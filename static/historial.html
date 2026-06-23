@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Historial de ventas</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f5f4f0;--bg2:#fff;--border:#e2e0d8;--text:#1a1a18;--text2:#6b6b66;
+  --blue:#185fa5;--blue-bg:#e6f1fb;--green:#3b6d11;--green-bg:#eaf3de;
+  --red:#a32d2d;--red-bg:#fcebeb;--radius:10px
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1c1c1a;--bg2:#252522;--border:#3a3a36;--text:#e8e6dc;--text2:#9c9a92;
+  --blue:#85b7eb;--blue-bg:#042c53;--green:#97c459;--green-bg:#173404;
+  --red:#f09595;--red-bg:#501313
+}}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.topbar{background:var(--bg2);border-bottom:0.5px solid var(--border);padding:0 1rem;height:54px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:10}
+.topbar-title{font-size:17px;font-weight:600;flex:1;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topbar-right{display:flex;align-items:center;gap:6px;flex-shrink:0;min-width:84px;justify-content:flex-end}
+.btn-inicio{display:inline-flex;align-items:center;gap:5px;height:36px;padding:0 12px;border:0.5px solid var(--border);border-radius:8px;background:transparent;color:var(--text);font-size:13px;text-decoration:none;flex-shrink:0;white-space:nowrap}
+.btn-inicio:hover{background:var(--bg)}
+.home-img{width:18px;height:18px;object-fit:contain;display:block}
+@media(prefers-color-scheme:dark){.home-img{filter:invert(1)}}
+.container{max-width:760px;margin:0 auto;padding:1.25rem}
+.filtros{display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap;align-items:flex-end}
+.filtro-campo{display:flex;flex-direction:column;gap:4px}
+.filtro-campo label{font-size:11px;color:var(--text2)}
+.filtros input,.filtros select{height:40px;padding:0 10px;border:0.5px solid var(--border);border-radius:8px;background:var(--bg2);color:var(--text);font-size:14px;font-family:inherit}
+button{height:40px;padding:0 16px;border:0.5px solid var(--border);border-radius:8px;background:transparent;color:var(--text);font-size:14px;font-family:inherit;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-weight:600}
+button:hover{background:var(--bg)}
+button.primary{background:var(--text);color:var(--bg2);border-color:var(--text)}
+button.primary:hover{opacity:.85;background:var(--text)}
+.btn-csv{background:transparent;color:var(--text);border-color:var(--border)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:1.25rem}
+.stat{background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius);padding:.875rem 1rem}
+.stat-label{font-size:12px;color:var(--text2);margin-bottom:3px}
+.stat-value{font-size:20px;font-weight:700}
+.lista{display:flex;flex-direction:column;gap:8px}
+.venta{background:var(--bg2);border:0.5px solid var(--border);border-radius:10px;padding:.875rem 1rem;display:flex;justify-content:space-between;align-items:center;gap:10px;cursor:pointer}
+.venta:active{background:var(--bg)}
+.v-id{font-weight:600;font-size:14px}
+.v-fecha{font-size:12px;color:var(--text2)}
+.v-items{font-size:12px;color:var(--text2)}
+.v-total{font-size:18px;font-weight:700;color:var(--green);white-space:nowrap}
+.v-desc{font-size:11px;color:var(--red)}
+.empty{text-align:center;padding:3rem;color:var(--text2)}
+.op-row{display:flex;justify-content:space-between;align-items:center;padding:.875rem 1rem;border-bottom:0.5px solid var(--border)}
+.op-row:last-child{border-bottom:none}
+.op-nombre{font-weight:600;font-size:14px}
+.op-ventas{font-size:12px;color:var(--text2)}
+.op-total{font-size:18px;font-weight:700;color:var(--green)}
+/* Modal detalle */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:100;padding:1rem}
+.overlay.open{display:flex}
+.modal{background:var(--bg2);border:0.5px solid var(--border);border-radius:14px;padding:1.5rem;width:400px;max-width:96vw;max-height:90vh;overflow-y:auto}
+.modal h2{font-size:17px;font-weight:600;margin-bottom:1rem}
+#detalle-contenido{background:var(--bg);border-radius:10px;padding:1.25rem;margin-bottom:1rem}
+.tk-head,.tk-foot{text-align:center;margin:8px 0}
+.tk-negocio{font-size:18px;font-weight:700}
+.tk-sub{font-size:12px;color:var(--text2)}
+.tk-items{border-top:1px dashed var(--border);border-bottom:1px dashed var(--border);padding:8px 0;margin:8px 0}
+.tk-line{display:flex;justify-content:space-between;margin-bottom:4px;font-family:ui-monospace,monospace;font-size:13px}
+.tk-total{font-weight:700;font-size:16px;border-top:1px dashed var(--border);margin-top:8px;padding-top:8px}
+.tk-desc{color:var(--red)}
+.tk-ahorro{color:var(--green);font-weight:600}
+.acciones{display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+.acciones button{flex:1;min-width:90px;height:44px;border-radius:10px;border:0.5px solid var(--border);background:transparent;color:var(--text);font-weight:600;cursor:pointer;font-size:13px;justify-content:center}
+.acciones button:hover{background:var(--bg)}
+.modal-footer button{width:100%;height:40px;border-radius:8px;background:var(--text);color:var(--bg2);border:none;font-size:14px;cursor:pointer;justify-content:center}
+.modal-footer button:hover{background:var(--text);opacity:.85}
+@media(max-width:560px){
+  .topbar{padding:0 .625rem}.topbar-title{font-size:15px}.topbar-right{min-width:0}
+  .container{padding:.875rem}.stat-value{font-size:16px}
+}
+</style>
+<link rel="stylesheet" href="/static/modern.css">
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/" class="btn-inicio"><img src="/static/home-icon.webp" class="home-img" alt="Inicio"> Inicio</a>
+  <h1 class="topbar-title">📋 Historial de ventas</h1>
+  <div class="topbar-right">
+    <a href="/pagos" class="btn-inicio" style="min-width:0">💳 Vender</a>
+  </div>
+</div>
+
+<div class="container">
+  <div class="filtros">
+    <div class="filtro-campo">
+      <label>Desde</label>
+      <input type="date" id="f-desde">
+    </div>
+    <div class="filtro-campo">
+      <label>Hasta</label>
+      <input type="date" id="f-hasta">
+    </div>
+    <div class="filtro-campo">
+      <label>Operador</label>
+      <select id="f-operador"><option value="">Todos</option></select>
+    </div>
+    <div class="filtro-campo">
+      <label>Pago</label>
+      <select id="f-metodo">
+        <option value="">Todos</option>
+        <option value="efectivo">Efectivo</option>
+        <option value="tarjeta">Tarjeta</option>
+      </select>
+    </div>
+    <div class="filtro-campo">
+      <label>Sucursal</label>
+      <select id="f-sucursal"><option value="">Todas</option></select>
+    </div>
+    <button class="primary" onclick="cargar()">Filtrar</button>
+    <button class="btn-csv" onclick="descargarCSV()">⬇ CSV</button>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-label">Ventas</div><div class="stat-value" id="s-num">—</div></div>
+    <div class="stat"><div class="stat-label">Total vendido</div><div class="stat-value" id="s-total" style="color:var(--green)">—</div></div>
+    <div class="stat"><div class="stat-label">Efectivo</div><div class="stat-value" id="s-efectivo">—</div></div>
+    <div class="stat"><div class="stat-label">Tarjeta</div><div class="stat-value" id="s-tarjeta">—</div></div>
+    <div class="stat"><div class="stat-label">Ticket promedio</div><div class="stat-value" id="s-prom">—</div></div>
+  </div>
+
+  <div class="lista" id="lista"></div>
+
+  <div class="section-title" id="op-titulo" style="font-size:13px;font-weight:600;color:var(--text2);margin:1.5rem 0 .75rem;text-transform:uppercase;letter-spacing:.5px;display:none">Ventas por operador</div>
+  <div class="card" id="op-desglose" style="display:none"></div>
+
+  <div class="section-title" id="suc-titulo" style="font-size:13px;font-weight:600;color:var(--text2);margin:1.5rem 0 .75rem;text-transform:uppercase;letter-spacing:.5px;display:none">Ventas por sucursal</div>
+  <div class="card" id="suc-desglose" style="display:none"></div>
+</div>
+
+<!-- Modal detalle de venta -->
+<div class="overlay" id="detalle-modal">
+  <div class="modal">
+    <h2>Detalle de venta</h2>
+    <div id="detalle-contenido"></div>
+    <div class="acciones">
+      <button onclick="descargarTicketDetalle()">⬇ Descargar</button>
+      <button onclick="imprimirDetalle()">🖨 Imprimir</button>
+      <button onclick="compartirWhatsApp()" style="border-color:#25d366;background:#e9fbe9;color:#1a6e38">💬 WA</button>
+      <button onclick="compartirEmail()" style="border-color:var(--blue);background:var(--blue-bg);color:var(--blue)">✉️ Email</button>
+    </div>
+    <div class="modal-footer">
+      <button onclick="cerrarDetalle()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/auth.js"></script>
+<script>
+requireGerente();
+let ventas=[];
+let ventaDetalle=null;
+
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function money(n){return '$'+Number(n).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});}
+
+async function cargarOperadores(){
+  try{
+    const r=await authFetch('/api/ventas-operadores');
+    if(!r.ok)return;
+    const ops=await r.json();
+    const sel=document.getElementById('f-operador');
+    sel.innerHTML='<option value="">Todos</option>'+ops.map(o=>`<option value="${esc(o)}">${esc(o)}</option>`).join('');
+  }catch(e){}
+}
+
+async function cargar(){
+  const desdeStr=document.getElementById('f-desde').value;
+  const hastaStr=document.getElementById('f-hasta').value;
+  const operador=document.getElementById('f-operador').value;
+  const metodo=document.getElementById('f-metodo').value;
+  const sucursal=document.getElementById('f-sucursal').value;
+  const params=new URLSearchParams();
+  if(desdeStr){
+    const [y,m,d]=desdeStr.split('-').map(Number);
+    params.set('desde', new Date(y,m-1,d,0,0,0).toISOString());
+  }
+  if(hastaStr){
+    const [y,m,d]=hastaStr.split('-').map(Number);
+    params.set('hasta', new Date(y,m-1,d,23,59,59,999).toISOString());
+  }
+  if(operador)params.set('operador',operador);
+  if(metodo)params.set('metodo_pago',metodo);
+  if(sucursal)params.set('sucursal',sucursal);
+  try{
+    const [rv,rs]=await Promise.all([
+      authFetch('/api/ventas?'+params.toString()),
+      authFetch('/api/ventas/resumen?'+params.toString())
+    ]);
+    ventas=await rv.json();
+    const resumen=await rs.json();
+    document.getElementById('s-num').textContent=resumen.num_ventas;
+    document.getElementById('s-total').textContent=money(resumen.total_vendido);
+    document.getElementById('s-efectivo').textContent=money(resumen.total_efectivo||0);
+    document.getElementById('s-tarjeta').textContent=money(resumen.total_tarjeta||0);
+    document.getElementById('s-prom').textContent=money(resumen.ticket_promedio);
+    renderDesglose(resumen.por_operador||[]);
+    renderDesgloseSucursal(resumen.por_sucursal||[]);
+    render();
+  }catch(e){console.error(e);}
+}
+
+function renderDesglose(lista){
+  const titulo=document.getElementById('op-titulo');
+  const cont=document.getElementById('op-desglose');
+  if(!lista.length){titulo.style.display='none';cont.style.display='none';return;}
+  titulo.style.display='block';
+  cont.style.display='block';
+  cont.innerHTML=lista.map(o=>`
+    <div class="op-row">
+      <div>
+        <div class="op-nombre">👤 ${esc(o.operador)}</div>
+        <div class="op-ventas">${o.num_ventas} venta${o.num_ventas!==1?'s':''} · 💵 ${money(o.efectivo||0)} · 💳 ${money(o.tarjeta||0)}</div>
+      </div>
+      <div class="op-total">${money(o.total)}</div>
+    </div>`).join('');
+}
+
+function renderDesgloseSucursal(lista){
+  const titulo=document.getElementById('suc-titulo');
+  const cont=document.getElementById('suc-desglose');
+  if(!lista.length){titulo.style.display='none';cont.style.display='none';return;}
+  titulo.style.display='block';
+  cont.style.display='block';
+  cont.innerHTML=lista.map(s=>`
+    <div class="op-row">
+      <div>
+        <div class="op-nombre">🏪 Sucursal ${esc(s.sucursal)}</div>
+        <div class="op-ventas">${s.num_ventas} venta${s.num_ventas!==1?'s':''} · ${s.items_vendidos} ítems vendidos</div>
+      </div>
+      <div class="op-total">${money(s.total)}</div>
+    </div>`).join('');
+}
+
+async function cargarSucursalesSelect(){
+  try{
+    const r=await fetch('/api/sucursales');
+    const sucursales=await r.json();
+    const sel=document.getElementById('f-sucursal');
+    sel.innerHTML='<option value="">Todas</option>'+sucursales.map(s=>`<option value="${esc(s.nombre)}">${esc(s.nombre)}</option>`).join('');
+  }catch(e){}
+}
+
+function render(){
+  const cont=document.getElementById('lista');
+  if(!ventas.length){cont.innerHTML='<div class="empty">No hay ventas en este periodo</div>';return;}
+  cont.innerHTML=ventas.map(v=>{
+    const fecha=new Date(v.fecha).toLocaleString('es-MX',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+    const desc=v.descuento_extra_pct>0?`<div class="v-desc">desc ${v.descuento_extra_pct}%</div>`:'';
+    const op=v.operador?`<div class="v-items">Operador: ${esc(v.operador)}${v.sucursal?' · Suc. '+esc(v.sucursal):''}</div>`:'';
+    const met=v.metodo_pago==='tarjeta'?'💳 Tarjeta':'💵 Efectivo';
+    return `<div class="venta" onclick="verDetalle(${v.id})">
+      <div>
+        <div class="v-id">Venta #${v.id}</div>
+        <div class="v-fecha">${fecha} · ${met}</div>
+        <div class="v-items">${v.num_items} artículo${v.num_items!==1?'s':''}</div>
+        ${op}
+      </div>
+      <div style="text-align:right">
+        <div class="v-total">${money(v.total)}</div>
+        ${desc}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function verDetalle(id){
+  try{
+    const r=await authFetch('/api/ventas/'+id);
+    ventaDetalle=await r.json();
+    document.getElementById('detalle-contenido').innerHTML=ticketHTML(ventaDetalle);
+    document.getElementById('detalle-modal').classList.add('open');
+  }catch(e){}
+}
+function cerrarDetalle(){document.getElementById('detalle-modal').classList.remove('open');}
+
+function ticketHTML(v){
+  const fecha=new Date(v.fecha).toLocaleString('es-MX');
+  let html=`<div class="tk-head">
+    <div class="tk-negocio">Mi negocio</div>
+    ${v.sucursal?`<div class="tk-sub">Sucursal ${esc(v.sucursal)}</div>`:''}
+    <div class="tk-sub">Ticket de venta #${v.id}</div>
+    <div class="tk-sub">${fecha}</div>
+    ${v.operador?`<div class="tk-sub">Operador: ${esc(v.operador)}</div>`:''}
+  </div><div class="tk-items">`;
+  (v.detalle||[]).forEach(it=>{
+    const cant=Number.isInteger(it.cantidad)?it.cantidad+'x':it.cantidad.toFixed(3)+'kg';
+    html+=`<div class="tk-line"><span>${cant} ${esc(it.nombre)}</span><span>${money(it.importe)}</span></div>`;
+  });
+  html+='</div>';
+  if(v.descuento_extra_pct>0){
+    html+=`<div class="tk-line"><span>Subtotal</span><span>${money(v.subtotal)}</span></div>`;
+    html+=`<div class="tk-line tk-desc"><span>Descuento ${v.descuento_extra_pct}%${v.autorizado_por?' ('+esc(v.autorizado_por)+')':''}</span><span>-${money(v.subtotal*v.descuento_extra_pct/100)}</span></div>`;
+  }
+  const ahorroTk=v.ahorro_total!=null?v.ahorro_total:0;
+  if(ahorroTk>0.005){
+    html+=`<div class="tk-line tk-ahorro"><span>🎉 Ahorraste</span><span>${money(ahorroTk)}</span></div>`;
+  }
+  html+=`<div class="tk-line tk-total"><span>TOTAL</span><span>${money(v.total)}</span></div>`;
+  if(v.metodo_pago==='tarjeta'){
+    html+=`<div class="tk-line"><span>Pago</span><span>TARJETA</span></div>`;
+    if(v.tpv_terminal)html+=`<div class="tk-line"><span>Terminal</span><span>${esc(v.tpv_terminal)}</span></div>`;
+    if(v.tpv_referencia)html+=`<div class="tk-line"><span>Referencia</span><span>${esc(v.tpv_referencia)}</span></div>`;
+    if(v.tpv_autorizacion)html+=`<div class="tk-line"><span>Autorización</span><span>${esc(v.tpv_autorizacion)}</span></div>`;
+  }else{
+    html+=`<div class="tk-line"><span>Pago</span><span>EFECTIVO</span></div>`;
+    if(v.pago_con!=null){
+      html+=`<div class="tk-line"><span>Pagó con</span><span>${money(v.pago_con)}</span></div>`;
+      html+=`<div class="tk-line"><span>Cambio</span><span>${money(v.cambio||0)}</span></div>`;
+    }
+  }
+  html+='<div class="tk-foot">¡Gracias por su compra!</div>';
+  return html;
+}
+
+function descargarTicketDetalle(){
+  if(!ventaDetalle)return;
+  const v=ventaDetalle;
+  const fecha=new Date(v.fecha).toLocaleString('es-MX');
+  let txt=`        MI NEGOCIO\n   Ticket de venta #${v.id}\n   ${fecha}\n--------------------------------\n`;
+  (v.detalle||[]).forEach(it=>{
+    const cant=Number.isInteger(it.cantidad)?it.cantidad+'x':it.cantidad.toFixed(3)+'kg';
+    txt+=`${cant} ${it.nombre} - ${money(it.importe)}\n`;
+  });
+  txt+='--------------------------------\n';
+  if(v.descuento_extra_pct>0){
+    txt+=`Subtotal: ${money(v.subtotal)}\nDescuento ${v.descuento_extra_pct}%: -${money(v.subtotal*v.descuento_extra_pct/100)}\n`;
+  }
+  const ahorroDl=v.ahorro_total!=null?v.ahorro_total:0;
+  if(ahorroDl>0.005){
+    txt+=`Ahorraste: ${money(ahorroDl)}\n`;
+  }
+  txt+=`TOTAL: ${money(v.total)}\n`;
+  if(v.pago_con!=null){txt+=`Pagó con: ${money(v.pago_con)}\nCambio: ${money(v.cambio||0)}\n`;}
+  txt+='\n   ¡Gracias por su compra!\n';
+  bajarArchivo(txt,`ticket_${v.id}.txt`,'text/plain');
+}
+
+function imprimirDetalle(){
+  if(!ventaDetalle)return;
+  const win=window.open('','_blank');
+  win.document.write(`<html><head><title>Ticket #${ventaDetalle.id}</title>
+    <style>body{font-family:monospace;font-size:13px;max-width:300px;margin:20px auto}
+    .tk-line{display:flex;justify-content:space-between;margin-bottom:3px}
+    .tk-total{font-weight:bold;font-size:15px;border-top:1px dashed #000;margin-top:6px;padding-top:6px}
+    .tk-desc{color:#a32d2d}.tk-ahorro{color:#3b6d11;font-weight:bold}.tk-head,.tk-foot{text-align:center;margin:8px 0}
+    .tk-negocio{font-size:18px;font-weight:bold}.tk-items{border-top:1px dashed #000;border-bottom:1px dashed #000;padding:6px 0;margin:6px 0}
+    </style></head><body>${ticketHTML(ventaDetalle)}</body></html>`);
+  win.document.close();
+  setTimeout(()=>win.print(),300);
+}
+
+function ticketTextoPlano(v){
+  if(!v)return '';
+  const fecha=new Date(v.fecha).toLocaleString('es-MX');
+  let txt=`🏪 MI NEGOCIO`;
+  if(v.sucursal)txt+=` — Sucursal ${v.sucursal}`;
+  txt+=`\n📋 Ticket #${v.id} | ${fecha}`;
+  if(v.operador)txt+=`\n👤 ${v.operador}`;
+  txt+=`\n─────────────────────\n`;
+  (v.detalle||[]).forEach(it=>{
+    const cant=Number.isInteger(it.cantidad)?it.cantidad+'x':it.cantidad.toFixed(3)+'kg';
+    txt+=`${cant} ${it.nombre} — ${money(it.importe)}\n`;
+  });
+  txt+=`─────────────────────\n`;
+  if(v.descuento_extra_pct>0){
+    txt+=`Subtotal: ${money(v.subtotal)}\n`;
+    txt+=`Descuento ${v.descuento_extra_pct}%: -${money(v.subtotal*v.descuento_extra_pct/100)}\n`;
+  }
+  const ahorroTxt=v.ahorro_total!=null?v.ahorro_total:0;
+  if(ahorroTxt>0.005){
+    txt+=`🎉 Ahorraste: ${money(ahorroTxt)}\n`;
+  }
+  txt+=`💰 TOTAL: ${money(v.total)}\n`;
+  if(v.metodo_pago==='tarjeta'){
+    txt+=`💳 Pago: Tarjeta`;
+    if(v.tpv_terminal)txt+=` (${v.tpv_terminal})`;
+    txt+=`\n`;
+    if(v.tpv_referencia)txt+=`Ref: ${v.tpv_referencia}\n`;
+  }else if(v.pago_con){
+    txt+=`💵 Pagó: ${money(v.pago_con)} | Cambio: ${money(v.cambio||0)}\n`;
+  }
+  txt+=`\n¡Gracias por su compra! 🙏`;
+  return txt;
+}
+
+function compartirWhatsApp(){
+  const txt=ticketTextoPlano(ventaDetalle);
+  if(!txt)return;
+  window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');
+}
+
+function compartirEmail(){
+  const v=ventaDetalle;
+  if(!v)return;
+  const asunto=encodeURIComponent(`Ticket de compra #${v.id} — Mi negocio`);
+  const cuerpo=encodeURIComponent(ticketTextoPlano(v));
+  window.location.href=`mailto:?subject=${asunto}&body=${cuerpo}`;
+}
+
+async function descargarCSV(){
+  if(!ventas.length){alert('No hay ventas para exportar');return;}
+  // Descargar el detalle completo de cada venta para incluir las descripciones
+  const detalles = await Promise.all(ventas.map(async v=>{
+    try{ const r=await authFetch('/api/ventas/'+v.id); return await r.json(); }
+    catch(e){ return null; }
+  }));
+  let csv='Venta,Sucursal,Fecha,Operador,Metodo pago,Terminal TPV,Ref TPV,Autorizacion TPV,No. item,Producto,Cantidad,Precio unit.,Importe,Total venta,Descuento %,Pago con,Cambio\n';
+  detalles.forEach(v=>{
+    if(!v)return;
+    const fecha=new Date(v.fecha).toLocaleString('es-MX');
+    const metodo=v.metodo_pago==='tarjeta'?'Tarjeta':'Efectivo';
+    const term=v.tpv_terminal||'';
+    const ref=v.tpv_referencia||'';
+    const aut=v.tpv_autorizacion||'';
+    (v.detalle||[]).forEach((it,idx)=>{
+      const esPrimero = idx===0;
+      const nombre=(it.nombre||'').replace(/"/g,'""');
+      csv+=`${v.id},"${v.sucursal||''}","${fecha}","${v.operador||''}","${metodo}","${term}","${ref}","${aut}",${idx+1},"${nombre}",${it.cantidad},${it.precio_unitario},${it.importe},`;
+      csv+=`${esPrimero?v.total:''},${esPrimero?v.descuento_extra_pct:''},${esPrimero?(v.pago_con||''):''},${esPrimero?(v.cambio||''):''}\n`;
+    });
+  });
+  bajarArchivo(csv,`ventas_detalle_${new Date().toISOString().slice(0,10)}.csv`,'text/csv');
+}
+
+function bajarArchivo(contenido,nombre,tipo){
+  const blob=new Blob([contenido],{type:tipo+';charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=nombre;
+  document.body.appendChild(a);a.click();a.remove();
+  URL.revokeObjectURL(url);
+}
+
+document.addEventListener('keydown',e=>{if(e.key==='Escape')cerrarDetalle();});
+
+function hoyStr(){
+  const d=new Date();
+  const tz=d.getTimezoneOffset()*60000;
+  return new Date(d.getTime()-tz).toISOString().slice(0,10);
+}
+document.getElementById('f-desde').value=hoyStr();
+document.getElementById('f-hasta').value=hoyStr();
+
+cargarOperadores();
+cargarSucursalesSelect();
+cargar();
+</script>
+</body>
+</html>

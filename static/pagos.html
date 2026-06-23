@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Punto de venta</title>
+<script type="module">
+import { BarcodeDetector } from 'https://cdn.jsdelivr.net/npm/barcode-detector@3/dist/es/ponyfill.min.js';
+window.BarcodeDetectorPolyfill = BarcodeDetector;
+</script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f5f4f0;--bg2:#fff;--border:#e2e0d8;--text:#1a1a18;--text2:#6b6b66;
+  --blue:#185fa5;--blue-bg:#e6f1fb;--green:#3b6d11;--green-bg:#eaf3de;
+  --amber:#854f0b;--amber-bg:#faeeda;--red:#a32d2d;--red-bg:#fcebeb;--radius:10px
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1c1c1a;--bg2:#252522;--border:#3a3a36;--text:#e8e6dc;--text2:#9c9a92;
+  --blue:#85b7eb;--blue-bg:#042c53;--green:#97c459;--green-bg:#173404;
+  --amber:#ef9f27;--amber-bg:#412402;--red:#f09595;--red-bg:#501313
+}}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.topbar{background:var(--bg2);border-bottom:0.5px solid var(--border);padding:0 1rem;height:54px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:10}
+.topbar-title{font-size:17px;font-weight:600;flex:1;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topbar-right{display:flex;align-items:center;gap:6px;flex-shrink:0;min-width:84px;justify-content:flex-end}
+.btn-inicio{display:inline-flex;align-items:center;gap:5px;height:36px;padding:0 12px;border:0.5px solid var(--border);border-radius:8px;background:transparent;color:var(--text);font-size:13px;text-decoration:none;flex-shrink:0;white-space:nowrap}
+.btn-inicio:hover{background:var(--bg)}
+.home-img{width:18px;height:18px;object-fit:contain;display:block}
+@media(prefers-color-scheme:dark){.home-img{filter:invert(1)}}
+.icon-btn{height:36px;width:36px;border:0.5px solid var(--border);border-radius:8px;background:transparent;font-size:16px;cursor:pointer}
+.container{max-width:760px;margin:0 auto;padding:1rem 1.25rem 8rem}
+.search-row{display:flex;gap:8px;margin-bottom:1rem}
+.search-row input{flex:1;height:46px;padding:0 14px;border:0.5px solid var(--border);border-radius:10px;background:var(--bg2);color:var(--text);font-size:16px;font-family:inherit}
+.search-row input:focus{outline:2px solid var(--blue);outline-offset:1px}
+.search-row button{height:46px;width:46px;border:0.5px solid var(--border);border-radius:10px;background:var(--bg2);font-size:20px;cursor:pointer}
+.resultados{display:flex;flex-direction:column;gap:6px;margin-bottom:1rem}
+.res-item{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--bg2);border:0.5px solid var(--border);border-radius:10px;padding:.75rem 1rem;cursor:pointer}
+.res-item:active{background:var(--bg)}
+.res-name{font-weight:600;font-size:14px}
+.res-meta{font-size:12px;color:var(--text2)}
+.res-price{font-weight:700;color:var(--blue);white-space:nowrap}
+.section-title{font-size:13px;font-weight:600;color:var(--text2);margin:1rem 0 .5rem;text-transform:uppercase;letter-spacing:.5px}
+.cart{background:var(--bg2);border:0.5px solid var(--border);border-radius:12px;overflow:hidden}
+.cart-empty{text-align:center;padding:2.5rem 1rem;color:var(--text2)}
+.cart-item{display:flex;align-items:center;gap:10px;padding:.75rem 1rem;border-bottom:0.5px solid var(--border)}
+.cart-item:last-child{border-bottom:none}
+.ci-info{flex:1;min-width:0}
+.ci-name{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ci-price{font-size:12px;color:var(--text2)}
+.ci-price-row{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.ci-price-old{font-size:11px;color:var(--text2);text-decoration:line-through}
+.ci-desc-badge{font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;background:var(--red-bg);color:var(--red)}
+.qty{display:flex;align-items:center;gap:4px}
+.qty button{width:30px;height:30px;border:0.5px solid var(--border);border-radius:6px;background:transparent;color:var(--text);font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s}
+.qty button:active{background:var(--bg)}
+.qty-input{width:58px;height:30px;text-align:center;font-weight:600;font-size:14px;border:0.5px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-family:inherit;-moz-appearance:textfield}
+.qty-input::-webkit-outer-spin-button,.qty-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.qty-input:focus{outline:2px solid var(--blue);outline-offset:1px}
+.qty-unidad{font-size:11px;color:var(--text2)}
+.ci-importe{font-weight:700;min-width:70px;text-align:right;font-size:14px}
+.ci-del{background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:4px}
+.totales{position:fixed;bottom:0;left:0;right:0;background:var(--bg2);border-top:0.5px solid var(--border);padding:1rem 1.25rem;box-shadow:0 -2px 10px rgba(0,0,0,.06)}
+.totales-inner{max-width:760px;margin:0 auto}
+.linea{display:flex;justify-content:space-between;font-size:14px;margin-bottom:4px;color:var(--text2)}
+.linea.desc{color:var(--red)}
+.linea-ahorro{color:var(--green)!important;font-weight:600}
+.linea-total{display:flex;justify-content:space-between;font-size:22px;font-weight:700;margin:6px 0 12px}
+.acciones{display:flex;gap:8px}
+.acciones button{flex:1;height:48px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;border:0.5px solid var(--border);background:transparent;color:var(--text)}
+.btn-desc{background:var(--amber-bg);color:var(--amber);border-color:transparent}
+.btn-cobrar{background:var(--green);color:#fff;border-color:var(--green)}
+.btn-cobrar:disabled{opacity:.4;cursor:not-allowed}
+/* Modales */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:100;padding:1rem}
+.overlay.open{display:flex}
+.modal{background:var(--bg2);border:0.5px solid var(--border);border-radius:14px;padding:1.5rem;width:400px;max-width:96vw;max-height:90vh;overflow-y:auto}
+.modal h2{font-size:17px;font-weight:600;margin-bottom:1rem}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:12px;color:var(--text2);margin-bottom:4px}
+.field input,.field select{width:100%;height:42px;padding:0 12px;border:0.5px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:16px;font-family:inherit}
+.modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:1rem}
+.modal-footer button{height:40px;padding:0 16px;border-radius:8px;font-size:14px;cursor:pointer;border:0.5px solid var(--border);background:transparent;color:var(--text)}
+.modal-footer .primary{background:var(--text);color:var(--bg2);border-color:var(--text)}
+.msg{padding:10px;border-radius:8px;font-size:13px;margin-top:8px;display:none}
+.msg.show{display:block}
+.msg.error{background:var(--red-bg);color:var(--red)}
+.msg.ok{background:var(--green-bg);color:var(--green)}
+.metodo-btn{flex:1;height:44px;border:0.5px solid var(--border);border-radius:10px;background:transparent;color:var(--text);font-size:14px;font-weight:600;cursor:pointer}
+.metodo-btn.activo{background:var(--blue-bg);color:var(--blue);border-color:var(--blue)}
+#qr-reader{width:100%;border-radius:8px;overflow:hidden;position:relative;margin-bottom:8px}
+#qr-reader video{width:100%;border-radius:8px;display:block}
+.scan-frame{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:70%;height:42%;pointer-events:none}
+.scan-frame::before{content:'';position:absolute;inset:0;border-radius:14px;box-shadow:0 0 0 2000px rgba(0,0,0,.55)}
+.scan-corner{position:absolute;width:28px;height:28px;border:3px solid #4fc3f7;border-radius:6px;filter:drop-shadow(0 0 4px rgba(79,195,247,.6))}
+.scan-corner.tl{top:-3px;left:-3px;border-right:none;border-bottom:none}
+.scan-corner.tr{top:-3px;right:-3px;border-left:none;border-bottom:none}
+.scan-corner.bl{bottom:-3px;left:-3px;border-right:none;border-top:none}
+.scan-corner.br{bottom:-3px;right:-3px;border-left:none;border-top:none}
+.scan-line{position:absolute;left:4%;right:4%;top:6%;height:2px;background:linear-gradient(90deg,transparent,#4fc3f7,transparent);box-shadow:0 0 10px #4fc3f7;animation:scanmove 2.2s ease-in-out infinite}
+@keyframes scanmove{0%,100%{top:6%}50%{top:92%}}
+.ticket{font-family:ui-monospace,monospace;font-size:13px;background:var(--bg);border-radius:8px;padding:1rem;margin:0.5rem 0}
+.ticket .tk-line{display:flex;justify-content:space-between;margin-bottom:3px}
+.ticket .tk-total{font-weight:700;font-size:15px;border-top:1px dashed var(--border);margin-top:6px;padding-top:6px}
+.tk-head,.tk-foot{text-align:center;margin:8px 0}
+.tk-negocio{font-size:18px;font-weight:700}
+.tk-sub{font-size:12px;color:var(--text2)}
+.tk-items{border-top:1px dashed var(--border);border-bottom:1px dashed var(--border);padding:8px 0;margin:8px 0}
+.tk-line{display:flex;justify-content:space-between;margin-bottom:4px;font-family:ui-monospace,monospace;font-size:13px}
+.tk-total{font-weight:700;font-size:16px;border-top:1px dashed var(--border);margin-top:8px;padding-top:8px}
+.tk-desc{color:var(--red)}
+.tk-ahorro{color:var(--green);font-weight:600}
+.tk-foot{font-size:12px;color:var(--text2);margin-top:10px}
+#ticket-contenido{background:var(--bg);border-radius:10px;padding:1.25rem;margin-bottom:1rem}
+@media(max-width:560px){
+  .topbar{padding:0 .625rem}.topbar-title{font-size:15px}.topbar-right{min-width:0}
+  .container{padding:.875rem .875rem 8rem}
+}
+</style>
+<link rel="stylesheet" href="/static/modern.css">
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/" class="btn-inicio"><img src="/static/home-icon.webp" class="home-img" alt="Inicio"> Inicio</a>
+  <h1 class="topbar-title">💳 Punto de venta</h1>
+  <div class="topbar-right">
+    <span id="nav-operador" style="font-size:12px;color:var(--text2);white-space:nowrap"></span>
+    <a href="/historial" class="icon-btn" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none" title="Historial">📋</a>
+  </div>
+</div>
+
+<div class="container">
+  <div class="search-row">
+    <input type="search" id="buscar" placeholder="Buscar producto por nombre…" oninput="buscar()" autocomplete="off">
+    <button onclick="abrirEscaner()" title="Escanear">📷</button>
+  </div>
+  <div class="resultados" id="resultados"></div>
+
+  <div class="section-title">Carrito</div>
+  <div class="cart" id="cart"></div>
+</div>
+
+<div class="totales">
+  <div class="totales-inner">
+    <div class="linea"><span>Subtotal</span><span id="t-subtotal">$0.00</span></div>
+    <div class="linea desc" id="linea-desc" style="display:none"><span id="desc-label">Descuento</span><span id="t-desc">-$0.00</span></div>
+    <div class="linea linea-ahorro" id="linea-ahorro" style="display:none"><span>🎉 Ahorraste</span><span id="t-ahorro">$0.00</span></div>
+    <div class="linea-total"><span>Total</span><span id="t-total">$0.00</span></div>
+    <div class="acciones">
+      <button class="btn-desc" onclick="abrirDescuento()">% Descuento</button>
+      <button class="btn-cobrar" id="btn-cobrar" onclick="abrirCobro()" disabled>Cobrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal escáner -->
+<div class="overlay" id="scanner-modal">
+  <div class="modal">
+    <h2>Escanear código</h2>
+    <div id="qr-reader"><video id="scan-video" playsinline autoplay muted></video><div class="scan-frame"><span class="scan-corner tl"></span><span class="scan-corner tr"></span><span class="scan-corner bl"></span><span class="scan-corner br"></span><div class="scan-line"></div></div></div>
+    <div class="msg" id="scan-msg"></div>
+    <div class="modal-footer"><button onclick="cerrarEscaner()">Cerrar</button></div>
+  </div>
+</div>
+
+<!-- Modal cantidad (productos por peso) -->
+<div class="overlay" id="peso-modal">
+  <div class="modal">
+    <h2 id="peso-titulo">Cantidad</h2>
+    <div class="field">
+      <label id="peso-label">Peso en kg</label>
+      <input type="number" id="peso-input" min="0" step="0.001" placeholder="0.000">
+    </div>
+    <div class="modal-footer">
+      <button onclick="cerrarPeso()">Cancelar</button>
+      <button class="primary" onclick="confirmarPeso()">Agregar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal descuento extra (requiere autorización) -->
+<div class="overlay" id="desc-modal">
+  <div class="modal">
+    <h2>Descuento extra</h2>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:12px" id="desc-info">Requiere autorización de un gerente.</p>
+    <div class="field"><label>Porcentaje de descuento (%)</label><input type="number" id="d-pct" min="0" max="100" step="1" placeholder="0"></div>
+    <div class="field"><label>Usuario gerente</label><input id="d-usuario" autocomplete="off"></div>
+    <div class="field"><label>Contraseña</label><input type="password" id="d-password" autocomplete="off"></div>
+    <div class="msg" id="desc-msg"></div>
+    <div class="modal-footer">
+      <button onclick="cerrarDescuento()">Cancelar</button>
+      <button class="primary" onclick="autorizarDescuento()">Autorizar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal cobro -->
+<div class="overlay" id="cobro-modal">
+  <div class="modal">
+    <h2>Cobrar venta</h2>
+    <div id="cobro-resumen"></div>
+
+    <div class="field">
+      <label>Método de pago</label>
+      <div style="display:flex;gap:8px">
+        <button type="button" id="btn-efectivo" class="metodo-btn activo" onclick="setMetodo('efectivo')">💵 Efectivo</button>
+        <button type="button" id="btn-tarjeta" class="metodo-btn" onclick="setMetodo('tarjeta')">💳 Tarjeta</button>
+      </div>
+    </div>
+
+    <!-- Sección efectivo -->
+    <div id="sec-efectivo">
+      <div class="field"><label>Paga con ($) *</label><input type="number" id="c-pago" min="0" step="0.01" placeholder="0.00" oninput="calcCambio()"></div>
+      <div class="linea-total"><span>Cambio</span><span id="c-cambio">$0.00</span></div>
+    </div>
+
+    <!-- Sección tarjeta (datos del ticket de la TPV) -->
+    <div id="sec-tarjeta" style="display:none">
+      <div class="field"><label>Terminal (TPV)</label><input id="c-tpv-term" placeholder="Ej: Clip, BBVA, etc." autocomplete="off"></div>
+      <div class="field"><label>Referencia / No. de operación *</label><input id="c-tpv-ref" placeholder="Ej: 001234" autocomplete="off"></div>
+      <div class="field"><label>Código de autorización *</label><input id="c-tpv-aut" placeholder="Ej: 456789" autocomplete="off"></div>
+    </div>
+
+    <div class="msg" id="cobro-msg"></div>
+    <div class="modal-footer">
+      <button onclick="cerrarCobro()">Cancelar</button>
+      <button class="primary" onclick="confirmarCobro()">Confirmar venta</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal ticket digital -->
+<div class="overlay" id="ticket-modal">
+  <div class="modal">
+    <h2>✅ Venta registrada</h2>
+    <div id="ticket-contenido"></div>
+    <div class="acciones" style="gap:8px">
+      <button onclick="descargarTicket()" style="flex:1;height:44px;border-radius:10px;border:0.5px solid var(--border);background:transparent;color:var(--text);font-weight:600;cursor:pointer">⬇ Descargar</button>
+      <button onclick="imprimirTicket()" style="flex:1;height:44px;border-radius:10px;border:0.5px solid var(--border);background:transparent;color:var(--text);font-weight:600;cursor:pointer">🖨 Imprimir</button>
+      <button onclick="compartirWhatsApp()" style="flex:1;height:44px;border-radius:10px;border:0.5px solid #25d366;background:#e9fbe9;color:#1a6e38;font-weight:600;cursor:pointer">💬 WhatsApp</button>
+      <button onclick="compartirEmail()" style="flex:1;height:44px;border-radius:10px;border:0.5px solid var(--blue);background:var(--blue-bg);color:var(--blue);font-weight:600;cursor:pointer">✉️ Email</button>
+    </div>
+    <div class="modal-footer">
+      <button class="primary" onclick="cerrarTicket()" style="width:100%">Nueva venta</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/auth.js"></script>
+<script>
+const sesionPOS = requireAuth();
+let carrito = [];        // {id, nombre, precio, cantidad, vendido_por_peso, unidad}
+let descuentoExtra = 0;  // porcentaje
+let autorizadoPor = null;
+
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function money(n){return '$'+n.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});}
+
+// ─── Búsqueda ───────────────────────────────────────────────────────────
+let debTimer;
+function buscar(){clearTimeout(debTimer);debTimer=setTimeout(ejecutarBusqueda,250);}
+
+async function ejecutarBusqueda(){
+  const q = document.getElementById('buscar').value.trim();
+  if(!q){document.getElementById('resultados').innerHTML='';return;}
+  try{
+    const r = await authFetch('/api/pos/buscar?q='+encodeURIComponent(q));
+    const items = await r.json();
+    renderResultados(items);
+  }catch(e){}
+}
+
+let ultimosResultados = [];
+
+function renderResultados(items){
+  ultimosResultados = items;
+  const cont = document.getElementById('resultados');
+  if(!items.length){cont.innerHTML='<div class="res-meta" style="padding:8px">Sin resultados</div>';return;}
+  cont.innerHTML = items.map((p,i)=>`
+    <div class="res-item" onclick="agregarPorIndice(${i})">
+      <div>
+        <div class="res-name">${esc(p.nombre)}</div>
+        <div class="res-meta">${esc(p.categoria)} · stock: ${p.vendido_por_peso?p.stock.toFixed(2)+' kg':p.stock}</div>
+      </div>
+      <div class="res-price">${money(p.precio_final)}${p.vendido_por_peso?'/kg':''}</div>
+    </div>`).join('');
+}
+
+function agregarPorIndice(i){
+  const p = ultimosResultados[i];
+  if(p) agregar(p);
+}
+
+// ─── Carrito ────────────────────────────────────────────────────────────
+let pesoPendiente = null;
+
+function agregar(p){
+  // Alerta si el producto está agotado
+  if(p.stock<=0){
+    alert(`⚠️ "${p.nombre}" está AGOTADO (stock: ${p.vendido_por_peso?p.stock.toFixed(2)+' kg':p.stock}).\n\nNo se puede agregar al carrito.`);
+    return;
+  }
+  if(p.vendido_por_peso){
+    pesoPendiente = p;
+    document.getElementById('peso-titulo').textContent = p.nombre;
+    document.getElementById('peso-label').textContent = `Peso en kg (disponible: ${p.stock.toFixed(2)} kg)`;
+    document.getElementById('peso-input').value='';
+    document.getElementById('peso-input').max=p.stock;
+    document.getElementById('peso-modal').classList.add('open');
+    setTimeout(()=>document.getElementById('peso-input').focus(),60);
+    return;
+  }
+  const ex = carrito.find(c=>c.id===p.id);
+  if(ex){
+    if(ex.cantidad+1>p.stock){
+      alert(`⚠️ Solo hay ${p.stock} unidades de "${p.nombre}" en stock.`);
+      return;
+    }
+    ex.cantidad++;
+  }
+  else{carrito.push({id:p.id,nombre:p.nombre,precio:p.precio_final,precioOriginal:p.precio_venta,cantidad:1,vendido_por_peso:false,unidad:p.unidad,stock:p.stock});}
+  limpiarBusqueda();
+  renderCarrito();
+}
+
+function confirmarPeso(){
+  const kg = parseFloat(document.getElementById('peso-input').value);
+  if(isNaN(kg)||kg<=0){return;}
+  const p = pesoPendiente;
+  if(kg>p.stock){
+    alert(`⚠️ Solo hay ${p.stock.toFixed(2)} kg de "${p.nombre}" en stock.`);
+    return;
+  }
+  carrito.push({id:p.id,nombre:p.nombre,precio:p.precio_final,precioOriginal:p.precio_venta,cantidad:kg,vendido_por_peso:true,unidad:'kg',stock:p.stock});
+  cerrarPeso();
+  limpiarBusqueda();
+  renderCarrito();
+}
+function cerrarPeso(){document.getElementById('peso-modal').classList.remove('open');pesoPendiente=null;}
+
+function limpiarBusqueda(){
+  document.getElementById('buscar').value='';
+  document.getElementById('resultados').innerHTML='';
+}
+
+function cambiarCantidad(id,delta){
+  const c = carrito.find(x=>x.id===id);
+  if(!c)return;
+  if(c.vendido_por_peso){
+    const nuevo = Math.round((c.cantidad+delta*0.1)*1000)/1000;
+    if(delta>0 && c.stock!=null && nuevo>c.stock){
+      alert(`⚠️ Solo hay ${c.stock.toFixed(2)} kg disponibles.`);
+      return;
+    }
+    c.cantidad = Math.max(0.1, nuevo);
+  }else{
+    if(delta>0 && c.stock!=null && c.cantidad+1>c.stock){
+      alert(`⚠️ Solo hay ${c.stock} unidades disponibles.`);
+      return;
+    }
+    c.cantidad += delta;
+    if(c.cantidad<=0){carrito=carrito.filter(x=>x.id!==id);}
+  }
+  renderCarrito();
+}
+
+function cambiarCantidadManual(id, input){
+  const c = carrito.find(x=>x.id===id);
+  if(!c)return;
+  let val = parseFloat(input.value);
+  if(isNaN(val)||val<0){val=c.vendido_por_peso?0.001:1;}
+  if(c.vendido_por_peso){
+    val = Math.round(val*1000)/1000;
+    if(val<=0)val=0.001;
+  }else{
+    val = Math.round(val);
+    if(val<=0)val=1;
+  }
+  if(c.stock!=null && val>c.stock){
+    const disp = c.vendido_por_peso?c.stock.toFixed(3)+' kg':c.stock;
+    alert(`⚠️ Solo hay ${disp} disponibles. Se ajustó al máximo.`);
+    val = c.stock;
+  }
+  c.cantidad = val;
+  renderCarrito();
+}
+
+function quitar(id){carrito=carrito.filter(x=>x.id!==id);renderCarrito();}
+
+function renderCarrito(){
+  const cont = document.getElementById('cart');
+  if(!carrito.length){
+    cont.innerHTML='<div class="cart-empty">Carrito vacío.<br>Busca o escanea un producto para empezar.</div>';
+    descuentoExtra=0;autorizadoPor=null;
+    actualizarTotales();
+    document.getElementById('btn-cobrar').disabled=true;
+    return;
+  }
+  cont.innerHTML = carrito.map(c=>{
+    const importe = c.precio*c.cantidad;
+    const step = c.vendido_por_peso?'0.001':'1';
+    const cantVal = c.vendido_por_peso?c.cantidad.toFixed(3):c.cantidad;
+    const tieneDesc = c.precioOriginal && c.precioOriginal>c.precio;
+    const pctDesc = tieneDesc ? Math.round((1-c.precio/c.precioOriginal)*100) : 0;
+    const precioLinea = tieneDesc
+      ? `<span class="ci-price-old">${money(c.precioOriginal)}</span> <span class="ci-price">${money(c.precio)}${c.vendido_por_peso?'/kg':' c/u'}</span> <span class="ci-desc-badge">-${pctDesc}%</span>`
+      : `<span class="ci-price">${money(c.precio)}${c.vendido_por_peso?'/kg':' c/u'}</span>`;
+    return `<div class="cart-item">
+      <div class="ci-info">
+        <div class="ci-name">${esc(c.nombre)}</div>
+        <div class="ci-price-row">${precioLinea}</div>
+      </div>
+      <div class="qty">
+        <button onclick="cambiarCantidad(${c.id},-1)">−</button>
+        <input type="number" class="qty-input" inputmode="decimal" step="${step}" min="0" value="${cantVal}"
+               onchange="cambiarCantidadManual(${c.id}, this)" onfocus="this.select()">
+        ${c.vendido_por_peso?'<span class="qty-unidad">kg</span>':''}
+        <button onclick="cambiarCantidad(${c.id},1)">+</button>
+      </div>
+      <div class="ci-importe">${money(importe)}</div>
+      <button class="ci-del" onclick="quitar(${c.id})">🗑</button>
+    </div>`;
+  }).join('');
+  actualizarTotales();
+  document.getElementById('btn-cobrar').disabled=false;
+}
+
+function calcSubtotal(){return carrito.reduce((s,c)=>s+c.precio*c.cantidad,0);}
+function calcAhorroProductos(){
+  return carrito.reduce((s,c)=>{
+    const orig = c.precioOriginal;
+    if(orig && orig>c.precio) return s+(orig-c.precio)*c.cantidad;
+    return s;
+  },0);
+}
+
+function actualizarTotales(){
+  const subtotal = calcSubtotal();
+  const descMonto = subtotal*(descuentoExtra/100);
+  const total = subtotal-descMonto;
+  const ahorroProductos = calcAhorroProductos();
+  const ahorroTotal = ahorroProductos+descMonto;
+  document.getElementById('t-subtotal').textContent = money(subtotal);
+  document.getElementById('t-total').textContent = money(total);
+  const lineaDesc = document.getElementById('linea-desc');
+  if(descuentoExtra>0){
+    lineaDesc.style.display='flex';
+    document.getElementById('desc-label').textContent = `Descuento ${descuentoExtra}% (aut: ${autorizadoPor||'-'})`;
+    document.getElementById('t-desc').textContent = '-'+money(descMonto);
+  }else{
+    lineaDesc.style.display='none';
+  }
+  const lineaAhorro = document.getElementById('linea-ahorro');
+  if(ahorroTotal>0.005){
+    lineaAhorro.style.display='flex';
+    document.getElementById('t-ahorro').textContent = money(ahorroTotal);
+  }else{
+    lineaAhorro.style.display='none';
+  }
+}
+
+// ─── Descuento extra con autorización ───────────────────────────────────
+function abrirDescuento(){
+  if(!carrito.length)return;
+  document.getElementById('d-pct').value=descuentoExtra||'';
+  const inputUsuario=document.getElementById('d-usuario');
+  const info=document.getElementById('desc-info');
+  if(sesionPOS && sesionPOS.rol==='gerente'){
+    inputUsuario.value=sesionPOS.usuario;
+    inputUsuario.readOnly=true;
+    info.textContent=`El descuento debe autorizarse con tu propia sesión de gerente (${sesionPOS.usuario}).`;
+  }else{
+    inputUsuario.value='';
+    inputUsuario.readOnly=false;
+    info.textContent='Requiere autorización de un gerente.';
+  }
+  document.getElementById('d-password').value='';
+  document.getElementById('desc-msg').className='msg';
+  document.getElementById('desc-modal').classList.add('open');
+}
+function cerrarDescuento(){document.getElementById('desc-modal').classList.remove('open');}
+
+async function autorizarDescuento(){
+  const pct = parseFloat(document.getElementById('d-pct').value);
+  const usuario = document.getElementById('d-usuario').value.trim();
+  const password = document.getElementById('d-password').value;
+  const msg = document.getElementById('desc-msg');
+  if(isNaN(pct)||pct<0||pct>100){msg.className='msg error show';msg.textContent='Porcentaje inválido';return;}
+  if(!usuario||!password){msg.className='msg error show';msg.textContent='Ingresa usuario y contraseña';return;}
+  if(sesionPOS && sesionPOS.rol==='gerente' && usuario!==sesionPOS.usuario){
+    msg.className='msg error show';
+    msg.textContent=`El descuento debe ser autorizado por el gerente con la sesión activa (${sesionPOS.usuario}), no por otro usuario.`;
+    return;
+  }
+  try{
+    const r = await authFetch('/api/pos/autorizar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({usuario,password,descuento_pct:pct})}, true);
+    if(!r.ok){const e=await r.json();msg.className='msg error show';msg.textContent=e.detail||'No autorizado';return;}
+    descuentoExtra=pct;autorizadoPor=usuario;
+    actualizarTotales();
+    cerrarDescuento();
+  }catch(e){msg.className='msg error show';msg.textContent='Error de conexión';}
+}
+
+// ─── Cobro ──────────────────────────────────────────────────────────────
+let metodoPago = 'efectivo';
+
+function setMetodo(m){
+  metodoPago = m;
+  document.getElementById('btn-efectivo').classList.toggle('activo', m==='efectivo');
+  document.getElementById('btn-tarjeta').classList.toggle('activo', m==='tarjeta');
+  document.getElementById('sec-efectivo').style.display = m==='efectivo'?'block':'none';
+  document.getElementById('sec-tarjeta').style.display = m==='tarjeta'?'block':'none';
+  document.getElementById('cobro-msg').className='msg';
+}
+
+function abrirCobro(){
+  if(!carrito.length)return;
+  const subtotal=calcSubtotal();
+  const total=subtotal*(1-descuentoExtra/100);
+  let html='<div class="ticket">';
+  carrito.forEach(c=>{
+    const cant=c.vendido_por_peso?c.cantidad.toFixed(3)+'kg':c.cantidad+'x';
+    html+=`<div class="tk-line"><span>${cant} ${esc(c.nombre)}</span><span>${money(c.precio*c.cantidad)}</span></div>`;
+  });
+  if(descuentoExtra>0){
+    html+=`<div class="tk-line"><span>Subtotal</span><span>${money(subtotal)}</span></div>`;
+    html+=`<div class="tk-line"><span>Descuento ${descuentoExtra}%</span><span>-${money(subtotal*descuentoExtra/100)}</span></div>`;
+  }
+  html+=`<div class="tk-line tk-total"><span>TOTAL</span><span>${money(total)}</span></div></div>`;
+  document.getElementById('cobro-resumen').innerHTML=html;
+  document.getElementById('c-pago').value='';
+  document.getElementById('c-cambio').textContent=money(0);
+  document.getElementById('c-tpv-ref').value='';
+  document.getElementById('c-tpv-aut').value='';
+  document.getElementById('c-tpv-term').value='';
+  document.getElementById('cobro-msg').className='msg';
+  setMetodo('efectivo');
+  document.getElementById('cobro-modal').classList.add('open');
+}
+function cerrarCobro(){document.getElementById('cobro-modal').classList.remove('open');}
+
+function calcCambio(){
+  const subtotal=calcSubtotal();
+  const total=subtotal*(1-descuentoExtra/100);
+  const pago=parseFloat(document.getElementById('c-pago').value)||0;
+  const cambio=pago-total;
+  document.getElementById('c-cambio').textContent=money(cambio>0?cambio:0);
+}
+
+async function confirmarCobro(){
+  const msg=document.getElementById('cobro-msg');
+  const subtotal=calcSubtotal();
+  const total=subtotal*(1-descuentoExtra/100);
+  const items=carrito.map(c=>({producto_id:c.id,cantidad:c.cantidad,precio_unitario:c.precio,precio_original:c.precioOriginal||null}));
+  let body={items,descuento_extra_pct:descuentoExtra,autorizado_por:autorizadoPor,metodo_pago:metodoPago};
+
+  if(metodoPago==='efectivo'){
+    const pagoRaw=document.getElementById('c-pago').value.trim();
+    if(pagoRaw===''){
+      msg.className='msg error show';msg.textContent='Ingresa con cuánto paga el cliente';
+      document.getElementById('c-pago').focus();return;
+    }
+    const pago=parseFloat(pagoRaw);
+    if(isNaN(pago)||pago<0){msg.className='msg error show';msg.textContent='Monto de pago inválido';return;}
+    if(pago<total){msg.className='msg error show';msg.textContent=`El pago (${money(pago)}) es menor al total (${money(total)})`;return;}
+    body.pago_con=pago;
+  }else{
+    // Tarjeta: pedir datos del ticket de la TPV
+    const ref=document.getElementById('c-tpv-ref').value.trim();
+    const aut=document.getElementById('c-tpv-aut').value.trim();
+    if(!ref||!aut){
+      msg.className='msg error show';msg.textContent='Ingresa la referencia y autorización de la TPV';return;
+    }
+    body.tpv_referencia=ref;
+    body.tpv_autorizacion=aut;
+    body.tpv_terminal=document.getElementById('c-tpv-term').value.trim()||null;
+  }
+
+  try{
+    const r=await authFetch('/api/pos/venta',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const data=await r.json();
+    if(!r.ok){msg.className='msg error show';msg.textContent=data.detail||'Error al registrar venta';return;}
+    cerrarCobro();
+    carrito=[];descuentoExtra=0;autorizadoPor=null;
+    renderCarrito();
+    mostrarTicket(data);
+  }catch(e){msg.className='msg error show';msg.textContent='Error de conexión';}
+}
+
+// ─── Ticket digital ──────────────────────────────────────────────────────
+let ticketActual=null;
+
+function mostrarTicket(venta){
+  ticketActual=venta;
+  document.getElementById('ticket-contenido').innerHTML=generarTicketHTML(venta);
+  document.getElementById('ticket-modal').classList.add('open');
+}
+
+function generarTicketHTML(v){
+  const fecha=new Date(v.fecha).toLocaleString('es-MX');
+  let html=`<div class="tk-head">
+    <div class="tk-negocio">Mi negocio</div>
+    ${v.sucursal?`<div class="tk-sub">Sucursal ${esc(v.sucursal)}</div>`:''}
+    <div class="tk-sub">Ticket de venta #${v.id}</div>
+    <div class="tk-sub">${fecha}</div>
+    ${v.operador?`<div class="tk-sub">Operador: ${esc(v.operador)}</div>`:''}
+  </div><div class="tk-items">`;
+  (v.detalle||[]).forEach(it=>{
+    const cant=Number.isInteger(it.cantidad)?it.cantidad+'x':it.cantidad.toFixed(3)+'kg';
+    html+=`<div class="tk-line"><span>${cant} ${esc(it.nombre)}</span><span>${money(it.importe)}</span></div>`;
+  });
+  html+='</div>';
+  if(v.descuento_extra_pct>0){
+    html+=`<div class="tk-line"><span>Subtotal</span><span>${money(v.subtotal)}</span></div>`;
+    html+=`<div class="tk-line tk-desc"><span>Descuento ${v.descuento_extra_pct}%${v.autorizado_por?' ('+esc(v.autorizado_por)+')':''}</span><span>-${money(v.subtotal*v.descuento_extra_pct/100)}</span></div>`;
+  }
+  const ahorroTk = v.ahorro_total!=null ? v.ahorro_total : 0;
+  if(ahorroTk>0.005){
+    html+=`<div class="tk-line tk-ahorro"><span>🎉 Ahorraste</span><span>${money(ahorroTk)}</span></div>`;
+  }
+  html+=`<div class="tk-line tk-total"><span>TOTAL</span><span>${money(v.total)}</span></div>`;
+  if(v.metodo_pago==='tarjeta'){
+    html+=`<div class="tk-line"><span>Pago</span><span>TARJETA</span></div>`;
+    if(v.tpv_terminal)html+=`<div class="tk-line"><span>Terminal</span><span>${esc(v.tpv_terminal)}</span></div>`;
+    if(v.tpv_referencia)html+=`<div class="tk-line"><span>Referencia</span><span>${esc(v.tpv_referencia)}</span></div>`;
+    if(v.tpv_autorizacion)html+=`<div class="tk-line"><span>Autorización</span><span>${esc(v.tpv_autorizacion)}</span></div>`;
+  }else{
+    html+=`<div class="tk-line"><span>Pago</span><span>EFECTIVO</span></div>`;
+    if(v.pago_con!=null){
+      html+=`<div class="tk-line"><span>Pagó con</span><span>${money(v.pago_con)}</span></div>`;
+      html+=`<div class="tk-line"><span>Cambio</span><span>${money(v.cambio||0)}</span></div>`;
+    }
+  }
+  html+='<div class="tk-foot">¡Gracias por su compra!</div>';
+  return html;
+}
+
+function cerrarTicket(){document.getElementById('ticket-modal').classList.remove('open');}
+
+function ticketTextoPlano(v){
+  if(!v)return '';
+  const fecha=new Date(v.fecha).toLocaleString('es-MX');
+  let txt=`🏪 MI NEGOCIO`;
+  if(v.sucursal)txt+=` — Sucursal ${v.sucursal}`;
+  txt+=`\n📋 Ticket #${v.id} | ${fecha}`;
+  if(v.operador)txt+=`\n👤 ${v.operador}`;
+  txt+=`\n─────────────────────\n`;
+  (v.detalle||[]).forEach(it=>{
+    const cant=Number.isInteger(it.cantidad)?it.cantidad+'x':it.cantidad.toFixed(3)+'kg';
+    txt+=`${cant} ${it.nombre} — ${money(it.importe)}\n`;
+  });
+  txt+=`─────────────────────\n`;
+  if(v.descuento_extra_pct>0){
+    txt+=`Subtotal: ${money(v.subtotal)}\n`;
+    txt+=`Descuento ${v.descuento_extra_pct}%: -${money(v.subtotal*v.descuento_extra_pct/100)}\n`;
+  }
+  const ahorroTxt=v.ahorro_total!=null?v.ahorro_total:0;
+  if(ahorroTxt>0.005){
+    txt+=`🎉 Ahorraste: ${money(ahorroTxt)}\n`;
+  }
+  txt+=`💰 TOTAL: ${money(v.total)}\n`;
+  if(v.metodo_pago==='tarjeta'){
+    txt+=`💳 Pago: Tarjeta`;
+    if(v.tpv_terminal)txt+=` (${v.tpv_terminal})`;
+    txt+=`\n`;
+    if(v.tpv_referencia)txt+=`Ref: ${v.tpv_referencia}\n`;
+  }else if(v.pago_con){
+    txt+=`💵 Pagó: ${money(v.pago_con)} | Cambio: ${money(v.cambio||0)}\n`;
+  }
+  txt+=`\n¡Gracias por su compra! 🙏`;
+  return txt;
+}
+
+function compartirWhatsApp(){
+  const txt=ticketTextoPlano(ticketActual);
+  if(!txt)return;
+  const url='https://wa.me/?text='+encodeURIComponent(txt);
+  window.open(url,'_blank');
+}
+
+function compartirEmail(){
+  const v=ticketActual;
+  if(!v)return;
+  const txt=ticketTextoPlano(v);
+  const asunto=encodeURIComponent(`Ticket de compra #${v.id} — Mi negocio`);
+  const cuerpo=encodeURIComponent(txt);
+  window.location.href=`mailto:?subject=${asunto}&body=${cuerpo}`;
+}
+
+function descargarTicket(){
+  if(!ticketActual)return;
+  const v=ticketActual;
+  const fecha=new Date(v.fecha).toLocaleString('es-MX');
+  let txt=`        MI NEGOCIO\n   Ticket de venta #${v.id}\n   ${fecha}\n`;
+  txt+='--------------------------------\n';
+  (v.detalle||[]).forEach(it=>{
+    const cant=Number.isInteger(it.cantidad)?it.cantidad+'x':it.cantidad.toFixed(3)+'kg';
+    txt+=`${cant} ${it.nombre}\n`.padEnd(24)+`${money(it.importe)}\n`;
+  });
+  txt+='--------------------------------\n';
+  if(v.descuento_extra_pct>0){
+    txt+=`Subtotal: ${money(v.subtotal)}\n`;
+    txt+=`Descuento ${v.descuento_extra_pct}%: -${money(v.subtotal*v.descuento_extra_pct/100)}\n`;
+  }
+  const ahorroDl=v.ahorro_total!=null?v.ahorro_total:0;
+  if(ahorroDl>0.005){
+    txt+=`Ahorraste: ${money(ahorroDl)}\n`;
+  }
+  txt+=`TOTAL: ${money(v.total)}\n`;
+  if(v.pago_con!=null){txt+=`Pagó con: ${money(v.pago_con)}\nCambio: ${money(v.cambio||0)}\n`;}
+  txt+='\n   ¡Gracias por su compra!\n';
+  const blob=new Blob([txt],{type:'text/plain;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=`ticket_${v.id}.txt`;
+  document.body.appendChild(a);a.click();a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function imprimirTicket(){
+  if(!ticketActual)return;
+  const win=window.open('','_blank');
+  win.document.write(`<html><head><title>Ticket #${ticketActual.id}</title>
+    <style>body{font-family:monospace;font-size:13px;max-width:300px;margin:20px auto}
+    .tk-line{display:flex;justify-content:space-between;margin-bottom:3px}
+    .tk-total{font-weight:bold;font-size:15px;border-top:1px dashed #000;margin-top:6px;padding-top:6px}
+    .tk-desc{color:#a32d2d}.tk-ahorro{color:#3b6d11;font-weight:bold}.tk-head,.tk-foot{text-align:center;margin:8px 0}
+    .tk-negocio{font-size:18px;font-weight:bold}.tk-items{border-top:1px dashed #000;border-bottom:1px dashed #000;padding:6px 0;margin:6px 0}
+    </style></head><body>${generarTicketHTML(ticketActual)}</body></html>`);
+  win.document.close();
+  setTimeout(()=>win.print(),300);
+}
+
+// ─── Escáner ────────────────────────────────────────────────────────────
+let zxingStream=null,scanLoop=null;
+
+async function abrirEscaner(){
+  const msg=document.getElementById('scan-msg');
+  msg.className='msg';
+  document.getElementById('scanner-modal').classList.add('open');
+  if(!window.isSecureContext){msg.className='msg error show';msg.textContent='La cámara requiere HTTPS.';return;}
+  if(!navigator.mediaDevices){msg.className='msg error show';msg.textContent='Cámara no soportada.';return;}
+  let intentos=0;
+  while(!window.BarcodeDetectorPolyfill&&intentos<20){await new Promise(r=>setTimeout(r,150));intentos++;}
+  if(!window.BarcodeDetectorPolyfill){msg.className='msg error show';msg.textContent='No se cargó el escáner. Recarga la página.';return;}
+  const video=document.getElementById('scan-video');
+  try{
+    zxingStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080},advanced:[{focusMode:'continuous'}]},audio:false});
+    video.srcObject=zxingStream;
+    await video.play();
+    msg.className='msg show';msg.textContent=`Cámara activa (${video.videoWidth}x${video.videoHeight})`;
+    const detector=new window.BarcodeDetectorPolyfill({formats:['ean_13','ean_8','upc_a','upc_e','code_128','code_39','qr_code','itf']});
+    const canvas=document.createElement('canvas');
+    const ctx=canvas.getContext('2d',{willReadFrequently:true});
+    let detectando=false;
+    scanLoop=setInterval(async()=>{
+      if(detectando||!video.videoWidth)return;
+      detectando=true;
+      try{
+        const vw=video.videoWidth,vh=video.videoHeight;
+        const cw=Math.floor(vw*0.7),ch=Math.floor(vh*0.42);
+        const cx=Math.floor((vw-cw)/2),cy=Math.floor((vh-ch)/2);
+        canvas.width=cw;canvas.height=ch;
+        ctx.drawImage(video,cx,cy,cw,ch,0,0,cw,ch);
+        const codigos=await detector.detect(canvas);
+        if(codigos.length>0){clearInterval(scanLoop);scanLoop=null;onCodigo(codigos[0].rawValue);}
+      }catch(err){}
+      detectando=false;
+    },300);
+  }catch(e){msg.className='msg error show';msg.textContent='No se pudo acceder a la cámara: '+(e.message||e.name);}
+}
+
+async function cerrarEscaner(){
+  document.getElementById('scanner-modal').classList.remove('open');
+  if(scanLoop){clearInterval(scanLoop);scanLoop=null;}
+  if(zxingStream){zxingStream.getTracks().forEach(t=>t.stop());zxingStream=null;}
+  const v=document.getElementById('scan-video');if(v)v.srcObject=null;
+}
+
+async function onCodigo(codigo){
+  await cerrarEscaner();
+  try{
+    const r=await authFetch('/api/pos/buscar?q='+encodeURIComponent(codigo));
+    const items=await r.json();
+    const exacto=items.find(p=>p.codigo_barras===codigo)||items[0];
+    if(exacto){agregar(exacto);}
+    else{
+      document.getElementById('buscar').value=codigo;
+      ejecutarBusqueda();
+    }
+  }catch(e){}
+}
+
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){cerrarEscaner();cerrarPeso();cerrarDescuento();cerrarCobro();cerrarTicket();}});
+
+if(sesionPOS){
+  let txt='👤 '+sesionPOS.usuario;
+  if(sesionPOS.sucursal)txt+=' · Suc. '+sesionPOS.sucursal;
+  document.getElementById('nav-operador').textContent=txt;
+}
+renderCarrito();
+</script>
+</body>
+</html>

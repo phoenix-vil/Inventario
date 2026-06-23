@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Consulta de precios</title>
+<script type="module">
+import { BarcodeDetector } from 'https://cdn.jsdelivr.net/npm/barcode-detector@3/dist/es/ponyfill.min.js';
+window.BarcodeDetectorPolyfill = BarcodeDetector;
+</script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f5f4f0;--bg2:#fff;--border:#e2e0d8;--text:#1a1a18;--text2:#6b6b66;
+  --blue:#185fa5;--blue-bg:#e6f1fb;--green:#3b6d11;--green-bg:#eaf3de;
+  --red:#a32d2d;--red-bg:#fcebeb;--amber:#854f0b
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1c1c1a;--bg2:#252522;--border:#3a3a36;--text:#e8e6dc;--text2:#9c9a92;
+  --blue:#85b7eb;--blue-bg:#042c53;--green:#97c459;--green-bg:#173404;
+  --red:#f09595;--red-bg:#501313;--amber:#ef9f27
+}}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}
+
+/* Topbar */
+.topbar{background:color-mix(in srgb,var(--bg2) 88%,transparent);border-bottom:0.5px solid var(--border);padding:0 1rem;height:54px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:10;backdrop-filter:blur(10px)}
+.topbar-title{font-size:17px;font-weight:600;flex:1;text-align:center}
+.btn-inicio{display:inline-flex;align-items:center;gap:5px;height:36px;padding:0 12px;border:0.5px solid var(--border);border-radius:8px;background:transparent;color:var(--text);font-size:13px;text-decoration:none;transition:background .12s}
+.btn-inicio:hover{background:var(--bg)}
+.home-img{width:18px;height:18px;object-fit:contain}
+@media(prefers-color-scheme:dark){.home-img{filter:invert(1)}}
+
+/* Hero: zona principal con buscador y escáner */
+.hero{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:2.5rem 1.25rem 1.5rem;max-width:560px;width:100%;margin:0 auto}
+
+/* Estado inicial: logo y call to action */
+.hero-idle{display:flex;flex-direction:column;align-items:center;gap:1.5rem;width:100%;margin-bottom:2rem}
+.hero-icon{font-size:56px;line-height:1}
+.hero-title{font-size:20px;font-weight:700;color:var(--text);text-align:center}
+.hero-sub{font-size:14px;color:var(--text2);text-align:center}
+
+/* Botón escáner grande */
+.scan-btn-hero{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;height:62px;background:var(--blue);color:#fff;border:none;border-radius:16px;font-size:18px;font-weight:600;cursor:pointer;letter-spacing:-.2px;box-shadow:0 4px 16px color-mix(in srgb,var(--blue) 35%,transparent);transition:transform .1s,box-shadow .15s}
+.scan-btn-hero:active{transform:scale(.98)}
+.scan-btn-hero:hover{box-shadow:0 6px 20px color-mix(in srgb,var(--blue) 45%,transparent)}
+
+/* Barra de búsqueda */
+.search-bar{display:flex;gap:8px;width:100%;margin-top:.75rem}
+.search-bar input{flex:1;height:50px;padding:0 16px;border:0.5px solid var(--border);border-radius:12px;background:var(--bg2);color:var(--text);font-size:16px;font-family:inherit;box-shadow:0 1px 3px rgba(0,0,0,.04);transition:border-color .15s,box-shadow .15s}
+.search-bar input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px color-mix(in srgb,var(--blue) 18%,transparent)}
+
+/* Resultado principal (un solo producto) */
+.result-card{width:100%;background:var(--bg2);border:0.5px solid var(--border);border-radius:20px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.08);animation:card-in .25s ease-out}
+@keyframes card-in{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:none}}
+.result-img{width:100%;height:220px;object-fit:cover;background:var(--bg);display:block}
+.result-img-placeholder{width:100%;height:180px;background:linear-gradient(135deg,var(--bg),var(--border));display:flex;align-items:center;justify-content:center;font-size:72px}
+.result-body{padding:1.5rem}
+.result-cat{font-size:12px;font-weight:600;color:var(--blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.result-name{font-size:24px;font-weight:700;line-height:1.2;margin-bottom:.5rem}
+.result-marca{font-size:14px;color:var(--text2);margin-bottom:1rem}
+.price-row{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.price-main{font-size:42px;font-weight:800;color:var(--green);line-height:1}
+.price-unit{font-size:14px;color:var(--text2);margin-bottom:6px}
+.price-label{font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px}
+.price-old{font-size:18px;color:var(--text2);text-decoration:line-through}
+.res-price-label{font-size:10px;color:var(--text2);text-align:right}
+.disc-badge{display:inline-block;font-size:13px;font-weight:700;padding:3px 10px;border-radius:20px;background:var(--red-bg);color:var(--red)}
+.price-gram{font-size:13px;color:var(--text2);margin-top:6px}
+
+/* Lista de múltiples resultados */
+.multi-header{font-size:13px;color:var(--text2);margin:.75rem 0 .5rem;width:100%;text-align:center}
+.results-list{width:100%;display:flex;flex-direction:column;gap:10px}
+.res-card{display:flex;align-items:center;gap:12px;background:var(--bg2);border:0.5px solid var(--border);border-radius:14px;padding:.875rem 1rem;cursor:pointer;transition:transform .1s,box-shadow .15s;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.res-card:active{transform:scale(.98)}
+.res-card:hover{box-shadow:0 3px 12px rgba(0,0,0,.08)}
+.res-thumb{width:52px;height:52px;object-fit:cover;border-radius:10px;border:0.5px solid var(--border);flex-shrink:0;background:var(--bg)}
+.res-thumb-ph{width:52px;height:52px;border-radius:10px;background:var(--bg);border:0.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0}
+.res-info{flex:1;min-width:0}
+.res-name{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.res-cat{font-size:12px;color:var(--text2)}
+.res-price{font-size:18px;font-weight:700;color:var(--green);white-space:nowrap;text-align:right}
+.res-price-old{font-size:12px;color:var(--text2);text-decoration:line-through;text-align:right}
+
+/* Escáner */
+#qr-reader{width:100%;border-radius:8px;overflow:hidden;position:relative}
+#qr-reader video{width:100%;border-radius:8px;display:block}
+.scan-frame{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:70%;height:42%;pointer-events:none}
+.scan-frame::before{content:'';position:absolute;inset:0;border-radius:14px;box-shadow:0 0 0 2000px rgba(0,0,0,.55)}
+.scan-corner{position:absolute;width:28px;height:28px;border:3px solid #4fc3f7;border-radius:6px;filter:drop-shadow(0 0 4px rgba(79,195,247,.6))}
+.scan-corner.tl{top:-3px;left:-3px;border-right:none;border-bottom:none}
+.scan-corner.tr{top:-3px;right:-3px;border-left:none;border-bottom:none}
+.scan-corner.bl{bottom:-3px;left:-3px;border-right:none;border-top:none}
+.scan-corner.br{bottom:-3px;right:-3px;border-left:none;border-top:none}
+.scan-line{position:absolute;left:4%;right:4%;top:6%;height:2px;background:linear-gradient(90deg,transparent,#4fc3f7,transparent);box-shadow:0 0 10px #4fc3f7;animation:scanmove 2.2s ease-in-out infinite}
+@keyframes scanmove{0%,100%{top:6%}50%{top:92%}}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:100;padding:1rem}
+.overlay.open{display:flex;animation:ov-in .15s}
+@keyframes ov-in{from{opacity:0}to{opacity:1}}
+.modal{background:var(--bg2);border:0.5px solid var(--border);border-radius:14px;padding:1.5rem;width:420px;max-width:96vw;animation:mod-in .18s}
+@keyframes mod-in{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
+.modal h2{font-size:17px;font-weight:600;margin-bottom:1rem}
+.scan-msg{padding:9px;border-radius:8px;font-size:13px;margin-top:8px;background:var(--blue-bg);color:var(--blue);display:none}
+.scan-msg.show{display:block}
+.modal-footer{display:flex;justify-content:flex-end;margin-top:1rem}
+.modal-footer button{height:40px;padding:0 16px;border-radius:8px;font-size:14px;cursor:pointer;border:0.5px solid var(--border);background:transparent;color:var(--text)}
+.empty-result{text-align:center;padding:2rem;color:var(--text2);width:100%}
+.btn-nueva-busqueda{margin-top:1.5rem;width:100%;height:46px;border:0.5px solid var(--border);border-radius:12px;background:transparent;color:var(--text);font-size:14px;cursor:pointer;font-weight:500;transition:background .12s}
+.btn-nueva-busqueda:hover{background:var(--bg)}
+@media(max-width:400px){.price-main{font-size:34px}}
+</style>
+<link rel="stylesheet" href="/static/modern.css">
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/" class="btn-inicio"><img src="/static/home-icon.webp" class="home-img" alt="Inicio"> Inicio</a>
+  <h1 class="topbar-title">💲 Consulta de precios</h1>
+  <div style="width:84px"></div>
+</div>
+
+<div class="hero">
+
+  <!-- Barra de búsqueda: SIEMPRE la primera cosa en pantalla.
+       Va antes del bloque decorativo a propósito: así, cuando ese bloque
+       se oculta/muestra al buscar, nunca desplaza al input (nada cambia
+       ARRIBA de él), evitando que el teclado se cierre mientras escribes. -->
+  <div class="search-bar">
+    <input type="search" id="buscar" placeholder="Buscar por nombre..." oninput="buscar()" autocomplete="off">
+  </div>
+
+  <!-- Decoración inicial: icono, título y botón de escáner (se ocultan al buscar) -->
+  <div class="hero-idle" id="hero-deco">
+    <div class="hero-icon">💲</div>
+    <div>
+      <div class="hero-title">¿Cuánto cuesta?</div>
+      <div class="hero-sub">Escanea el código o busca por nombre</div>
+    </div>
+
+    <button class="scan-btn-hero" onclick="abrirEscaner()">
+      <span style="font-size:26px">📷</span> Escanear código de barras
+    </button>
+  </div>
+
+  <!-- Resultado(s) -->
+  <div id="resultado-cont" style="width:100%;display:none"></div>
+
+</div>
+
+<!-- Modal escáner -->
+<div class="overlay" id="scanner-overlay">
+  <div class="modal">
+    <h2>Escanear código de barras</h2>
+    <div id="qr-reader">
+      <video id="scan-video" playsinline autoplay muted></video>
+      <div class="scan-frame">
+        <span class="scan-corner tl"></span><span class="scan-corner tr"></span>
+        <span class="scan-corner bl"></span><span class="scan-corner br"></span>
+        <div class="scan-line"></div>
+      </div>
+    </div>
+    <div class="scan-msg" id="scan-msg"></div>
+    <div class="modal-footer"><button onclick="cerrarEscaner()">Cerrar</button></div>
+  </div>
+</div>
+
+<script src="/static/auth.js"></script>
+<script>
+requireAuth();
+
+let debTimer;
+let ultimosCodigo=null; // para evitar buscar la misma cosa dos veces
+
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function money(n){return '$'+Number(n).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});}
+
+/* ── Búsqueda ── */
+function buscar(){
+  clearTimeout(debTimer);
+  const q=document.getElementById('buscar').value.trim();
+  if(!q){mostrarIdle();return;}
+  debTimer=setTimeout(()=>ejecutarBusqueda(q),300);
+}
+
+async function ejecutarBusqueda(q){
+  if(q===ultimosCodigo)return;
+  ultimosCodigo=q;
+  try{
+    const r=await authFetch('/api/lista-precios?q='+encodeURIComponent(q));
+    const prods=await r.json();
+    mostrarResultados(prods, q);
+  }catch(e){ mostrarError('Error al buscar. Intenta de nuevo.'); }
+}
+
+async function buscarPorCodigo(codigo){
+  try{
+    const r=await authFetch('/api/lista-precios?codigo='+encodeURIComponent(codigo));
+    let prods=await r.json();
+    if(!prods.length){
+      // Fallback: buscar por texto
+      const r2=await authFetch('/api/lista-precios?q='+encodeURIComponent(codigo));
+      prods=await r2.json();
+    }
+    mostrarResultados(prods, codigo);
+  }catch(e){ mostrarError('Error al buscar. Intenta de nuevo.'); }
+}
+
+/* ── Mostrar resultados ── */
+function mostrarIdle(){
+  ultimosCodigo=null;
+  document.getElementById('hero-deco').style.display='flex';
+  document.getElementById('resultado-cont').style.display='none';
+  document.getElementById('resultado-cont').innerHTML='';
+}
+
+function mostrarError(msg){
+  document.getElementById('hero-deco').style.display='none';
+  const cont=document.getElementById('resultado-cont');
+  cont.style.display='block';
+  cont.innerHTML=`<div class="empty-result">😕 ${esc(msg)}</div>
+    <button class="btn-nueva-busqueda" onclick="nuevaBusqueda()">← Nueva búsqueda</button>`;
+}
+
+function mostrarResultados(prods, query){
+  document.getElementById('hero-deco').style.display='none';
+  const cont=document.getElementById('resultado-cont');
+  cont.style.display='block';
+
+  if(!prods.length){
+    cont.innerHTML=`<div class="empty-result">
+      😕 No se encontró ningún producto para <strong>${esc(query)}</strong>
+    </div>
+    <button class="btn-nueva-busqueda" onclick="nuevaBusqueda()">← Nueva búsqueda</button>`;
+    return;
+  }
+
+  if(prods.length===1){
+    cont.innerHTML=tarjetaGrande(prods[0])+
+      `<button class="btn-nueva-busqueda" onclick="nuevaBusqueda()">← Nueva búsqueda</button>`;
+  } else {
+    cont.innerHTML=`<div class="multi-header">${prods.length} productos encontrados</div>
+      <div class="results-list">${prods.map((p,i)=>tarjetaChica(p,i)).join('')}</div>
+      <button class="btn-nueva-busqueda" onclick="nuevaBusqueda()">← Nueva búsqueda</button>`;
+  }
+}
+
+function tarjetaGrande(p){
+  const img=p.imagen_url
+    ?`<img class="result-img" src="${esc(p.imagen_url)}" alt="${esc(p.nombre)}" onerror="this.parentElement.innerHTML='<div class=result-img-placeholder>🛍️</div>'">`
+    :`<div class="result-img-placeholder">🛍️</div>`;
+
+  const tieneDesc=p.descuento_pct>0;
+  const precios=tieneDesc
+    ?`<div class="price-row">
+        <div>
+          <div class="price-label">Precio con descuento</div>
+          <div class="price-main">${money(p.precio_final)}</div>
+        </div>
+        <div>
+          <div class="price-label">Antes</div>
+          <div class="price-old">${money(p.precio_venta)}</div>
+          <span class="disc-badge">-${p.descuento_pct}%</span>
+        </div>
+      </div>`
+    :`<div class="price-row"><div class="price-main">${money(p.precio_final)}</div></div>`;
+
+  const porPeso=p.vendido_por_peso
+    ?`<div class="price-gram">$${Number(p.precio_gramo).toLocaleString('es-MX',{minimumFractionDigits:4})} por gramo</div>` :'';
+
+  return `<div class="result-card">
+    ${img}
+    <div class="result-body">
+      <div class="result-cat">${esc(p.categoria)}</div>
+      <div class="result-name">${esc(p.nombre)}</div>
+      ${p.marca?`<div class="result-marca">${esc(p.marca)}</div>`:''}
+      ${precios}
+      <div class="price-unit">por ${esc(p.unidad)}${p.vendido_por_peso?' · precio por kg':''}</div>
+      ${porPeso}
+    </div>
+  </div>`;
+}
+
+let listaResultados=[];
+function tarjetaChica(p,i){
+  listaResultados[i]=p;
+  const thumb=p.imagen_url
+    ?`<img class="res-thumb" src="${esc(p.imagen_url)}" alt="" onerror="this.outerHTML='<div class=res-thumb-ph>🛍️</div>'">`
+    :`<div class="res-thumb-ph">🛍️</div>`;
+  const tieneDesc=p.descuento_pct>0;
+  return `<div class="res-card" onclick="mostrarResultados([listaResultados[${i}]],'')">
+    ${thumb}
+    <div class="res-info">
+      <div class="res-name">${esc(p.nombre)}</div>
+      <div class="res-cat">${esc(p.categoria)}${p.marca?' · '+esc(p.marca):''}</div>
+    </div>
+    <div>
+      ${tieneDesc?`<div class="res-price-label">Antes</div><div class="res-price-old">${money(p.precio_venta)}</div>`:''}
+      <div class="res-price">${money(p.precio_final)}${p.vendido_por_peso?'/kg':''}</div>
+      ${tieneDesc?`<div style="text-align:right"><span class="disc-badge" style="font-size:11px">-${p.descuento_pct}%</span></div>`:''}
+    </div>
+  </div>`;
+}
+
+function nuevaBusqueda(){
+  document.getElementById('buscar').value='';
+  mostrarIdle();
+  document.getElementById('buscar').focus();
+}
+
+/* ── Escáner ── */
+let zxingStream=null,scanLoop=null;
+async function abrirEscaner(){
+  const msg=document.getElementById('scan-msg');
+  msg.className='scan-msg';msg.style.background='';msg.style.color='';
+  document.getElementById('scanner-overlay').classList.add('open');
+  if(!window.isSecureContext){
+    msg.className='scan-msg show';msg.style.background='var(--red-bg)';msg.style.color='var(--red)';
+    msg.textContent='La cámara requiere HTTPS.';return;
+  }
+  if(!navigator.mediaDevices){
+    msg.className='scan-msg show';msg.style.background='var(--red-bg)';msg.style.color='var(--red)';
+    msg.textContent='Cámara no soportada.';return;
+  }
+  let i=0;while(!window.BarcodeDetectorPolyfill&&i<20){await new Promise(r=>setTimeout(r,150));i++;}
+  if(!window.BarcodeDetectorPolyfill){
+    msg.className='scan-msg show';msg.style.background='var(--red-bg)';msg.style.color='var(--red)';
+    msg.textContent='No se cargó el escáner. Recarga la página.';return;
+  }
+  const video=document.getElementById('scan-video');
+  try{
+    zxingStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080},advanced:[{focusMode:'continuous'}]},audio:false});
+    video.srcObject=zxingStream;await video.play();
+    msg.className='scan-msg show';
+    msg.textContent=`Cámara activa (${video.videoWidth}x${video.videoHeight}). Apunta al código...`;
+    const detector=new window.BarcodeDetectorPolyfill({formats:['ean_13','ean_8','upc_a','upc_e','code_128','code_39','qr_code','itf']});
+    const canvas=document.createElement('canvas');
+    const ctx=canvas.getContext('2d',{willReadFrequently:true});
+    let det=false;
+    scanLoop=setInterval(async()=>{
+      if(det||!video.videoWidth)return;det=true;
+      try{
+        const vw=video.videoWidth,vh=video.videoHeight;
+        const cw=Math.floor(vw*.7),ch=Math.floor(vh*.42);
+        canvas.width=cw;canvas.height=ch;
+        ctx.drawImage(video,Math.floor((vw-cw)/2),Math.floor((vh-ch)/2),cw,ch,0,0,cw,ch);
+        const codes=await detector.detect(canvas);
+        if(codes.length){clearInterval(scanLoop);scanLoop=null;onCodigo(codes[0].rawValue);}
+      }catch(e){}det=false;
+    },300);
+  }catch(e){
+    msg.className='scan-msg show';msg.style.background='var(--red-bg)';msg.style.color='var(--red)';
+    msg.textContent='No se pudo acceder a la cámara: '+(e.message||e.name);
+  }
+}
+async function cerrarEscaner(){
+  document.getElementById('scanner-overlay').classList.remove('open');
+  if(scanLoop){clearInterval(scanLoop);scanLoop=null;}
+  if(zxingStream){zxingStream.getTracks().forEach(t=>t.stop());zxingStream=null;}
+  const v=document.getElementById('scan-video');if(v)v.srcObject=null;
+}
+async function onCodigo(codigo){
+  await cerrarEscaner();
+  await buscarPorCodigo(codigo);
+}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')cerrarEscaner();});
+</script>
+</body>
+</html>

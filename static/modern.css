@@ -1,0 +1,107 @@
+/* ── Estilo moderno compartido ──────────────────────────────────────────
+   Se aplica sobre las variables --bg, --bg2, --border, --text, --text2,
+   --blue, --green, --red, --amber ya definidas en cada página. */
+
+* { -webkit-tap-highlight-color: transparent; }
+
+body {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Topbar con leve transparencia y blur */
+.topbar {
+  backdrop-filter: blur(10px);
+  background: color-mix(in srgb, var(--bg2) 88%, transparent);
+  box-shadow: 0 1px 0 rgba(0,0,0,.04);
+}
+
+/* Tarjetas, paneles y modales: bordes más redondeados y sombra suave */
+.card, .panel, .modal, .stat, .form-card, .res-item, .venta, .item,
+.cart, .cart-item, .op-row, .user-row {
+  border-radius: 14px !important;
+}
+
+.card, .panel, .modal, .stat, .form-card {
+  box-shadow: 0 1px 3px rgba(0,0,0,.04), 0 1px 2px rgba(0,0,0,.03);
+}
+
+.modal {
+  box-shadow: 0 12px 40px rgba(0,0,0,.18);
+  animation: modal-in .18s ease-out;
+}
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(8px) scale(.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.overlay.open {
+  animation: overlay-in .15s ease-out;
+}
+@keyframes overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Botones: transición suave y leve elevación al presionar */
+button, .btn, .menu-btn, .res-item, .venta, .item, .tab,
+.qty button, a.btn-inicio {
+  transition: background-color .15s ease, border-color .15s ease,
+              transform .08s ease, box-shadow .15s ease, opacity .15s ease;
+}
+button:active, .btn:active, .menu-btn:active {
+  transform: scale(.98);
+}
+
+/* Botón primario con gradiente sutil */
+button.primary, .btn, .btn-cobrar {
+  background: linear-gradient(135deg, var(--text), color-mix(in srgb, var(--text) 85%, var(--blue) 15%)) !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,.12);
+}
+button.primary:hover, .btn:hover, .btn-cobrar:hover:not(:disabled) {
+  box-shadow: 0 4px 14px rgba(0,0,0,.16);
+}
+.btn-cobrar {
+  background: linear-gradient(135deg, var(--green), color-mix(in srgb, var(--green) 80%, #2ecc71 20%)) !important;
+  border: none !important;
+}
+
+/* Menú principal: tarjetas con hover elevado */
+.menu-btn {
+  box-shadow: 0 1px 3px rgba(0,0,0,.04);
+}
+.menu-btn:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,.08);
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--border) 50%, var(--blue) 50%);
+}
+.menu-btn .icon {
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.03);
+}
+.icon-precios { background: linear-gradient(135deg, var(--blue-bg), color-mix(in srgb, var(--blue-bg) 60%, var(--blue) 40%)) !important; }
+.icon-inv     { background: linear-gradient(135deg, var(--green-bg), color-mix(in srgb, var(--green-bg) 60%, var(--green) 40%)) !important; }
+.icon-pagos   { background: linear-gradient(135deg, var(--amber-bg), color-mix(in srgb, var(--amber-bg) 60%, var(--amber) 40%)) !important; }
+
+/* Inputs: focus más vivo */
+input, select, textarea {
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: var(--blue) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 18%, transparent);
+}
+
+/* Badges con leve sombra para destacar */
+.badge, .rol-badge, .discount-badge {
+  box-shadow: 0 1px 2px rgba(0,0,0,.05);
+}
+
+/* Tablas: hover más suave */
+tbody tr { transition: background-color .1s ease; }
+
+/* Scrollbar discreto (WebKit) */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text2) 35%, transparent);
+  border-radius: 8px;
+}
+::-webkit-scrollbar-track { background: transparent; }

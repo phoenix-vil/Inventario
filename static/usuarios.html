@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Usuarios</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f5f4f0;--bg2:#fff;--border:#e2e0d8;--text:#1a1a18;--text2:#6b6b66;
+  --blue:#185fa5;--blue-bg:#e6f1fb;--green:#3b6d11;--green-bg:#eaf3de;
+  --red:#a32d2d;--red-bg:#fcebeb;--radius:10px
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1c1c1a;--bg2:#252522;--border:#3a3a36;--text:#e8e6dc;--text2:#9c9a92;
+  --blue:#85b7eb;--blue-bg:#042c53;--green:#97c459;--green-bg:#173404;
+  --red:#f09595;--red-bg:#501313
+}}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.topbar{background:var(--bg2);border-bottom:0.5px solid var(--border);padding:0 1rem;height:54px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:10}
+.topbar-title{font-size:17px;font-weight:600;flex:1;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topbar-right{display:flex;align-items:center;flex-shrink:0;min-width:84px;justify-content:flex-end}
+.btn-inicio{display:inline-flex;align-items:center;gap:5px;height:36px;padding:0 12px;border:0.5px solid var(--border);border-radius:8px;background:transparent;color:var(--text);font-size:13px;text-decoration:none;flex-shrink:0;white-space:nowrap}
+.btn-inicio:hover{background:var(--bg)}
+.home-img{width:18px;height:18px;object-fit:contain;display:block}
+@media(prefers-color-scheme:dark){.home-img{filter:invert(1)}}
+.container{max-width:600px;margin:0 auto;padding:1.25rem}
+.section-title{font-size:13px;font-weight:600;color:var(--text2);margin:1.5rem 0 .75rem;text-transform:uppercase;letter-spacing:.5px}
+.section-title:first-child{margin-top:0}
+.card{background:var(--bg2);border:0.5px solid var(--border);border-radius:12px;overflow:hidden}
+.user-row{display:flex;align-items:center;gap:10px;padding:.875rem 1rem;border-bottom:0.5px solid var(--border)}
+.user-row:last-child{border-bottom:none}
+.u-info{flex:1;min-width:0}
+.u-name{font-weight:600;font-size:14px}
+.u-rol{font-size:12px;color:var(--text2)}
+.rol-badge{display:inline-block;font-size:11px;font-weight:600;padding:1px 8px;border-radius:20px}
+.rol-gerente{background:var(--blue-bg);color:var(--blue)}
+.rol-cajero{background:var(--green-bg);color:var(--green)}
+.u-actions{display:flex;gap:6px}
+.u-actions button{height:32px;padding:0 10px;border:0.5px solid var(--border);border-radius:7px;background:transparent;color:var(--text);font-size:12px;cursor:pointer}
+.u-actions button.danger{color:var(--red);border-color:transparent;background:var(--red-bg)}
+.form-card{background:var(--bg2);border:0.5px solid var(--border);border-radius:12px;padding:1.25rem}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:12px;color:var(--text2);margin-bottom:4px}
+.field input,.field select{width:100%;height:42px;padding:0 12px;border:0.5px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:16px;font-family:inherit}
+.btn{width:100%;height:46px;border:none;border-radius:10px;background:var(--text);color:var(--bg2);font-size:15px;font-weight:600;cursor:pointer;margin-top:4px}
+.msg{padding:10px;border-radius:8px;font-size:13px;margin-top:10px;display:none}
+.msg.show{display:block}
+.msg.error{background:var(--red-bg);color:var(--red)}
+.msg.ok{background:var(--green-bg);color:var(--green)}
+/* Modal cambio de contraseña */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:100;padding:1rem}
+.overlay.open{display:flex}
+.modal{background:var(--bg2);border:0.5px solid var(--border);border-radius:14px;padding:1.5rem;width:380px;max-width:96vw}
+.modal h2{font-size:17px;font-weight:600;margin-bottom:1rem}
+.modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:1rem}
+.modal-footer button{height:40px;padding:0 16px;border-radius:8px;font-size:14px;cursor:pointer;border:0.5px solid var(--border);background:transparent;color:var(--text)}
+.modal-footer .primary{background:var(--text);color:var(--bg2);border-color:var(--text)}
+@media(max-width:560px){.topbar{padding:0 .625rem}.topbar-title{font-size:15px}.topbar-right{min-width:0}.container{padding:.875rem}}
+</style>
+<link rel="stylesheet" href="/static/modern.css">
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/" class="btn-inicio"><img src="/static/home-icon.webp" class="home-img" alt="Inicio"> Inicio</a>
+  <h1 class="topbar-title">👥 Usuarios</h1>
+  <div class="topbar-right"></div>
+</div>
+
+<div class="container">
+  <div class="section-title">Operadores registrados</div>
+  <div class="card" id="lista-usuarios"></div>
+
+  <div class="section-title">Crear nuevo usuario</div>
+  <div class="form-card">
+    <div class="field"><label>Usuario</label><input id="nu-usuario" autocomplete="off"></div>
+    <div class="field"><label>Contraseña</label><input id="nu-password" type="password" autocomplete="off"></div>
+    <div class="field"><label>Rol</label>
+      <select id="nu-rol">
+        <option value="cajero">Cajero (solo vende)</option>
+        <option value="gerente">Gerente (administra todo)</option>
+      </select>
+    </div>
+    <button class="btn" onclick="crearUsuario()">Crear usuario</button>
+    <div class="msg" id="crear-msg"></div>
+  </div>
+
+  <div class="section-title">Sucursales</div>
+  <div class="card" id="lista-sucursales"></div>
+
+  <div class="section-title">Agregar sucursal</div>
+  <div class="form-card">
+    <div class="field"><label>Nombre / número de sucursal</label><input id="ns-nombre" placeholder="Ej: 2, Centro, Norte..." autocomplete="off"></div>
+    <button class="btn" onclick="crearSucursal()">Agregar sucursal</button>
+    <div class="msg" id="sucursal-msg"></div>
+  </div>
+</div>
+
+<!-- Modal cambio de contraseña -->
+<div class="overlay" id="pwd-modal">
+  <div class="modal">
+    <h2 id="pwd-titulo">Cambiar contraseña</h2>
+    <div class="field"><label>Nueva contraseña</label><input id="pwd-nueva" type="password" autocomplete="off"></div>
+    <div class="msg" id="pwd-msg"></div>
+    <div class="modal-footer">
+      <button onclick="cerrarPwd()">Cancelar</button>
+      <button class="primary" onclick="guardarPwd()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/auth.js"></script>
+<script>
+const sesion = requireGerente();
+let usuarioEditando = null;
+
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+async function cargar(){
+  try{
+    const r = await authFetch('/api/usuarios');
+    if(!r.ok)return;
+    const us = await r.json();
+    document.getElementById('lista-usuarios').innerHTML = us.map(u=>{
+      const esYo = u.usuario===sesion.usuario;
+      const badge = u.rol==='gerente'?'rol-gerente':'rol-cajero';
+      return `<div class="user-row">
+        <div class="u-info">
+          <div class="u-name">${esc(u.usuario)} ${esYo?'<span style="font-size:11px;color:var(--text2)">(tú)</span>':''}</div>
+          <div class="u-rol"><span class="rol-badge ${badge}">${esc(u.rol)}</span></div>
+        </div>
+        <div class="u-actions">
+          <button onclick="abrirPwd('${esc(u.usuario)}')">🔑 Clave</button>
+          ${esYo?'':`<button class="danger" onclick="borrarUsuario('${esc(u.usuario)}')">🗑</button>`}
+        </div>
+      </div>`;
+    }).join('');
+  }catch(e){}
+}
+
+async function crearUsuario(){
+  const msg = document.getElementById('crear-msg');
+  const usuario = document.getElementById('nu-usuario').value.trim();
+  const password = document.getElementById('nu-password').value;
+  const rol = document.getElementById('nu-rol').value;
+  if(!usuario||!password){msg.className='msg error show';msg.textContent='Completa usuario y contraseña';return;}
+  if(password.length<4){msg.className='msg error show';msg.textContent='La contraseña debe tener al menos 4 caracteres';return;}
+  try{
+    const r = await authFetch('/api/usuarios',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({usuario,password,rol})});
+    const data = await r.json();
+    if(!r.ok){msg.className='msg error show';msg.textContent=data.detail||'Error';return;}
+    msg.className='msg ok show';msg.textContent=`Usuario "${data.usuario}" creado.`;
+    document.getElementById('nu-usuario').value='';
+    document.getElementById('nu-password').value='';
+    cargar();
+  }catch(e){msg.className='msg error show';msg.textContent='Error de conexión';}
+}
+
+async function borrarUsuario(usuario){
+  if(!confirm(`¿Eliminar al usuario "${usuario}"? Esta acción no se puede deshacer.`))return;
+  try{
+    const r = await authFetch('/api/usuarios/'+encodeURIComponent(usuario),{method:'DELETE'});
+    if(r.status===204){cargar();return;}
+    const data = await r.json();
+    alert(data.detail||'No se pudo eliminar');
+  }catch(e){alert('Error de conexión');}
+}
+
+function abrirPwd(usuario){
+  usuarioEditando = usuario;
+  document.getElementById('pwd-titulo').textContent = `Cambiar contraseña de ${usuario}`;
+  document.getElementById('pwd-nueva').value='';
+  document.getElementById('pwd-msg').className='msg';
+  document.getElementById('pwd-modal').classList.add('open');
+  setTimeout(()=>document.getElementById('pwd-nueva').focus(),60);
+}
+function cerrarPwd(){document.getElementById('pwd-modal').classList.remove('open');usuarioEditando=null;}
+
+async function guardarPwd(){
+  const msg = document.getElementById('pwd-msg');
+  const nueva = document.getElementById('pwd-nueva').value;
+  if(!nueva||nueva.length<4){msg.className='msg error show';msg.textContent='La contraseña debe tener al menos 4 caracteres';return;}
+  try{
+    const r = await authFetch('/api/usuarios/password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({usuario:usuarioEditando,password_nuevo:nueva})});
+    const data = await r.json();
+    if(!r.ok){msg.className='msg error show';msg.textContent=data.detail||'Error';return;}
+    cerrarPwd();
+  }catch(e){msg.className='msg error show';msg.textContent='Error de conexión';}
+}
+
+document.addEventListener('keydown',e=>{if(e.key==='Escape')cerrarPwd();});
+
+// ─── Sucursales ──────────────────────────────────────────────────────────
+async function cargarSucursales(){
+  try{
+    const r = await fetch('/api/sucursales');
+    const sucursales = await r.json();
+    const cont = document.getElementById('lista-sucursales');
+    if(!sucursales.length){cont.innerHTML='<div class="user-row"><div class="u-info">Sin sucursales registradas</div></div>';return;}
+    cont.innerHTML = sucursales.map(s=>`<div class="user-row">
+      <div class="u-info"><div class="u-name">${esc(s.nombre)}</div></div>
+      <div class="u-actions"><button class="danger" onclick="borrarSucursal(${s.id},'${esc(s.nombre)}')">🗑</button></div>
+    </div>`).join('');
+  }catch(e){}
+}
+
+async function crearSucursal(){
+  const msg = document.getElementById('sucursal-msg');
+  const nombre = document.getElementById('ns-nombre').value.trim();
+  if(!nombre){msg.className='msg error show';msg.textContent='Escribe un nombre para la sucursal';return;}
+  try{
+    const r = await authFetch('/api/sucursales',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre})});
+    const data = await r.json();
+    if(!r.ok){msg.className='msg error show';msg.textContent=data.detail||'Error';return;}
+    msg.className='msg ok show';msg.textContent=`Sucursal "${data.nombre}" agregada.`;
+    document.getElementById('ns-nombre').value='';
+    cargarSucursales();
+  }catch(e){msg.className='msg error show';msg.textContent='Error de conexión';}
+}
+
+async function borrarSucursal(id,nombre){
+  if(!confirm(`¿Eliminar la sucursal "${nombre}"?`))return;
+  try{
+    const r = await authFetch('/api/sucursales/'+id,{method:'DELETE'});
+    if(r.status===204){cargarSucursales();return;}
+    const data = await r.json();
+    alert(data.detail||'No se pudo eliminar');
+  }catch(e){alert('Error de conexión');}
+}
+
+cargar();
+cargarSucursales();
+</script>
+</body>
+</html>
