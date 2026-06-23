@@ -69,3 +69,4 @@ sudo systemctl restart inventario
 cp ~/inventario/inventario.db ~/inventario_backup_$(date +%Y%m%d).db
 ```
 # Inventario
+# Inventari-
