@@ -90,6 +90,35 @@ Las ~50 decenas de scripts en la raíz y en `static/` **no son parte de la aplic
 - No los tomes como fuente de verdad del estado actual: lee `main.py` y los HTML.
 - Para un cambio nuevo, edita los archivos directamente con Edit. No hace falta escribir un script de parche nuevo salvo que el usuario lo pida.
 
-## Estado del repositorio
+## Control de versiones
 
-Git está muy desactualizado: el último commit es `6ee61c9` ("Subida inicial", junio 2026) y todo el trabajo posterior — créditos, gastos, devoluciones, cotizaciones, PWA, dashboard — está sin commitear. Además hay archivos que no deberían estar versionados: `inventario.db` y sus backups, `__pycache__/`, `.serper_key`, `serper_log.csv`, los `.zip`. No hay `.gitignore`. Si el usuario pide ordenar esto, empieza por ahí.
+Un solo repositorio (`origin` = `github.com:phoenix-vil/Inventario`) con una rama por entorno:
+
+| Carpeta | Rama | Entorno |
+|---------|------|---------|
+| `~/inventario` | `main` | Producción (:8000). Solo recibe merges desde `qa`. |
+| `~/inventario-qa` | `qa` | Pruebas (:8001). Aquí se desarrolla. |
+
+`inventario.db` **no se versiona** (está en `.gitignore`, junto con `__pycache__/`, `.serper_key`, `serper_log.csv` y los `.zip`). Cada entorno conserva su propia base: hacer merge o cambiar de rama nunca toca los datos.
+
+### Flujo para un cambio
+
+```bash
+# 1. Desarrollar y probar en QA
+cd ~/inventario-qa                    # rama qa
+# ...editar, probar contra :8001...
+git add -A && git commit -m "Descripción en español"
+git push origin qa
+
+# 2. Pasar a producción, ya probado
+cd ~/inventario                       # rama main
+git merge qa
+sudo systemctl restart inventario
+# ...verificar :8000...
+git tag -a v1.1.0 -m "Qué incluye esta versión"
+git push origin main --follow-tags
+```
+
+Las etiquetas `vX.Y.Z` en `main` marcan qué versión corre en producción. Para saberlo en cualquier momento: `git describe --tags`. Para volver a una versión anterior si algo sale mal: `git revert <commit>` (preferible) o `git checkout v1.0.0 -- <archivo>` para un archivo suelto, y reiniciar el servicio.
+
+Sigue haciendo el respaldo con fecha antes de cambios grandes: git versiona el código, pero no `inventario.db`.
