@@ -125,6 +125,11 @@ class CambiarPassword(BaseModel):
 
 class CrearSucursal(BaseModel):
     nombre: str = Field(..., min_length=1, max_length=50)
+    tiendas: Optional[list[str]] = None  # a qué tienda(s) pertenece esta sucursal física
+
+
+class EditarSucursal(BaseModel):
+    tiendas: Optional[list[str]] = None
 
 
 class CrearTienda(BaseModel):

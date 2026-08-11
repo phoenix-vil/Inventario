@@ -56,7 +56,6 @@ class Usuario(Base):
     password_hash = Column(String, nullable=False)
     salt = Column(String, nullable=False)
     rol = Column(String, default="gerente")  # gerente | cajero
-    tiendas = Column(String, nullable=True)  # nombres de tienda separados por coma; vacío/None = sin restricción (ve todas)
     creado_en = Column(DateTime, default=datetime.utcnow)
 
 
@@ -108,6 +107,7 @@ class Sucursal(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String, nullable=False, unique=True)
+    tiendas = Column(String, nullable=True)  # nombres de tienda separados por coma que se venden en esta sucursal
     creado_en = Column(DateTime, default=datetime.utcnow)
 
 
@@ -129,6 +129,7 @@ class Sesion(Base):
     usuario = Column(String, nullable=False)
     rol = Column(String, nullable=False)
     sucursal = Column(String, nullable=True)
+    tienda = Column(String, nullable=True)  # tienda activa, resuelta desde la sucursal al iniciar sesión
     creado_en = Column(DateTime, default=datetime.utcnow)
 
 

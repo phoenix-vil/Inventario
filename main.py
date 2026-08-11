@@ -21,7 +21,7 @@ from schemas import (
     ProductoCreate, ProductoUpdate, ProductoOut, AjusteStock,
     AutorizarDescuento, RegistrarVenta, CrearUsuario, CambiarPassword,
     Login, LogoutReq, CrearSucursal, DescuentoCategoria, AsignarStockSucursal, TrasladoStock)
-from schemas import CrearTienda, ClasificarProductosMasivo
+from schemas import CrearTienda, ClasificarProductosMasivo, EditarSucursal
 from schemas import CrearCliente, CrearPagoCredito
 from schemas import CrearGasto
 from schemas import CrearVentaPendiente
@@ -74,10 +74,18 @@ def login(data: Login, db: Session = Depends(get_db)):
     u = db.query(Usuario).filter(Usuario.usuario == data.usuario).first()
     if not u or not verificar_password(data.password, u.password_hash, u.salt):
         raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
+
+    # La(s) tienda(s) activa(s) de la sesión son las de la sucursal elegida, todas a la
+    # vez (ej. Imprenta = Only Reef + Only Garden simultáneo, no hay que elegir una).
+    tienda_texto = None
+    if data.sucursal:
+        suc = db.query(Sucursal).filter(Sucursal.nombre == data.sucursal).first()
+        tienda_texto = suc.tiendas if suc else None
+
     token = generar_token()
-    db.add(Sesion(token=token, usuario=u.usuario, rol=u.rol, sucursal=data.sucursal))
+    db.add(Sesion(token=token, usuario=u.usuario, rol=u.rol, sucursal=data.sucursal, tienda=tienda_texto))
     db.commit()
-    return {"token": token, "usuario": u.usuario, "rol": u.rol, "sucursal": data.sucursal}
+    return {"token": token, "usuario": u.usuario, "rol": u.rol, "sucursal": data.sucursal, "tienda": texto_a_tiendas(tienda_texto)}
 
 
 @app.post("/api/logout")
@@ -94,15 +102,36 @@ def info_sesion(authorization: Optional[str] = Header(None), db: Session = Depen
     s = get_sesion(authorization, db)
     if not s:
         raise HTTPException(status_code=401, detail="Sin sesión")
-    return {"usuario": s.usuario, "rol": s.rol, "sucursal": s.sucursal}
+    return {"usuario": s.usuario, "rol": s.rol, "sucursal": s.sucursal, "tienda": texto_a_tiendas(s.tienda)}
 
 
 # ─── Sucursales ─────────────────────────────────────────────────────────────
+def tiendas_a_texto(lista: Optional[List[str]]) -> Optional[str]:
+    """[ "Only Reef", "Only Garden" ] -> "Only Reef,Only Garden". Vacío/None -> None."""
+    if not lista:
+        return None
+    limpio = [t.strip() for t in lista if t and t.strip()]
+    return ",".join(limpio) if limpio else None
+
+
+def texto_a_tiendas(texto: Optional[str]) -> List[str]:
+    return [t for t in (texto or "").split(",") if t]
+
+
+def validar_tiendas(lista: Optional[List[str]], db: Session):
+    if not lista:
+        return
+    existentes = {t.nombre for t in db.query(Tienda).all()}
+    desconocidas = [t for t in lista if t.strip() and t.strip() not in existentes]
+    if desconocidas:
+        raise HTTPException(status_code=400, detail=f"Tienda(s) desconocida(s): {', '.join(desconocidas)}")
+
+
 @app.get("/api/sucursales")
 def listar_sucursales(db: Session = Depends(get_db)):
     """Público (sin sesión) para que el login pueda mostrar la lista."""
     rows = db.query(Sucursal).order_by(Sucursal.nombre).all()
-    return [{"id": s.id, "nombre": s.nombre} for s in rows]
+    return [{"id": s.id, "nombre": s.nombre, "tiendas": texto_a_tiendas(s.tiendas)} for s in rows]
 
 
 @app.post("/api/sucursales", status_code=201)
@@ -112,11 +141,26 @@ def crear_sucursal(data: CrearSucursal, sesion: Sesion = Depends(requerir_gerent
         raise HTTPException(status_code=400, detail="El nombre no puede estar vacío")
     if db.query(Sucursal).filter(Sucursal.nombre == nombre).first():
         raise HTTPException(status_code=409, detail="Esa sucursal ya existe")
-    s = Sucursal(nombre=nombre)
+    validar_tiendas(data.tiendas, db)
+    s = Sucursal(nombre=nombre, tiendas=tiendas_a_texto(data.tiendas))
     db.add(s)
     db.commit()
     db.refresh(s)
-    return {"id": s.id, "nombre": s.nombre}
+    return {"id": s.id, "nombre": s.nombre, "tiendas": texto_a_tiendas(s.tiendas)}
+
+
+@app.patch("/api/sucursales/{sucursal_id}")
+def editar_sucursal(sucursal_id: int, data: EditarSucursal, sesion: Sesion = Depends(requerir_gerente), db: Session = Depends(get_db)):
+    s = db.query(Sucursal).filter(Sucursal.id == sucursal_id).first()
+    if not s:
+        raise HTTPException(status_code=404, detail="Sucursal no encontrada")
+    cambios = data.model_dump(exclude_unset=True)
+    if "tiendas" in cambios:
+        validar_tiendas(cambios["tiendas"], db)
+        s.tiendas = tiendas_a_texto(cambios["tiendas"])
+    db.commit()
+    db.refresh(s)
+    return {"id": s.id, "nombre": s.nombre, "tiendas": texto_a_tiendas(s.tiendas)}
 
 
 @app.delete("/api/sucursales/{sucursal_id}", status_code=204)

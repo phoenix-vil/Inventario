@@ -36,6 +36,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .user-row:last-child{border-bottom:none}
 .u-info{flex:1;min-width:0}
 .u-name{font-weight:600;font-size:14px}
+.u-tiendas{display:flex;gap:5px;flex-wrap:wrap;margin-top:4px}
+.tienda-badge{display:inline-block;font-size:11px;font-weight:600;padding:1px 8px;border-radius:20px;background:var(--green-bg);color:var(--green)}
+.tienda-badge.sin{background:var(--red-bg);color:var(--red);font-weight:500}
 .u-actions{display:flex;gap:6px}
 .u-actions button{height:32px;padding:0 10px;border:0.5px solid var(--border);border-radius:7px;background:transparent;color:var(--text);font-size:12px;cursor:pointer}
 .u-actions button.danger{color:var(--red);border-color:transparent;background:var(--red-bg)}
@@ -43,11 +46,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .field{margin-bottom:12px}
 .field label{display:block;font-size:12px;color:var(--text2);margin-bottom:4px}
 .field input{width:100%;height:42px;padding:0 12px;border:0.5px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:16px;font-family:inherit}
+.tiendas-check{display:flex;flex-direction:column;gap:6px;border:0.5px solid var(--border);border-radius:8px;padding:10px;max-height:180px;overflow-y:auto}
+.tiendas-check label{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:400;cursor:pointer}
+.tiendas-check input{width:auto;height:auto}
+.field-hint{font-size:11px;color:var(--text2);margin-top:4px}
 .btn{width:100%;height:46px;border:none;border-radius:10px;background:var(--text);color:var(--bg2);font-size:15px;font-weight:600;cursor:pointer;margin-top:4px}
 .msg{padding:10px;border-radius:8px;font-size:13px;margin-top:10px;display:none}
 .msg.show{display:block}
 .msg.error{background:var(--red-bg);color:var(--red)}
 .msg.ok{background:var(--green-bg);color:var(--green)}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:100;padding:1rem}
+.overlay.open{display:flex}
+.modal{background:var(--bg2);border:0.5px solid var(--border);border-radius:14px;padding:1.5rem;width:380px;max-width:96vw}
+.modal h2{font-size:17px;font-weight:600;margin-bottom:1rem}
+.modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:1rem}
+.modal-footer button{height:40px;padding:0 16px;border-radius:8px;font-size:14px;cursor:pointer;border:0.5px solid var(--border);background:transparent;color:var(--text)}
+.modal-footer .primary{background:var(--text);color:var(--bg2);border-color:var(--text)}
 @media(max-width:560px){.topbar{padding:0 .625rem}.topbar-title{font-size:15px}.topbar-right{min-width:0}.container{padding:.875rem}}
 </style>
 <link rel="stylesheet" href="/static/modern.css">
@@ -67,8 +81,30 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <div class="section-title">Agregar sucursal</div>
   <div class="form-card">
     <div class="field"><label>Nombre / número de sucursal</label><input id="ns-nombre" placeholder="Ej: 2, Centro, Norte..." autocomplete="off"></div>
+    <div class="field">
+      <label>¿A qué tienda(s) pertenece?</label>
+      <div class="tiendas-check" id="ns-tiendas"></div>
+      <div class="field-hint">Marca una o más (ej. Imprenta = Only Reef + Only Garden). Sin marcar ninguna, la sucursal queda sin tienda asignada por ahora.</div>
+    </div>
     <button class="btn" onclick="crearSucursal()">Agregar sucursal</button>
     <div class="msg" id="sucursal-msg"></div>
+  </div>
+</div>
+
+<!-- Modal editar tiendas de una sucursal -->
+<div class="overlay" id="editar-modal">
+  <div class="modal">
+    <h2 id="editar-titulo">Editar sucursal</h2>
+    <div class="field">
+      <label>¿A qué tienda(s) pertenece?</label>
+      <div class="tiendas-check" id="ed-tiendas"></div>
+      <div class="field-hint">Sin marcar ninguna, la sucursal queda sin tienda asignada.</div>
+    </div>
+    <div class="msg" id="editar-msg"></div>
+    <div class="modal-footer">
+      <button onclick="cerrarEditar()">Cancelar</button>
+      <button class="primary" onclick="guardarEditar()">Guardar</button>
+    </div>
   </div>
 </div>
 
@@ -76,7 +112,28 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <script>
 requireGerente();
 
+let tiendasDisponibles = [];
+let sucursalEditando = null;
+
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+function pintarCheckboxes(contId, seleccionadas){
+  const cont = document.getElementById(contId);
+  cont.innerHTML = tiendasDisponibles.map(t=>
+    `<label><input type="checkbox" value="${esc(t.nombre)}" ${seleccionadas.includes(t.nombre)?'checked':''}> ${esc(t.nombre)}</label>`
+  ).join('');
+}
+function leerCheckboxes(contId){
+  return [...document.querySelectorAll(`#${contId} input:checked`)].map(i=>i.value);
+}
+
+async function cargarTiendas(){
+  try{
+    const r = await fetch('/api/tiendas');
+    if(r.ok) tiendasDisponibles = await r.json();
+    pintarCheckboxes('ns-tiendas', []);
+  }catch(e){}
+}
 
 async function cargarSucursales(){
   try{
@@ -84,23 +141,33 @@ async function cargarSucursales(){
     const sucursales = await r.json();
     const cont = document.getElementById('lista-sucursales');
     if(!sucursales.length){cont.innerHTML='<div class="user-row"><div class="u-info">Sin sucursales registradas</div></div>';return;}
-    cont.innerHTML = sucursales.map(s=>`<div class="user-row">
-      <div class="u-info"><div class="u-name">${esc(s.nombre)}</div></div>
-      <div class="u-actions"><button class="danger" onclick="borrarSucursal(${s.id},'${esc(s.nombre)}')">🗑</button></div>
-    </div>`).join('');
+    cont.innerHTML = sucursales.map(s=>{
+      const tiendasHtml = s.tiendas && s.tiendas.length
+        ? s.tiendas.map(t=>`<span class="tienda-badge">${esc(t)}</span>`).join('')
+        : `<span class="tienda-badge sin">Sin tienda asignada</span>`;
+      return `<div class="user-row">
+      <div class="u-info"><div class="u-name">${esc(s.nombre)}</div><div class="u-tiendas">${tiendasHtml}</div></div>
+      <div class="u-actions">
+        <button onclick='abrirEditar(${JSON.stringify(s).replace(/'/g,"&#39;")})'>✏️</button>
+        <button class="danger" onclick="borrarSucursal(${s.id},'${esc(s.nombre)}')">🗑</button>
+      </div>
+    </div>`;
+    }).join('');
   }catch(e){}
 }
 
 async function crearSucursal(){
   const msg = document.getElementById('sucursal-msg');
   const nombre = document.getElementById('ns-nombre').value.trim();
+  const tiendas = leerCheckboxes('ns-tiendas');
   if(!nombre){msg.className='msg error show';msg.textContent='Escribe un nombre para la sucursal';return;}
   try{
-    const r = await authFetch('/api/sucursales',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre})});
+    const r = await authFetch('/api/sucursales',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre,tiendas})});
     const data = await r.json();
     if(!r.ok){msg.className='msg error show';msg.textContent=data.detail||'Error';return;}
     msg.className='msg ok show';msg.textContent=`Sucursal "${data.nombre}" agregada.`;
     document.getElementById('ns-nombre').value='';
+    pintarCheckboxes('ns-tiendas', []);
     cargarSucursales();
   }catch(e){msg.className='msg error show';msg.textContent='Error de conexión';}
 }
@@ -115,7 +182,32 @@ async function borrarSucursal(id,nombre){
   }catch(e){alert('Error de conexión');}
 }
 
-cargarSucursales();
+function abrirEditar(s){
+  sucursalEditando = s.id;
+  document.getElementById('editar-titulo').textContent = `Editar tiendas de ${s.nombre}`;
+  pintarCheckboxes('ed-tiendas', s.tiendas || []);
+  document.getElementById('editar-msg').className='msg';
+  document.getElementById('editar-modal').classList.add('open');
+}
+function cerrarEditar(){document.getElementById('editar-modal').classList.remove('open');sucursalEditando=null;}
+
+async function guardarEditar(){
+  const msg = document.getElementById('editar-msg');
+  const tiendas = leerCheckboxes('ed-tiendas');
+  try{
+    const r = await authFetch(`/api/sucursales/${sucursalEditando}`,{
+      method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({tiendas})
+    });
+    const data = await r.json();
+    if(!r.ok){msg.className='msg error show';msg.textContent=data.detail||'Error';return;}
+    cerrarEditar();
+    cargarSucursales();
+  }catch(e){msg.className='msg error show';msg.textContent='Error de conexión';}
+}
+
+document.addEventListener('keydown',e=>{if(e.key==='Escape')cerrarEditar();});
+
+cargarTiendas().then(cargarSucursales);
 </script>
 </body>
 </html>
