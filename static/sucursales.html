@@ -95,10 +95,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div class="overlay" id="editar-modal">
   <div class="modal">
     <h2 id="editar-titulo">Editar sucursal</h2>
+    <div class="field"><label>Nombre</label><input id="ed-nombre" autocomplete="off"></div>
     <div class="field">
       <label>¿A qué tienda(s) pertenece?</label>
       <div class="tiendas-check" id="ed-tiendas"></div>
-      <div class="field-hint">Sin marcar ninguna, la sucursal queda sin tienda asignada.</div>
+      <div class="field-hint">Sin marcar ninguna, la sucursal queda sin tienda asignada (así debe quedar la sucursal de Dirección General, para ver las 5 tiendas sin restricción).</div>
     </div>
     <div class="msg" id="editar-msg"></div>
     <div class="modal-footer">
@@ -184,7 +185,8 @@ async function borrarSucursal(id,nombre){
 
 function abrirEditar(s){
   sucursalEditando = s.id;
-  document.getElementById('editar-titulo').textContent = `Editar tiendas de ${s.nombre}`;
+  document.getElementById('editar-titulo').textContent = `Editar ${s.nombre}`;
+  document.getElementById('ed-nombre').value = s.nombre;
   pintarCheckboxes('ed-tiendas', s.tiendas || []);
   document.getElementById('editar-msg').className='msg';
   document.getElementById('editar-modal').classList.add('open');
@@ -193,10 +195,12 @@ function cerrarEditar(){document.getElementById('editar-modal').classList.remove
 
 async function guardarEditar(){
   const msg = document.getElementById('editar-msg');
+  const nombre = document.getElementById('ed-nombre').value.trim();
   const tiendas = leerCheckboxes('ed-tiendas');
+  if(!nombre){msg.className='msg error show';msg.textContent='El nombre no puede estar vacío';return;}
   try{
     const r = await authFetch(`/api/sucursales/${sucursalEditando}`,{
-      method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({tiendas})
+      method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre,tiendas})
     });
     const data = await r.json();
     if(!r.ok){msg.className='msg error show';msg.textContent=data.detail||'Error';return;}

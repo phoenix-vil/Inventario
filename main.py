@@ -69,6 +69,11 @@ def requerir_gerente(authorization: Optional[str] = Header(None), db: Session = 
     return s
 
 
+def sesion_opcional(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)) -> Optional[Sesion]:
+    """Igual que requerir_sesion pero sin exigir sesión válida: None si no hay token o es inválido."""
+    return get_sesion(authorization, db)
+
+
 @app.post("/api/login")
 def login(data: Login, db: Session = Depends(get_db)):
     u = db.query(Usuario).filter(Usuario.usuario == data.usuario).first()
@@ -127,6 +132,16 @@ def validar_tiendas(lista: Optional[List[str]], db: Session):
         raise HTTPException(status_code=400, detail=f"Tienda(s) desconocida(s): {', '.join(desconocidas)}")
 
 
+def aplicar_filtro_tienda(query, sesion: Optional[Sesion]):
+    """Restringe un query de Producto a la(s) tienda(s) activa(s) de la sesión.
+    Sin sesión, o sesión sin tienda activa (ej. Dirección General) -> sin restricción.
+    Los productos sin tienda clasificada (None) siempre son visibles."""
+    if sesion and sesion.tienda:
+        tiendas_activas = texto_a_tiendas(sesion.tienda)
+        query = query.filter(or_(Producto.tienda.is_(None), Producto.tienda.in_(tiendas_activas)))
+    return query
+
+
 @app.get("/api/sucursales")
 def listar_sucursales(db: Session = Depends(get_db)):
     """Público (sin sesión) para que el login pueda mostrar la lista."""
@@ -155,6 +170,14 @@ def editar_sucursal(sucursal_id: int, data: EditarSucursal, sesion: Sesion = Dep
     if not s:
         raise HTTPException(status_code=404, detail="Sucursal no encontrada")
     cambios = data.model_dump(exclude_unset=True)
+    if "nombre" in cambios:
+        nuevo_nombre = (cambios["nombre"] or "").strip()
+        if not nuevo_nombre:
+            raise HTTPException(status_code=400, detail="El nombre no puede estar vacío")
+        existe = db.query(Sucursal).filter(Sucursal.nombre == nuevo_nombre, Sucursal.id != sucursal_id).first()
+        if existe:
+            raise HTTPException(status_code=409, detail="Ya existe una sucursal con ese nombre")
+        s.nombre = nuevo_nombre
     if "tiendas" in cambios:
         validar_tiendas(cambios["tiendas"], db)
         s.tiendas = tiendas_a_texto(cambios["tiendas"])
@@ -299,6 +322,7 @@ def listar(
     estado: Optional[str] = Query(None, description="ok | bajo | agotado"),
     skip: int = 0,
     limit: int = 200,
+    sesion: Optional[Sesion] = Depends(sesion_opcional),
     db: Session = Depends(get_db),
 ):
     query = db.query(Producto)
@@ -321,6 +345,7 @@ def listar(
         query = query.filter(Producto.stock > 0, Producto.stock <= Producto.stock_minimo)
     elif estado == "ok":
         query = query.filter(Producto.stock > Producto.stock_minimo)
+    query = aplicar_filtro_tienda(query, sesion)
 
     return query.order_by(Producto.nombre).offset(skip).limit(limit).all()
 
@@ -369,8 +394,9 @@ def editar(id: int, data: ProductoUpdate, sesion: Sesion = Depends(requerir_gere
 
 # ─── Buscar por código de barras (para el escáner) ─────────────────────────
 @app.get("/api/productos/buscar/codigo/{codigo}", response_model=ProductoOut)
-def buscar_por_codigo(codigo: str, db: Session = Depends(get_db)):
-    p = db.query(Producto).filter(Producto.codigo_barras == codigo).first()
+def buscar_por_codigo(codigo: str, sesion: Optional[Sesion] = Depends(sesion_opcional), db: Session = Depends(get_db)):
+    query = aplicar_filtro_tienda(db.query(Producto).filter(Producto.codigo_barras == codigo), sesion)
+    p = query.first()
     if not p:
         raise HTTPException(status_code=404, detail="No hay producto con ese código de barras")
     return p
@@ -1309,7 +1335,8 @@ def cotizaciones_page():
 
 @app.get("/api/pos/producto/{producto_id}")
 def pos_producto(producto_id: int, sesion: Sesion = Depends(requerir_sesion), db: Session = Depends(get_db)):
-    p = db.query(Producto).filter(Producto.id == producto_id).first()
+    query = aplicar_filtro_tienda(db.query(Producto).filter(Producto.id == producto_id), sesion)
+    p = query.first()
     if not p:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
     ahora = datetime.utcnow()
@@ -1333,13 +1360,14 @@ def pos_producto(producto_id: int, sesion: Sesion = Depends(requerir_sesion), db
 
 
 @app.get("/api/pos/buscar")
-def pos_buscar(q: str = Query(...), db: Session = Depends(get_db)):
-    rows = db.query(Producto).filter(
+def pos_buscar(q: str = Query(...), sesion: Optional[Sesion] = Depends(sesion_opcional), db: Session = Depends(get_db)):
+    query = db.query(Producto).filter(
         or_(
             Producto.nombre.ilike(f"%{q}%"),
             Producto.codigo_barras == q,
         )
-    ).order_by(Producto.nombre).limit(20).all()
+    )
+    rows = aplicar_filtro_tienda(query, sesion).order_by(Producto.nombre).limit(20).all()
     ahora = datetime.utcnow()
     resultado = []
     for p in rows:

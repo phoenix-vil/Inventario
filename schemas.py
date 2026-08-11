@@ -129,6 +129,7 @@ class CrearSucursal(BaseModel):
 
 
 class EditarSucursal(BaseModel):
+    nombre: Optional[str] = Field(None, min_length=1, max_length=50)
     tiendas: Optional[list[str]] = None
 
 
