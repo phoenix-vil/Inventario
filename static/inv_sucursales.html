@@ -2,8 +2,14 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#1a1a18">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="icon" type="image/png" href="/static/icon-nav-v2.png" media="(prefers-color-scheme: light)">
+<link rel="icon" type="image/png" href="/static/icon-nav-blanco.png" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="/static/touch-icon-v3-180.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Inventario por sucursal</title>
+<title>Inventario por sucursal · Only Enterprises</title>
 <script type="module">
 import { BarcodeDetector } from 'https://cdn.jsdelivr.net/npm/barcode-detector@3/dist/es/ponyfill.min.js';
 window.BarcodeDetectorPolyfill = BarcodeDetector;
@@ -106,16 +112,30 @@ tr:hover td{background:var(--bg)}
 .toast{position:fixed;bottom:1.25rem;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg2);padding:.625rem 1.25rem;border-radius:8px;font-size:13px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:200;white-space:nowrap}
 .toast.show{opacity:1}
 @media(max-width:600px){.topbar{padding:0 .625rem}.topbar-title{font-size:15px}.filtros input{min-width:130px}}
+
+/* --- Diseno del modal de traslado --- */
+.field{margin-bottom:14px}
+.field label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px}
+.field input,.field select{width:100%;height:42px;padding:0 12px;border:0.5px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);font-size:14px;font-family:inherit;transition:border-color .15s,box-shadow .15s}
+.field input:focus,.field select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px color-mix(in srgb,var(--blue) 18%,transparent)}
+.tr-result-item{padding:10px 12px;border:0.5px solid var(--border);border-radius:10px;margin-bottom:6px;cursor:pointer;font-size:13px;background:var(--bg2);transition:background .12s,border-color .12s}
+.tr-result-item:hover{background:var(--bg);border-color:var(--blue)}
+.tr-selected-card{margin-top:8px;padding:.75rem .875rem;background:var(--blue-bg);border:0.5px solid color-mix(in srgb,var(--blue) 30%,transparent);border-radius:10px;font-size:13px;color:var(--blue);font-weight:600;align-items:center;gap:8px}
+.tr-arrow-icon{text-align:center;font-size:20px;color:var(--text2);margin:-6px 0 12px}
+.tr-empty{font-size:12px;color:var(--text2);padding:8px 2px}
+.tr-hint{font-size:12px;color:var(--text2);margin-top:4px}
+.modal-footer button:disabled{opacity:.5;cursor:not-allowed}
 </style>
-<link rel="stylesheet" href="/static/modern.css">
+<link rel="stylesheet" href="/static/modern.css?v=1785433285">
 </head>
 <body>
 
 <div class="topbar">
-  <a href="/" class="btn-inicio"><img src="/static/home-icon.webp" class="home-img" alt="Inicio"> Inicio</a>
+  <a href="/" class="btn-inicio" title="Inicio"><img src="/static/icon-nav-v2.png" alt="Inicio" class="nav-icon" style="height:32px;width:32px"></a>
   <h1 class="topbar-title">🏪 Inventario por sucursal</h1>
   <div class="topbar-right">
     <button class="icon-btn" onclick="abrirEscaner()" title="Escanear código">📷</button>
+    <button onclick="abrirTraslado()" class="icon-btn" title="Trasladar stock entre sucursales" style="width:auto;padding:0 10px;font-size:12px">🔄 Trasladar</button>
     <button onclick="descargarCSV()" class="icon-btn" title="Exportar CSV" style="width:auto;padding:0 10px;font-size:12px">⬇ CSV</button>
     <button onclick="cargar()" class="icon-btn" title="Actualizar">↻</button>
   </div>
@@ -156,6 +176,39 @@ tr:hover td{background:var(--bg)}
   <div id="alert-agotado" style="display:none"></div>
 
   <div id="tabla-cont"><div class="empty">Selecciona una sucursal</div></div>
+</div>
+
+
+<!-- Modal traslado de stock entre sucursales -->
+<div class="overlay" id="modal-traslado">
+  <div class="modal">
+    <h2>🔄 Trasladar stock entre sucursales</h2>
+    <div class="field">
+      <label>Producto</label>
+      <input type="text" id="tr-buscar" placeholder="Buscar producto..." oninput="filtrarTraslado()" autocomplete="off">
+      <div id="tr-resultados" style="margin-top:6px"></div>
+      <div id="tr-seleccionado" class="tr-selected-card" style="display:none"></div>
+    </div>
+    <div class="field">
+      <label>📤 De la sucursal</label>
+      <select id="tr-origen" onchange="actualizarStockOrigen()"></select>
+    </div>
+    <div class="tr-arrow-icon">⬇</div>
+    <div class="field">
+      <label>📥 A la sucursal</label>
+      <select id="tr-destino"></select>
+    </div>
+    <div class="field">
+      <label>Cantidad a trasladar</label>
+      <input type="number" id="tr-cantidad" min="0" step="1" placeholder="0">
+      <div id="tr-disponible" class="tr-hint"></div>
+    </div>
+    <div class="scan-msg" id="tr-msg"></div>
+    <div class="modal-footer">
+      <button onclick="cerrarTraslado()">Cancelar</button>
+      <button class="primary" id="tr-btn-confirmar" onclick="confirmarTraslado()">🔄 Confirmar traslado</button>
+    </div>
+  </div>
 </div>
 
 <!-- Modal escáner -->
@@ -544,6 +597,117 @@ function onCodigo(codigo){
   toast(prod?'📦 '+prod.nombre:'Código no encontrado: '+codigo,!prod);
 }
 document.addEventListener('keydown',e=>{if(e.key==='Escape')cerrarEscaner();});
+
+/* ── Traslado de stock entre sucursales ─────────────────────────────────── */
+let trProductoSel = null;
+
+function abrirTraslado(){
+  if(!data || !data.sucursales.length){
+    toast('Necesitas al menos 2 sucursales registradas para trasladar', true);
+    return;
+  }
+  if(data.sucursales.length < 2){
+    toast('Necesitas al menos 2 sucursales para poder trasladar stock', true);
+    return;
+  }
+  trProductoSel = null;
+  document.getElementById('tr-buscar').value = '';
+  document.getElementById('tr-resultados').innerHTML = '';
+  document.getElementById('tr-seleccionado').style.display = 'none';
+  document.getElementById('tr-cantidad').value = '';
+  document.getElementById('tr-msg').className = 'scan-msg';
+
+  const origSel = document.getElementById('tr-origen');
+  const destSel = document.getElementById('tr-destino');
+  origSel.innerHTML = data.sucursales.map(s=>`<option value="${esc(s)}">Suc. ${esc(s)}</option>`).join('');
+  destSel.innerHTML = data.sucursales.map(s=>`<option value="${esc(s)}">Suc. ${esc(s)}</option>`).join('');
+  if(data.sucursales.length>1) destSel.value = data.sucursales[1];
+
+  const _btnR = document.getElementById('tr-btn-confirmar');
+  if(_btnR){ _btnR.disabled=false; _btnR.textContent='🔄 Confirmar traslado'; }
+  document.getElementById('modal-traslado').classList.add('open');
+  actualizarStockOrigen();
+}
+
+function cerrarTraslado(){
+  document.getElementById('modal-traslado').classList.remove('open');
+  trProductoSel = null;
+}
+
+function filtrarTraslado(){
+  const q = document.getElementById('tr-buscar').value.toLowerCase().trim();
+  const cont = document.getElementById('tr-resultados');
+  if(!q || !data){ cont.innerHTML=''; return; }
+  const encontrados = data.productos.filter(p=>
+    p.nombre.toLowerCase().includes(q) || (p.marca||'').toLowerCase().includes(q) || (p.codigo_barras||'')===q
+  ).slice(0, 8);
+  if(!encontrados.length){ cont.innerHTML = '<div class="tr-empty">Sin resultados</div>'; return; }
+  cont.innerHTML = encontrados.map(p=>`
+    <div class="tr-result-item" onclick='seleccionarProductoTraslado(${p.id})'>
+      <strong>${esc(p.nombre)}</strong>${p.marca?' · '+esc(p.marca):''}
+    </div>`).join('');
+}
+
+function seleccionarProductoTraslado(id){
+  trProductoSel = data.productos.find(p=>p.id===id);
+  if(!trProductoSel) return;
+  document.getElementById('tr-buscar').value = '';
+  document.getElementById('tr-resultados').innerHTML = '';
+  const sel = document.getElementById('tr-seleccionado');
+  sel.style.display = 'flex';
+  sel.textContent = '📦 ' + trProductoSel.nombre;
+  actualizarStockOrigen();
+}
+
+function actualizarStockOrigen(){
+  const disp = document.getElementById('tr-disponible');
+  if(!trProductoSel){ disp.textContent=''; return; }
+  const origen = document.getElementById('tr-origen').value;
+  const d = trProductoSel.por_sucursal[origen] || {asignado:0, vendido:0};
+  const restante = Math.round((d.asignado - d.vendido)*1000)/1000;
+  const unidad = trProductoSel.vendido_por_peso ? ' kg' : '';
+  disp.textContent = `Disponible en Suc. ${origen}: ${restante}${unidad}`;
+  document.getElementById('tr-cantidad').max = Math.max(0, restante);
+}
+
+async function confirmarTraslado(){
+  const msg = document.getElementById('tr-msg');
+  const btn = document.getElementById('tr-btn-confirmar');
+
+  function mostrarError(texto){
+    msg.className='scan-msg show'; msg.style.background='var(--red-bg)'; msg.style.color='var(--red)'; msg.textContent=texto;
+  }
+
+  if(!trProductoSel){ mostrarError('Selecciona un producto'); return; }
+
+  const origen = document.getElementById('tr-origen').value;
+  const destino = document.getElementById('tr-destino').value;
+  const cantidad = parseFloat(document.getElementById('tr-cantidad').value);
+
+  if(origen === destino){ mostrarError('La sucursal de origen y destino deben ser distintas'); return; }
+  if(isNaN(cantidad) || cantidad<=0){ mostrarError('Cantidad inválida'); return; }
+
+  const textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Trasladando...';
+
+  try{
+    const r = await authFetch('/api/stock-sucursal/trasladar', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({producto_id:trProductoSel.id, sucursal_origen:origen, sucursal_destino:destino, cantidad})
+    });
+    const d = await r.json();
+    if(!r.ok){ mostrarError(d.detail||'Error'); btn.disabled=false; btn.textContent=textoOriginal; return; }
+    toast(`✓ ${cantidad} trasladado de Suc.${origen} a Suc.${destino}`);
+    cerrarTraslado();
+    cargar();
+  }catch(e){
+    mostrarError('Error de conexión');
+    btn.disabled = false;
+    btn.textContent = textoOriginal;
+  }
+}
+
 cargar();
 </script>
 </body>

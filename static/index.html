@@ -2,8 +2,14 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#1a1a18">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="icon" type="image/png" href="/static/icon-nav-v2.png" media="(prefers-color-scheme: light)">
+<link rel="icon" type="image/png" href="/static/icon-nav-blanco.png" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="/static/touch-icon-v3-180.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Inventario</title>
+<title>Inventario · Only Enterprises</title>
 <script type="module">
 import { BarcodeDetector } from 'https://cdn.jsdelivr.net/npm/barcode-detector@3/dist/es/ponyfill.min.js';
 window.BarcodeDetectorPolyfill = BarcodeDetector;
@@ -113,12 +119,12 @@ button.danger:hover{background:var(--red-bg)}
   .stat{padding:.625rem .75rem}
 }
 </style>
-<link rel="stylesheet" href="/static/modern.css">
+<link rel="stylesheet" href="/static/modern.css?v=1785433285">
 </head>
 <body>
 
 <div class="topbar">
-  <a href="/" class="btn-inicio"><img src="/static/home-icon.webp" class="home-img" alt="Inicio"> Inicio</a>
+  <a href="/" class="btn-inicio" title="Inicio"><img src="/static/icon-nav-v2.png" alt="Inicio" class="nav-icon" style="height:32px;width:32px"></a>
   <h1 class="topbar-title">📦 Inventario</h1>
   <div class="topbar-right">
     <span id="sync-indicator" style="font-size:12px;color:var(--text2)"></span>
@@ -298,7 +304,7 @@ async function cargarProductos() {
   const q = document.getElementById('buscar').value;
   const cat = document.getElementById('filtro-cat').value;
   const estado = document.getElementById('filtro-estado').value;
-  let url = '/api/productos?limit=500';
+  let url = '/api/productos?limit=3000';
   if (q) url += '&q=' + encodeURIComponent(q);
   if (cat) url += '&categoria=' + encodeURIComponent(cat);
   if (estado) url += '&estado=' + encodeURIComponent(estado);

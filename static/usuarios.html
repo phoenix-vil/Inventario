@@ -2,8 +2,14 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#1a1a18">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="icon" type="image/png" href="/static/icon-nav-v2.png" media="(prefers-color-scheme: light)">
+<link rel="icon" type="image/png" href="/static/icon-nav-blanco.png" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="/static/touch-icon-v3-180.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Usuarios</title>
+<title>Usuarios · Only Enterprises</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -58,12 +64,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .modal-footer .primary{background:var(--text);color:var(--bg2);border-color:var(--text)}
 @media(max-width:560px){.topbar{padding:0 .625rem}.topbar-title{font-size:15px}.topbar-right{min-width:0}.container{padding:.875rem}}
 </style>
-<link rel="stylesheet" href="/static/modern.css">
+<link rel="stylesheet" href="/static/modern.css?v=1785433285">
 </head>
 <body>
 
 <div class="topbar">
-  <a href="/" class="btn-inicio"><img src="/static/home-icon.webp" class="home-img" alt="Inicio"> Inicio</a>
+  <a href="/" class="btn-inicio" title="Inicio"><img src="/static/icon-nav-v2.png" alt="Inicio" class="nav-icon" style="height:32px;width:32px"></a>
   <h1 class="topbar-title">👥 Usuarios</h1>
   <div class="topbar-right"></div>
 </div>
@@ -86,15 +92,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="msg" id="crear-msg"></div>
   </div>
 
-  <div class="section-title">Sucursales</div>
-  <div class="card" id="lista-sucursales"></div>
-
-  <div class="section-title">Agregar sucursal</div>
-  <div class="form-card">
-    <div class="field"><label>Nombre / número de sucursal</label><input id="ns-nombre" placeholder="Ej: 2, Centro, Norte..." autocomplete="off"></div>
-    <button class="btn" onclick="crearSucursal()">Agregar sucursal</button>
-    <div class="msg" id="sucursal-msg"></div>
-  </div>
 </div>
 
 <!-- Modal cambio de contraseña -->
@@ -158,7 +155,7 @@ async function crearUsuario(){
 }
 
 async function borrarUsuario(usuario){
-  if(!confirm(`¿Eliminar al usuario "${usuario}"? Esta acción no se puede deshacer.`))return;
+  if(!(await confirmarPersonalizado(`¿Eliminar al usuario "${usuario}"? Esta acción no se puede deshacer.`, 'Eliminar usuario')))return;
   try{
     const r = await authFetch('/api/usuarios/'+encodeURIComponent(usuario),{method:'DELETE'});
     if(r.status===204){cargar();return;}
@@ -191,46 +188,7 @@ async function guardarPwd(){
 
 document.addEventListener('keydown',e=>{if(e.key==='Escape')cerrarPwd();});
 
-// ─── Sucursales ──────────────────────────────────────────────────────────
-async function cargarSucursales(){
-  try{
-    const r = await fetch('/api/sucursales');
-    const sucursales = await r.json();
-    const cont = document.getElementById('lista-sucursales');
-    if(!sucursales.length){cont.innerHTML='<div class="user-row"><div class="u-info">Sin sucursales registradas</div></div>';return;}
-    cont.innerHTML = sucursales.map(s=>`<div class="user-row">
-      <div class="u-info"><div class="u-name">${esc(s.nombre)}</div></div>
-      <div class="u-actions"><button class="danger" onclick="borrarSucursal(${s.id},'${esc(s.nombre)}')">🗑</button></div>
-    </div>`).join('');
-  }catch(e){}
-}
-
-async function crearSucursal(){
-  const msg = document.getElementById('sucursal-msg');
-  const nombre = document.getElementById('ns-nombre').value.trim();
-  if(!nombre){msg.className='msg error show';msg.textContent='Escribe un nombre para la sucursal';return;}
-  try{
-    const r = await authFetch('/api/sucursales',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre})});
-    const data = await r.json();
-    if(!r.ok){msg.className='msg error show';msg.textContent=data.detail||'Error';return;}
-    msg.className='msg ok show';msg.textContent=`Sucursal "${data.nombre}" agregada.`;
-    document.getElementById('ns-nombre').value='';
-    cargarSucursales();
-  }catch(e){msg.className='msg error show';msg.textContent='Error de conexión';}
-}
-
-async function borrarSucursal(id,nombre){
-  if(!confirm(`¿Eliminar la sucursal "${nombre}"?`))return;
-  try{
-    const r = await authFetch('/api/sucursales/'+id,{method:'DELETE'});
-    if(r.status===204){cargarSucursales();return;}
-    const data = await r.json();
-    alert(data.detail||'No se pudo eliminar');
-  }catch(e){alert('Error de conexión');}
-}
-
 cargar();
-cargarSucursales();
 </script>
 </body>
 </html>

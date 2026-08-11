@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#1a1a18">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gastos · Only Enterprises</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f5f4f0;--bg2:#fff;--border:#e2e0d8;--text:#1a1a18;--text2:#6b6b66;
+  --blue:#185fa5;--blue-bg:#e6f1fb;--green:#3b6d11;--green-bg:#eaf3de;
+  --amber:#854f0b;--amber-bg:#faeeda;--red:#a32d2d;--red-bg:#fcebeb
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1c1c1a;--bg2:#252522;--border:#3a3a36;--text:#e8e6dc;--text2:#9c9a92;
+  --blue:#85b7eb;--blue-bg:#042c53;--green:#97c459;--green-bg:#173404;
+  --amber:#ef9f27;--amber-bg:#412402;--red:#f09595;--red-bg:#501313
+}}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}
+.topbar{background:color-mix(in srgb,var(--bg2) 88%,transparent);border-bottom:0.5px solid var(--border);padding:0 1rem;height:54px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:10;backdrop-filter:blur(10px)}
+.topbar-title{font-size:17px;font-weight:600;flex:1;text-align:center}
+.btn-inicio{display:inline-flex;align-items:center;gap:5px;height:36px;padding:0 12px;border:0.5px solid var(--border);border-radius:8px;background:transparent;color:var(--text);text-decoration:none;transition:background .12s}
+.btn-inicio:hover{background:var(--bg)}
+.icon-btn{height:36px;width:36px;border:0.5px solid var(--border);border-radius:8px;background:transparent;font-size:16px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;color:var(--text)}
+.icon-btn:hover{background:var(--bg)}
+.container{max-width:900px;margin:0 auto;padding:1.25rem 1.25rem 6rem}
+
+.btn-agregar{width:100%;height:52px;border:none;border-radius:14px;background:var(--text);color:var(--bg2);font-size:16px;font-weight:700;cursor:pointer;margin-bottom:1.25rem;display:flex;align-items:center;justify-content:center;gap:8px}
+
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:1.25rem}
+.stat{background:var(--bg2);border:0.5px solid var(--border);border-radius:14px;padding:1rem;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.stat-label{font-size:12px;color:var(--text2);margin-bottom:4px}
+.stat-value{font-size:22px;font-weight:800}
+.stat-value.red{color:var(--red)}
+
+.filtros{display:flex;gap:8px;margin-bottom:1.25rem;flex-wrap:wrap;align-items:flex-end}
+.filtro-campo{display:flex;flex-direction:column;gap:4px}
+.filtro-campo label{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.4px}
+.filtros input,.filtros select{height:42px;padding:0 12px;border:0.5px solid var(--border);border-radius:10px;background:var(--bg2);color:var(--text);font-size:14px;font-family:inherit;transition:border-color .15s,box-shadow .15s}
+.filtros input:focus,.filtros select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px color-mix(in srgb,var(--blue) 18%,transparent)}
+.filtros button{height:42px;padding:0 16px;border:0.5px solid var(--border);border-radius:10px;background:transparent;color:var(--text);font-size:13px;cursor:pointer;font-weight:600}
+.filtros button.primary{background:var(--text);color:var(--bg2);border-color:var(--text)}
+
+.section-title{font-size:13px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:1.25rem 0 .75rem;display:flex;align-items:center;gap:8px}
+.badge-cnt{font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:var(--bg2);border:0.5px solid var(--border);text-transform:none;letter-spacing:0}
+
+.card{background:var(--bg2);border:0.5px solid var(--border);border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.04);margin-bottom:1.25rem}
+
+/* Desglose por categoria */
+.cat-row{display:flex;justify-content:space-between;align-items:center;padding:.75rem 1rem;border-bottom:0.5px solid var(--border)}
+.cat-row:last-child{border-bottom:none}
+.cat-nombre{font-weight:600;font-size:14px}
+.cat-bar-track{height:5px;background:var(--bg);border-radius:10px;margin-top:5px;overflow:hidden;width:140px}
+.cat-bar-fill{height:100%;background:var(--red);border-radius:10px}
+.cat-total{font-weight:700;font-size:14px;color:var(--red)}
+
+/* Lista de gastos */
+.gasto-row{display:flex;justify-content:space-between;align-items:flex-start;padding:.875rem 1rem;border-bottom:0.5px solid var(--border);gap:10px}
+.gasto-row:last-child{border-bottom:none}
+.gasto-concepto{font-weight:600;font-size:14px}
+.gasto-meta{font-size:12px;color:var(--text2);margin-top:2px}
+.gasto-cat-badge{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;background:var(--amber-bg);color:var(--amber);margin-top:4px}
+.gasto-right{text-align:right;flex-shrink:0}
+.gasto-monto{font-weight:800;font-size:16px;color:var(--red)}
+.gasto-del{background:none;border:none;color:var(--text2);cursor:pointer;font-size:14px;margin-top:4px;padding:2px}
+.gasto-del:hover{color:var(--red)}
+
+.empty{text-align:center;padding:2.5rem 1rem;color:var(--text2);font-size:14px}
+
+/* Modal agregar gasto */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:100;padding:1rem}
+.overlay.open{display:flex}
+.modal{background:var(--bg2);border:0.5px solid var(--border);border-radius:16px;padding:1.5rem;width:440px;max-width:96vw;max-height:90vh;overflow-y:auto}
+.modal h2{font-size:18px;font-weight:700;margin-bottom:1.25rem}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bottom:5px}
+.field input,.field select,.field textarea{width:100%;height:44px;padding:0 14px;border:0.5px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);font-size:15px;font-family:inherit}
+.field textarea{height:70px;padding:10px 14px;resize:vertical}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px color-mix(in srgb,var(--blue) 18%,transparent)}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.metodo-row{display:flex;gap:8px}
+.metodo-btn{flex:1;height:44px;border:0.5px solid var(--border);border-radius:10px;background:transparent;color:var(--text);font-size:14px;font-weight:600;cursor:pointer}
+.metodo-btn.activo{background:var(--blue-bg);color:var(--blue);border-color:var(--blue)}
+.modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:1.25rem}
+.modal-footer button{height:44px;padding:0 18px;border-radius:10px;font-size:14px;cursor:pointer;border:0.5px solid var(--border);background:transparent;color:var(--text)}
+.modal-footer button.primary{background:var(--text);color:var(--bg2);border:none;font-weight:600}
+.msg{padding:9px;border-radius:8px;font-size:13px;margin-top:8px;display:none}
+.msg.show{display:block}
+.msg.error{background:var(--red-bg);color:var(--red)}
+.msg.ok{background:var(--green-bg);color:var(--green)}
+@media(max-width:600px){.topbar{padding:0 .625rem}.topbar-title{font-size:15px}}
+</style>
+<link rel="stylesheet" href="/static/modern.css?v=1785433285">
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/" class="btn-inicio" title="Inicio"><img src="/static/icon-nav-v2.png" alt="Inicio" class="nav-icon" style="height:32px;width:32px"></a>
+  <h1 class="topbar-title">💸 Gastos</h1>
+  <button class="icon-btn" onclick="cargarTodo()" title="Actualizar">↻</button>
+</div>
+
+<div class="container">
+  <button class="btn-agregar" onclick="abrirModal()">+ Agregar gasto</button>
+
+  <div class="stats-grid">
+    <div class="stat">
+      <div class="stat-label">Total del periodo</div>
+      <div class="stat-value red" id="st-total">—</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Número de gastos</div>
+      <div class="stat-value" id="st-num">—</div>
+    </div>
+  </div>
+
+  <div class="filtros">
+    <div class="filtro-campo">
+      <label>Desde</label>
+      <input type="date" id="f-desde">
+    </div>
+    <div class="filtro-campo">
+      <label>Hasta</label>
+      <input type="date" id="f-hasta">
+    </div>
+    <div class="filtro-campo">
+      <label>Categoría</label>
+      <select id="f-categoria"><option value="">Todas</option></select>
+    </div>
+    <button class="primary" onclick="cargarTodo()">Filtrar</button>
+  </div>
+
+  <div class="section-title">Por categoría</div>
+  <div class="card" id="desglose-categorias">
+    <div class="empty">Cargando...</div>
+  </div>
+
+  <div class="section-title">Detalle de gastos <span class="badge-cnt" id="badge-lista"></span></div>
+  <div class="card" id="lista-gastos">
+    <div class="empty">Cargando...</div>
+  </div>
+</div>
+
+<!-- Modal agregar gasto -->
+<div class="overlay" id="modal-gasto">
+  <div class="modal">
+    <h2>+ Agregar gasto</h2>
+    <div class="field">
+      <label>Concepto *</label>
+      <input type="text" id="g-concepto" placeholder="Ej: Pago de renta, luz, papelería...">
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Categoría *</label>
+        <input type="text" id="g-categoria" list="cat-list" placeholder="Ej: Renta, Sueldos...">
+        <datalist id="cat-list"></datalist>
+      </div>
+      <div class="field">
+        <label>Monto *</label>
+        <input type="number" id="g-monto" min="0" step="0.01" placeholder="0.00">
+      </div>
+    </div>
+    <div class="field">
+      <label>Método de pago</label>
+      <div class="metodo-row">
+        <button type="button" class="metodo-btn activo" id="btn-efectivo" onclick="setMetodo('efectivo')">💵 Efectivo</button>
+        <button type="button" class="metodo-btn" id="btn-tarjeta" onclick="setMetodo('tarjeta')">💳 Tarjeta</button>
+        <button type="button" class="metodo-btn" id="btn-transferencia" onclick="setMetodo('transferencia')">🏦 Transf.</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>Fecha</label>
+      <input type="date" id="g-fecha">
+    </div>
+    <div class="field">
+      <label>Nota (opcional)</label>
+      <textarea id="g-nota" placeholder="Detalles adicionales..."></textarea>
+    </div>
+    <div class="msg" id="g-msg"></div>
+    <div class="modal-footer">
+      <button onclick="cerrarModal()">Cancelar</button>
+      <button class="primary" onclick="guardarGasto()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/auth.js"></script>
+<script>
+requireGerente();
+
+let metodoActual = 'efectivo';
+
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function money(n){return '$'+Number(n||0).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});}
+
+function hoyStr(){
+  const d=new Date();
+  const tz=d.getTimezoneOffset()*60000;
+  return new Date(d.getTime()-tz).toISOString().slice(0,10);
+}
+
+function limitesForm(desdeStr, hastaStr){
+  const params = new URLSearchParams();
+  if(desdeStr){
+    const [y,m,d]=desdeStr.split('-').map(Number);
+    params.set('desde', new Date(y,m-1,d,0,0,0).toISOString());
+  }
+  if(hastaStr){
+    const [y,m,d]=hastaStr.split('-').map(Number);
+    params.set('hasta', new Date(y,m-1,d,23,59,59,999).toISOString());
+  }
+  return params;
+}
+
+async function cargarCategorias(){
+  try{
+    const r = await authFetch('/api/gastos/categorias');
+    const cats = await r.json();
+    document.getElementById('cat-list').innerHTML = cats.map(c=>`<option value="${esc(c)}">`).join('');
+    const sel = document.getElementById('f-categoria');
+    const val = sel.value;
+    sel.innerHTML = '<option value="">Todas</option>' + cats.map(c=>`<option value="${esc(c)}"${c===val?' selected':''}>${esc(c)}</option>`).join('');
+  }catch(e){}
+}
+
+async function cargarTodo(){
+  const desdeStr = document.getElementById('f-desde').value;
+  const hastaStr = document.getElementById('f-hasta').value;
+  const categoria = document.getElementById('f-categoria').value;
+  const params = limitesForm(desdeStr, hastaStr);
+  if(categoria) params.set('categoria', categoria);
+
+  try{
+    const [rResumen, rLista] = await Promise.all([
+      authFetch('/api/gastos/resumen?'+params.toString()),
+      authFetch('/api/gastos?'+params.toString()),
+    ]);
+    const resumen = await rResumen.json();
+    const lista = await rLista.json();
+
+    document.getElementById('st-total').textContent = money(resumen.total);
+    document.getElementById('st-num').textContent = resumen.num_gastos;
+
+    renderCategorias(resumen.por_categoria, resumen.total);
+    renderLista(lista);
+  }catch(e){
+    console.error(e);
+  }
+}
+
+function renderCategorias(por_categoria, total){
+  const cont = document.getElementById('desglose-categorias');
+  if(!por_categoria.length){
+    cont.innerHTML = '<div class="empty">Sin gastos en este período</div>';
+    return;
+  }
+  const max = Math.max(...por_categoria.map(c=>c.total), 1);
+  cont.innerHTML = por_categoria.map(c=>{
+    const pct = Math.round((c.total/max)*100);
+    return `<div class="cat-row">
+      <div>
+        <div class="cat-nombre">${esc(c.categoria)}</div>
+        <div class="cat-bar-track"><div class="cat-bar-fill" style="width:${pct}%"></div></div>
+      </div>
+      <div class="cat-total">${money(c.total)}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderLista(lista){
+  document.getElementById('badge-lista').textContent = lista.length;
+  const cont = document.getElementById('lista-gastos');
+  if(!lista.length){
+    cont.innerHTML = '<div class="empty">Sin gastos registrados en este período</div>';
+    return;
+  }
+  cont.innerHTML = lista.map(g=>{
+    const fecha = new Date(g.fecha).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'});
+    const iconoMetodo = g.metodo_pago==='tarjeta' ? '💳' : g.metodo_pago==='transferencia' ? '🏦' : '💵';
+    return `<div class="gasto-row">
+      <div>
+        <div class="gasto-concepto">${esc(g.concepto)}</div>
+        <div class="gasto-meta">${fecha} · ${iconoMetodo} ${g.metodo_pago}${g.operador?' · '+esc(g.operador):''}${g.sucursal?' · Suc. '+esc(g.sucursal):''}</div>
+        <span class="gasto-cat-badge">${esc(g.categoria)}</span>
+        ${g.nota?`<div class="gasto-meta" style="margin-top:4px">${esc(g.nota)}</div>`:''}
+      </div>
+      <div class="gasto-right">
+        <div class="gasto-monto">${money(g.monto)}</div>
+        <button class="gasto-del" onclick="borrarGasto(${g.id})">🗑 Eliminar</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function setMetodo(m){
+  metodoActual = m;
+  document.querySelectorAll('.metodo-btn').forEach(b=>b.classList.remove('activo'));
+  document.getElementById('btn-'+m).classList.add('activo');
+}
+
+function abrirModal(){
+  document.getElementById('g-concepto').value='';
+  document.getElementById('g-categoria').value='';
+  document.getElementById('g-monto').value='';
+  document.getElementById('g-nota').value='';
+  document.getElementById('g-fecha').value=hoyStr();
+  setMetodo('efectivo');
+  document.getElementById('g-msg').className='msg';
+  document.getElementById('modal-gasto').classList.add('open');
+}
+
+function cerrarModal(){
+  document.getElementById('modal-gasto').classList.remove('open');
+}
+
+async function guardarGasto(){
+  const msg = document.getElementById('g-msg');
+  const concepto = document.getElementById('g-concepto').value.trim();
+  const categoria = document.getElementById('g-categoria').value.trim();
+  const monto = parseFloat(document.getElementById('g-monto').value);
+  const fechaStr = document.getElementById('g-fecha').value;
+  const nota = document.getElementById('g-nota').value.trim() || null;
+
+  if(!concepto){ msg.className='msg error show'; msg.textContent='Escribe el concepto del gasto'; return; }
+  if(!categoria){ msg.className='msg error show'; msg.textContent='Escribe o selecciona una categoría'; return; }
+  if(isNaN(monto) || monto<=0){ msg.className='msg error show'; msg.textContent='El monto debe ser mayor a 0'; return; }
+
+  let fecha = null;
+  if(fechaStr){
+    const [y,m,d] = fechaStr.split('-').map(Number);
+    fecha = new Date(y,m-1,d,12,0,0).toISOString();
+  }
+
+  try{
+    const r = await authFetch('/api/gastos', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({concepto, categoria, monto, metodo_pago: metodoActual, fecha, nota})
+    });
+    const data = await r.json();
+    if(!r.ok){ msg.className='msg error show'; msg.textContent=data.detail||'Error al guardar'; return; }
+    cerrarModal();
+    cargarCategorias();
+    cargarTodo();
+  }catch(e){
+    msg.className='msg error show'; msg.textContent='Error de conexión';
+  }
+}
+
+async function borrarGasto(id){
+  if(!(await confirmarPersonalizado('¿Eliminar este gasto? Esta acción no se puede deshacer.', 'Eliminar gasto'))) return;
+  try{
+    await authFetch('/api/gastos/'+id, {method:'DELETE'});
+    cargarTodo();
+  }catch(e){
+    alert('Error al eliminar');
+  }
+}
+
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') cerrarModal(); });
+
+document.getElementById('f-desde').value = hoyStr();
+document.getElementById('f-hasta').value = hoyStr();
+
+cargarCategorias();
+cargarTodo();
+</script>
+</body>
+</html>

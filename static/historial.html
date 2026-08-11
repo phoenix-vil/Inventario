@@ -2,8 +2,14 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#1a1a18">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="icon" type="image/png" href="/static/icon-nav-v2.png" media="(prefers-color-scheme: light)">
+<link rel="icon" type="image/png" href="/static/icon-nav-blanco.png" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="/static/touch-icon-v3-180.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Historial de ventas</title>
+<title>Historial · Only Enterprises</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -60,10 +66,10 @@ button.primary:hover{opacity:.85;background:var(--text)}
 #detalle-contenido{background:var(--bg);border-radius:10px;padding:1.25rem;margin-bottom:1rem}
 .tk-head,.tk-foot{text-align:center;margin:8px 0}
 .tk-negocio{font-size:18px;font-weight:700}
-.tk-sub{font-size:12px;color:var(--text2)}
-.tk-items{border-top:1px dashed var(--border);border-bottom:1px dashed var(--border);padding:8px 0;margin:8px 0}
+.tk-sub{font-size:12px;color:var(--text);text-align:center}
+.tk-items{padding:8px 0;margin:8px 0}
 .tk-line{display:flex;justify-content:space-between;margin-bottom:4px;font-family:ui-monospace,monospace;font-size:13px}
-.tk-total{font-weight:700;font-size:16px;border-top:1px dashed var(--border);margin-top:8px;padding-top:8px}
+.tk-total{font-weight:700;font-size:16px;margin-top:8px;padding-top:8px}
 .tk-desc{color:var(--red)}
 .tk-ahorro{color:var(--green);font-weight:600}
 .acciones{display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap}
@@ -76,14 +82,15 @@ button.primary:hover{opacity:.85;background:var(--text)}
   .container{padding:.875rem}.stat-value{font-size:16px}
 }
 </style>
-<link rel="stylesheet" href="/static/modern.css">
+<link rel="stylesheet" href="/static/modern.css?v=1785433285">
 </head>
 <body>
 
 <div class="topbar">
-  <a href="/" class="btn-inicio"><img src="/static/home-icon.webp" class="home-img" alt="Inicio"> Inicio</a>
+  <a href="/" class="btn-inicio" title="Inicio"><img src="/static/icon-nav-v2.png" alt="Inicio" class="nav-icon" style="height:32px;width:32px"></a>
   <h1 class="topbar-title">📋 Historial de ventas</h1>
   <div class="topbar-right">
+    <button class="icon-btn" onclick="reporteDesdeHistorial()" title="Descargar reporte PDF" style="margin-right:6px">📄</button>
     <a href="/pagos" class="btn-inicio" style="min-width:0">💳 Vender</a>
   </div>
 </div>
@@ -108,6 +115,8 @@ button.primary:hover{opacity:.85;background:var(--text)}
         <option value="">Todos</option>
         <option value="efectivo">Efectivo</option>
         <option value="tarjeta">Tarjeta</option>
+        <option value="credito">Crédito</option>
+        <option value="transferencia">Transferencia</option>
       </select>
     </div>
     <div class="filtro-campo">
@@ -124,6 +133,7 @@ button.primary:hover{opacity:.85;background:var(--text)}
     <div class="stat"><div class="stat-label">Efectivo</div><div class="stat-value" id="s-efectivo">—</div></div>
     <div class="stat"><div class="stat-label">Tarjeta</div><div class="stat-value" id="s-tarjeta">—</div></div>
     <div class="stat"><div class="stat-label">Ticket promedio</div><div class="stat-value" id="s-prom">—</div></div>
+    <div class="stat"><div class="stat-label">💰 Abonos cobrados</div><div class="stat-value" id="s-abonos" style="color:var(--blue)">—</div></div>
   </div>
 
   <div class="lista" id="lista"></div>
@@ -141,10 +151,9 @@ button.primary:hover{opacity:.85;background:var(--text)}
     <h2>Detalle de venta</h2>
     <div id="detalle-contenido"></div>
     <div class="acciones">
-      <button onclick="descargarTicketDetalle()">⬇ Descargar</button>
-      <button onclick="imprimirDetalle()">🖨 Imprimir</button>
-      <button onclick="compartirWhatsApp()" style="border-color:#25d366;background:#e9fbe9;color:#1a6e38">💬 WA</button>
-      <button onclick="compartirEmail()" style="border-color:var(--blue);background:var(--blue-bg);color:var(--blue)">✉️ Email</button>
+      <button onclick="compartirWhatsApp()" style="width:100%;border:none;background:#25d366;color:#fff;font-weight:700;flex-basis:100%">Compartir por WhatsApp</button>
+      <button onclick="descargarTicketDetalle()" style="flex:1;color:var(--text2);font-size:13px">Descargar</button>
+      <button onclick="imprimirDetalle()" style="flex:1;color:var(--text2);font-size:13px">Imprimir</button>
     </div>
     <div class="modal-footer">
       <button onclick="cerrarDetalle()">Cerrar</button>
@@ -152,6 +161,8 @@ button.primary:hover{opacity:.85;background:var(--text)}
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="/static/auth.js"></script>
 <script>
 requireGerente();
@@ -160,6 +171,7 @@ let ventaDetalle=null;
 
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function money(n){return '$'+Number(n).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function fmtPct(p){const n=Math.round((Number(p)||0)*100)/100;return (n%1===0)?String(n):n.toFixed(2).replace(/0$/,'');}
 
 async function cargarOperadores(){
   try{
@@ -190,9 +202,10 @@ async function cargar(){
   if(metodo)params.set('metodo_pago',metodo);
   if(sucursal)params.set('sucursal',sucursal);
   try{
-    const [rv,rs]=await Promise.all([
+    const [rv,rs,ra]=await Promise.all([
       authFetch('/api/ventas?'+params.toString()),
-      authFetch('/api/ventas/resumen?'+params.toString())
+      authFetch('/api/ventas/resumen?'+params.toString()),
+      authFetch('/api/clientes/abonos-periodo?'+params.toString())
     ]);
     ventas=await rv.json();
     const resumen=await rs.json();
@@ -203,8 +216,28 @@ async function cargar(){
     document.getElementById('s-prom').textContent=money(resumen.ticket_promedio);
     renderDesglose(resumen.por_operador||[]);
     renderDesgloseSucursal(resumen.por_sucursal||[]);
+    if(ra.ok){
+      const abonosData=await ra.json();
+      document.getElementById('s-abonos').textContent=money(abonosData.total||0);
+      renderAbonos(abonosData.abonos||[]);
+    }
     render();
   }catch(e){console.error(e);}
+}
+
+function renderAbonos(lista){
+  const titulo=document.getElementById('abonos-titulo');
+  const cont=document.getElementById('abonos-lista');
+  if(!lista.length){titulo.style.display='none';cont.style.display='none';return;}
+  titulo.style.display='block';
+  cont.style.display='block';
+  cont.innerHTML=lista.map(a=>{
+    const fecha=new Date(a.fecha).toLocaleString('es-MX',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+    return `<div class="hist-row" style="display:flex;justify-content:space-between;padding:.75rem 1rem;border-bottom:0.5px solid var(--border)">
+      <span>👤 ${esc(a.cliente_nombre)}${a.nota?' · '+esc(a.nota):''}<div style="font-size:11px;color:var(--text2)">${fecha} · ${esc(a.operador||'')}${a.sucursal?' · Suc. '+esc(a.sucursal):''}</div></span>
+      <span style="color:var(--blue);font-weight:600">+${money(a.monto)}</span>
+    </div>`;
+  }).join('');
 }
 
 function renderDesglose(lista){
@@ -250,21 +283,31 @@ async function cargarSucursalesSelect(){
 
 function render(){
   const cont=document.getElementById('lista');
-  if(!ventas.length){cont.innerHTML='<div class="empty">No hay ventas en este periodo</div>';return;}
+  if(!ventas.length){cont.innerHTML='<div class="empty">No hay movimientos en este periodo</div>';return;}
   cont.innerHTML=ventas.map(v=>{
     const fecha=new Date(v.fecha).toLocaleString('es-MX',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
-    const desc=v.descuento_extra_pct>0?`<div class="v-desc">desc ${v.descuento_extra_pct}%</div>`:'';
+    const desc=v.descuento_extra_pct>0?`<div class="v-desc">desc ${fmtPct(v.descuento_extra_pct)}%</div>`:'';
     const op=v.operador?`<div class="v-items">Operador: ${esc(v.operador)}${v.sucursal?' · Suc. '+esc(v.sucursal):''}</div>`:'';
-    const met=v.metodo_pago==='tarjeta'?'💳 Tarjeta':'💵 Efectivo';
+    const etiquetasMet={tarjeta:'💳 Tarjeta',credito:'📒 Crédito',transferencia:'🏦 Transferencia',efectivo:'💵 Efectivo'};
+    const met=etiquetasMet[v.metodo_pago]||'💵 Efectivo';
+    const esDev = (v.estado==='devolucion') || (v.total<0);
+    const titulo = esDev
+      ? `<div class="v-id" style="color:var(--red)">↩️ Devolución #${v.id}</div>`
+        + (v.venta_origen_id?`<div class="v-items">del ticket #${v.venta_origen_id}</div>`:'')
+      : `<div class="v-id">Venta #${v.id}</div>`;
+    const badgeEstado = (!esDev && (v.estado==='parcial'||v.estado==='devuelta'))
+      ? `<div class="v-items" style="color:var(--amber)">${v.estado==='devuelta'?'Devuelta por completo':'Con devolución parcial'}</div>`
+      : '';
     return `<div class="venta" onclick="verDetalle(${v.id})">
       <div>
-        <div class="v-id">Venta #${v.id}</div>
+        ${titulo}
         <div class="v-fecha">${fecha} · ${met}</div>
         <div class="v-items">${v.num_items} artículo${v.num_items!==1?'s':''}</div>
+        ${badgeEstado}
         ${op}
       </div>
       <div style="text-align:right">
-        <div class="v-total">${money(v.total)}</div>
+        <div class="v-total" style="${v.total<0?'color:var(--red)':''}">${money(v.total)}</div>
         ${desc}
       </div>
     </div>`;
@@ -275,29 +318,174 @@ async function verDetalle(id){
   try{
     const r=await authFetch('/api/ventas/'+id);
     ventaDetalle=await r.json();
-    document.getElementById('detalle-contenido').innerHTML=ticketHTML(ventaDetalle);
+    const _esDev = ventaDetalle && ((ventaDetalle.estado === 'devolucion') || (ventaDetalle.total < 0));
+  const _tit = document.querySelector('#detalle-modal h2');
+  if(_tit) _tit.textContent = _esDev ? 'Detalle de devolución' : 'Detalle de venta';
+  document.getElementById('detalle-contenido').innerHTML=ticketHTML(ventaDetalle);
     document.getElementById('detalle-modal').classList.add('open');
   }catch(e){}
 }
 function cerrarDetalle(){document.getElementById('detalle-modal').classList.remove('open');}
 
+let _logoCacheDataUrl = null;
+function cargarImagenBase64(url){
+  if(_logoCacheDataUrl){
+    return Promise.resolve(_logoCacheDataUrl);
+  }
+  return new Promise(function(resolve, reject){
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = function(){
+      const anchoDestino = 240;
+      const alto = Math.round(img.height * (anchoDestino / img.width));
+      const canvas = document.createElement('canvas');
+      canvas.width = anchoDestino;
+      canvas.height = alto;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, anchoDestino, alto);
+      const dataUrl = canvas.toDataURL('image/png');
+      _logoCacheDataUrl = dataUrl;
+      resolve(dataUrl);
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+cargarImagenBase64('/static/logo.png').catch(function(){});
+
+async function generarPDFTicketVenta(v){
+  const jsPDFCtor = window.jspdf.jsPDF;
+  const contenedor = document.createElement('div');
+  contenedor.style.position = 'absolute';
+  contenedor.style.left = '-9999px';
+  contenedor.style.top = '0';
+  contenedor.style.width = '300px';
+  contenedor.style.background = '#ffffff';
+  contenedor.style.padding = '16px';
+  contenedor.style.fontFamily = 'monospace';
+  contenedor.style.fontSize = '13px';
+  contenedor.style.color = '#000000';
+  contenedor.innerHTML = ticketHTML(v);
+  contenedor.querySelectorAll('.tk-sub, .tk-foot, .tk-negocio, .tk-line, .tk-total').forEach(function(el){ el.style.color = '#000000'; });
+  contenedor.querySelectorAll('.tk-desc').forEach(function(el){ el.style.color = '#a32d2d'; });
+  contenedor.querySelectorAll('.tk-ahorro').forEach(function(el){ el.style.color = '#3b6d11'; });
+  document.body.appendChild(contenedor);
+
+  try{
+    await new Promise(function(r){ setTimeout(r, 80); });
+    const canvas = await html2canvas(contenedor, {scale:2, backgroundColor:'#ffffff', useCORS:true});
+    const imgData = canvas.toDataURL('image/png');
+    const pdfWidth = 320;
+    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+    const doc = new jsPDFCtor({unit:'pt', format:[pdfWidth, pdfHeight], orientation:'portrait'});
+    doc.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+    return doc.output('blob');
+  } finally {
+    document.body.removeChild(contenedor);
+  }
+}
+
+async function compartirComoPDFVenta(v, nombreArchivo){
+  const blob = await generarPDFTicketVenta(v);
+  const archivo = new File([blob], nombreArchivo, {type:'application/pdf'});
+  const puedeCompartir = navigator.canShare && navigator.canShare({files:[archivo]});
+  console.log('[diagnostico compartir]', nombreArchivo, '| canShare:', puedeCompartir, '| tamano:', archivo.size, 'bytes | tipo:', archivo.type);
+  if(puedeCompartir){
+    try{
+      await navigator.share({files:[archivo]});
+      return;
+    }catch(e){
+      console.log('[diagnostico compartir] navigator.share fallo:', e.name, e.message);
+      if(e.name === 'AbortError') return;
+    }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = nombreArchivo;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 3000);
+  alert('Tu navegador no permite compartir directo. Se descargó el PDF: adjúntalo manualmente en WhatsApp.');
+}
+
+function ticketDevolucionHTML(v){
+  const fecha = new Date(v.fecha).toLocaleString('es-MX').replace(',', '');
+  const logoSrc = (typeof _logoCacheDataUrl !== 'undefined' && _logoCacheDataUrl) ? _logoCacheDataUrl : '/static/logo.png';
+  const RAYA = '<svg width="100%" height="3" style="display:block;margin:6px 0"><line x1="0" y1="1.5" x2="100%" y2="1.5" stroke="#000" stroke-width="1" stroke-dasharray="4,3"/></svg>';
+  const nombresMet = {efectivo:'EFECTIVO', tarjeta:'TARJETA', credito:'A CRÉDITO', transferencia:'TRANSFERENCIA'};
+
+  let html = '<div class="tk-head">'
+    + '<img src="' + logoSrc + '" alt="Only Enterprises" style="height:44px;width:auto;margin-bottom:6px">'
+    + '<div class="tk-sub">COMPROBANTE DE DEVOLUCIÓN</div>'
+    + (v.sucursal ? '<div class="tk-sub">Sucursal ' + esc(v.sucursal) + '</div>' : '')
+    + '<div class="tk-sub">Devolución #' + v.id + '</div>'
+    + (v.venta_origen_id ? '<div class="tk-sub">Ticket original #' + v.venta_origen_id + '</div>' : '')
+    + '<div class="tk-sub">' + fecha + '</div>'
+    + (v.operador ? '<div class="tk-sub">Operador: ' + esc(v.operador) + '</div>' : '')
+    + '</div>' + RAYA;
+
+  let subtotalNeto = 0;
+  (v.detalle || []).forEach(function(it){
+    const cant = Math.abs(it.cantidad);
+    const c = Number.isInteger(cant) ? cant + 'x' : cant.toFixed(3) + 'kg';
+    const pUnit = it.precio_unitario || 0;
+    const pOrig = (it.precio_original != null && it.precio_original > pUnit) ? it.precio_original : pUnit;
+    subtotalNeto += pUnit * cant;
+    html += '<div class="tk-line"><span>' + c + ' ' + esc(it.nombre) + '</span><span>' + money(pOrig * cant) + '</span></div>';
+    if(pOrig > pUnit){
+      const pct = Math.round((1 - pUnit / pOrig) * 100);
+      html += '<div class="tk-line tk-desc"><span style="padding-left:12px">Descuento (' + pct + '%)</span><span>'
+        + money(-((pOrig - pUnit) * cant)) + '</span></div>';
+    }
+  });
+  html += RAYA;
+
+  const pctGen = v.descuento_extra_pct || 0;
+  if(pctGen > 0){
+    html += '<div class="tk-line"><span>Subtotal devuelto</span><span>' + money(subtotalNeto) + '</span></div>';
+    html += '<div class="tk-line tk-desc"><span>Descuento general (' + fmtPct(pctGen) + '%)</span><span>'
+      + money(-(subtotalNeto * pctGen / 100)) + '</span></div>';
+    html += RAYA;
+  }
+
+  html += '<div class="tk-line tk-total"><span>TOTAL DEVUELTO</span><span>' + money(v.total) + '</span></div>';
+  html += RAYA;
+  html += '<div class="tk-line"><span>Reembolso</span><span>' + (nombresMet[v.metodo_pago] || v.metodo_pago) + '</span></div>';
+  if(v.autorizado_por){
+    html += '<div class="tk-line"><span>Motivo</span><span>' + esc(v.autorizado_por) + '</span></div>';
+  }
+  html += '<div class="tk-foot">Conserve este comprobante</div>';
+  return html;
+}
+
 function ticketHTML(v){
-  const fecha=new Date(v.fecha).toLocaleString('es-MX');
+  if(v && ((v.estado === 'devolucion') || (v.total < 0))) return ticketDevolucionHTML(v);
+  const fecha=new Date(v.fecha).toLocaleString('es-MX').replace(',', '');
+  const logoSrc=_logoCacheDataUrl||'/static/logo.png';
+  const RAYA='<svg width="100%" height="3" style="display:block;margin:6px 0"><line x1="0" y1="1.5" x2="100%" y2="1.5" stroke="#000" stroke-width="1" stroke-dasharray="4,3"/></svg>';
   let html=`<div class="tk-head">
-    <div class="tk-negocio">Mi negocio</div>
+    <img src="${logoSrc}" alt="Only Enterprises" style="height:44px;width:auto;margin-bottom:6px">
     ${v.sucursal?`<div class="tk-sub">Sucursal ${esc(v.sucursal)}</div>`:''}
     <div class="tk-sub">Ticket de venta #${v.id}</div>
     <div class="tk-sub">${fecha}</div>
     ${v.operador?`<div class="tk-sub">Operador: ${esc(v.operador)}</div>`:''}
-  </div><div class="tk-items">`;
+  </div>${RAYA}<div class="tk-items">`;
   (v.detalle||[]).forEach(it=>{
     const cant=Number.isInteger(it.cantidad)?it.cantidad+'x':it.cantidad.toFixed(3)+'kg';
-    html+=`<div class="tk-line"><span>${cant} ${esc(it.nombre)}</span><span>${money(it.importe)}</span></div>`;
+    const tieneDescItem = it.precio_original!=null && it.precio_original>it.precio_unitario;
+    if(tieneDescItem){
+      const importeOriginal = it.precio_original * it.cantidad;
+      const pctItem = Math.round((1-it.precio_unitario/it.precio_original)*100);
+      html+=`<div class="tk-line"><span>${cant} ${esc(it.nombre)}</span><span>${money(importeOriginal)}</span></div>`;
+      html+=`<div class="tk-line tk-desc"><span>Descuento (${pctItem}%)</span><span>${money(it.importe)}</span></div>`;
+    }else{
+      html+=`<div class="tk-line"><span>${cant} ${esc(it.nombre)}</span><span>${money(it.importe)}</span></div>`;
+    }
   });
-  html+='</div>';
+  html+='</div>'+RAYA;
   if(v.descuento_extra_pct>0){
     html+=`<div class="tk-line"><span>Subtotal</span><span>${money(v.subtotal)}</span></div>`;
-    html+=`<div class="tk-line tk-desc"><span>Descuento ${v.descuento_extra_pct}%${v.autorizado_por?' ('+esc(v.autorizado_por)+')':''}</span><span>-${money(v.subtotal*v.descuento_extra_pct/100)}</span></div>`;
+    html+=`<div class="tk-line tk-desc"><span>Descuento ${fmtPct(v.descuento_extra_pct)}%</span><span>${money(-(v.subtotal*v.descuento_extra_pct/100))}</span></div>`;
   }
   const ahorroTk=v.ahorro_total!=null?v.ahorro_total:0;
   if(ahorroTk>0.005){
@@ -309,6 +497,12 @@ function ticketHTML(v){
     if(v.tpv_terminal)html+=`<div class="tk-line"><span>Terminal</span><span>${esc(v.tpv_terminal)}</span></div>`;
     if(v.tpv_referencia)html+=`<div class="tk-line"><span>Referencia</span><span>${esc(v.tpv_referencia)}</span></div>`;
     if(v.tpv_autorizacion)html+=`<div class="tk-line"><span>Autorización</span><span>${esc(v.tpv_autorizacion)}</span></div>`;
+  }else if(v.metodo_pago==='credito'){
+    html+=`<div class="tk-line" style="color:var(--amber)"><span>Pago</span><span>A CRÉDITO</span></div>`;
+    if(v.cliente_nombre)html+=`<div class="tk-line"><span>Cliente</span><span>${esc(v.cliente_nombre)}</span></div>`;
+  }else if(v.metodo_pago==='transferencia'){
+    html+=`<div class="tk-line"><span>Pago</span><span>TRANSFERENCIA</span></div>`;
+    if(v.transferencia_referencia)html+=`<div class="tk-line"><span>Referencia</span><span>${esc(v.transferencia_referencia)}</span></div>`;
   }else{
     html+=`<div class="tk-line"><span>Pago</span><span>EFECTIVO</span></div>`;
     if(v.pago_con!=null){
@@ -320,46 +514,33 @@ function ticketHTML(v){
   return html;
 }
 
-function descargarTicketDetalle(){
+async function descargarTicketDetalle(){
   if(!ventaDetalle)return;
-  const v=ventaDetalle;
-  const fecha=new Date(v.fecha).toLocaleString('es-MX');
-  let txt=`        MI NEGOCIO\n   Ticket de venta #${v.id}\n   ${fecha}\n--------------------------------\n`;
-  (v.detalle||[]).forEach(it=>{
-    const cant=Number.isInteger(it.cantidad)?it.cantidad+'x':it.cantidad.toFixed(3)+'kg';
-    txt+=`${cant} ${it.nombre} - ${money(it.importe)}\n`;
-  });
-  txt+='--------------------------------\n';
-  if(v.descuento_extra_pct>0){
-    txt+=`Subtotal: ${money(v.subtotal)}\nDescuento ${v.descuento_extra_pct}%: -${money(v.subtotal*v.descuento_extra_pct/100)}\n`;
-  }
-  const ahorroDl=v.ahorro_total!=null?v.ahorro_total:0;
-  if(ahorroDl>0.005){
-    txt+=`Ahorraste: ${money(ahorroDl)}\n`;
-  }
-  txt+=`TOTAL: ${money(v.total)}\n`;
-  if(v.pago_con!=null){txt+=`Pagó con: ${money(v.pago_con)}\nCambio: ${money(v.cambio||0)}\n`;}
-  txt+='\n   ¡Gracias por su compra!\n';
-  bajarArchivo(txt,`ticket_${v.id}.txt`,'text/plain');
+  const blob = await generarPDFTicketVenta(ventaDetalle);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'ticket_' + ventaDetalle.id + '.pdf';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 3000);
 }
 
 function imprimirDetalle(){
   if(!ventaDetalle)return;
   const win=window.open('','_blank');
-  win.document.write(`<html><head><title>Ticket #${ventaDetalle.id}</title>
-    <style>body{font-family:monospace;font-size:13px;max-width:300px;margin:20px auto}
+  win.document.write(`<html><head><title>Historial · Only Enterprises</title>
+    <style>@page{size:58mm auto;margin:0}body{font-family:monospace;font-size:11px;width:48mm;margin:0 auto;padding:2mm 0;line-height:1.35}img{max-width:34mm;height:auto}.tk-desc,.tk-ahorro,.tk-line span,.tk-total,.tk-sub,.tk-foot{color:#000 !important}.tk-desc,.tk-ahorro{font-weight:bold}
     .tk-line{display:flex;justify-content:space-between;margin-bottom:3px}
-    .tk-total{font-weight:bold;font-size:15px;border-top:1px dashed #000;margin-top:6px;padding-top:6px}
+    .tk-total{font-weight:bold;font-size:15px;margin-top:6px;padding-top:6px}
     .tk-desc{color:#a32d2d}.tk-ahorro{color:#3b6d11;font-weight:bold}.tk-head,.tk-foot{text-align:center;margin:8px 0}
-    .tk-negocio{font-size:18px;font-weight:bold}.tk-items{border-top:1px dashed #000;border-bottom:1px dashed #000;padding:6px 0;margin:6px 0}
-    </style></head><body>${ticketHTML(ventaDetalle)}</body></html>`);
+    .tk-negocio{font-size:18px;font-weight:bold}.tk-items{padding:6px 0;margin:6px 0}
+    </style></head><body>${ticketHTML(ventaDetalle).split(_logoCacheDataUrl||'@@X@@').join('/static/logo.png')}</body></html>`);
   win.document.close();
   setTimeout(()=>win.print(),300);
 }
 
 function ticketTextoPlano(v){
   if(!v)return '';
-  const fecha=new Date(v.fecha).toLocaleString('es-MX');
+  const fecha=new Date(v.fecha).toLocaleString('es-MX').replace(',', '');
   let txt=`🏪 MI NEGOCIO`;
   if(v.sucursal)txt+=` — Sucursal ${v.sucursal}`;
   txt+=`\n📋 Ticket #${v.id} | ${fecha}`;
@@ -372,7 +553,7 @@ function ticketTextoPlano(v){
   txt+=`─────────────────────\n`;
   if(v.descuento_extra_pct>0){
     txt+=`Subtotal: ${money(v.subtotal)}\n`;
-    txt+=`Descuento ${v.descuento_extra_pct}%: -${money(v.subtotal*v.descuento_extra_pct/100)}\n`;
+    txt+=`Descuento ${fmtPct(v.descuento_extra_pct)}%: -${money(v.subtotal*v.descuento_extra_pct/100)}\n`;
   }
   const ahorroTxt=v.ahorro_total!=null?v.ahorro_total:0;
   if(ahorroTxt>0.005){
@@ -384,6 +565,13 @@ function ticketTextoPlano(v){
     if(v.tpv_terminal)txt+=` (${v.tpv_terminal})`;
     txt+=`\n`;
     if(v.tpv_referencia)txt+=`Ref: ${v.tpv_referencia}\n`;
+  }else if(v.metodo_pago==='credito'){
+    txt+=`📒 Pago: A crédito`;
+    if(v.cliente_nombre)txt+=` (${v.cliente_nombre})`;
+    txt+=`\n`;
+  }else if(v.metodo_pago==='transferencia'){
+    txt+=`🏦 Pago: Transferencia\n`;
+    if(v.transferencia_referencia)txt+=`Ref: ${v.transferencia_referencia}\n`;
   }else if(v.pago_con){
     txt+=`💵 Pagó: ${money(v.pago_con)} | Cambio: ${money(v.cambio||0)}\n`;
   }
@@ -392,15 +580,14 @@ function ticketTextoPlano(v){
 }
 
 function compartirWhatsApp(){
-  const txt=ticketTextoPlano(ventaDetalle);
-  if(!txt)return;
-  window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');
+  if(!ventaDetalle)return;
+  compartirComoPDFVenta(ventaDetalle, 'ticket_'+ventaDetalle.id+'.pdf');
 }
 
 function compartirEmail(){
   const v=ventaDetalle;
   if(!v)return;
-  const asunto=encodeURIComponent(`Ticket de compra #${v.id} — Mi negocio`);
+  const asunto=encodeURIComponent(`Ticket de compra #${v.id} — Only Enterprises`);
   const cuerpo=encodeURIComponent(ticketTextoPlano(v));
   window.location.href=`mailto:?subject=${asunto}&body=${cuerpo}`;
 }
@@ -415,8 +602,9 @@ async function descargarCSV(){
   let csv='Venta,Sucursal,Fecha,Operador,Metodo pago,Terminal TPV,Ref TPV,Autorizacion TPV,No. item,Producto,Cantidad,Precio unit.,Importe,Total venta,Descuento %,Pago con,Cambio\n';
   detalles.forEach(v=>{
     if(!v)return;
-    const fecha=new Date(v.fecha).toLocaleString('es-MX');
-    const metodo=v.metodo_pago==='tarjeta'?'Tarjeta':'Efectivo';
+    const fecha=new Date(v.fecha).toLocaleString('es-MX').replace(',', '');
+    const nombresMet={tarjeta:'Tarjeta',credito:'Crédito',transferencia:'Transferencia',efectivo:'Efectivo'};
+    const metodo=nombresMet[v.metodo_pago]||'Efectivo';
     const term=v.tpv_terminal||'';
     const ref=v.tpv_referencia||'';
     const aut=v.tpv_autorizacion||'';
@@ -452,6 +640,136 @@ document.getElementById('f-hasta').value=hoyStr();
 cargarOperadores();
 cargarSucursalesSelect();
 cargar();
+
+// ─── Reporte completo en PDF ────────────────────────────────────────────
+async function generarReportePDF(desdeISO, hastaISO, etiquetaPeriodo){
+  let params = [];
+  if(desdeISO) params.push('desde=' + encodeURIComponent(desdeISO));
+  if(hastaISO) params.push('hasta=' + encodeURIComponent(hastaISO));
+  const url = '/api/reporte-completo' + (params.length ? '?' + params.join('&') : '');
+
+  let d;
+  try{
+    const r = await authFetch(url);
+    if(!r.ok){ alert('No se pudo generar el reporte'); return; }
+    d = await r.json();
+  }catch(e){ alert('Error de conexión al generar el reporte'); return; }
+
+  const nombresMetodo = {efectivo:'Efectivo', tarjeta:'Tarjeta', credito:'Crédito', transferencia:'Transferencia'};
+  const jsPDFCtor = window.jspdf.jsPDF;
+  const W = 595, M = 40, RIGHT = W - M;
+  const doc = new jsPDFCtor({unit:'pt', format:'a4', orientation:'portrait'});
+  let y = 40;
+
+  function linea(){
+    doc.setDrawColor(0);
+    doc.setLineDashPattern([3, 2], 0);
+    doc.line(M, y, RIGHT, y);
+    doc.setLineDashPattern([], 0);
+    y += 18;
+  }
+  function fila(etiqueta, valor, bold, size){
+    doc.setFont('courier','bold');
+    doc.setFontSize(size || 10);
+    doc.setTextColor(0);
+    doc.text(String(etiqueta), M, y);
+    doc.text(String(valor), RIGHT, y, {align:'right'});
+    y += (size || 10) + 6;
+  }
+  function titulo(txt){
+    doc.setFont('courier','bold'); doc.setFontSize(12); doc.setTextColor(0);
+    doc.text(txt, M, y);
+    y += 20;
+  }
+
+  try{
+    const logoData = await cargarImagenBase64('/static/logo.png');
+    const lw = 110, lh = 59;
+    doc.addImage(logoData, 'PNG', (W - lw)/2, y, lw, lh);
+    y += lh + 14;
+  }catch(e){
+    doc.setFont('courier','bold'); doc.setFontSize(15); doc.setTextColor(0);
+    doc.text('ONLY ENTERPRISES', W/2, y + 12, {align:'center'});
+    y += 32;
+  }
+
+  doc.setFont('courier','bold'); doc.setFontSize(15); doc.setTextColor(0);
+  doc.text('Reporte de ventas', W/2, y, {align:'center'}); y += 18;
+  doc.setFont('courier','bold'); doc.setFontSize(10);
+  doc.text(etiquetaPeriodo || '', W/2, y, {align:'center'}); y += 14;
+  doc.setFontSize(9);
+  doc.text('Generado: ' + new Date().toLocaleString('es-MX').replace(',',''), W/2, y, {align:'center'});
+  y += 18;
+  linea();
+
+  titulo('Resumen');
+  fila('Ventas totales (' + d.num_ventas + ' ventas)', money(d.total_vendido));
+  fila('Gastos (' + (d.num_gastos || 0) + ')', '-' + money(d.gastos));
+  if(d.devoluciones_num){
+    fila('Devoluciones (' + d.devoluciones_num + ')', '-' + money(d.devoluciones_total));
+  }
+  fila('Ganancia después de gastos', money(d.ganancia_neta), true, 12);
+  fila('Cuentas por cobrar', money(d.total_por_cobrar));
+  y += 6;
+  linea();
+
+  titulo('Métodos de pago');
+  if(!d.desglose_metodos_pago.length){
+    doc.setFont('courier','bold'); doc.setFontSize(10);
+    doc.text('Sin ventas en el período', M, y); y += 16;
+  }else{
+    d.desglose_metodos_pago.forEach(function(m){
+      fila((nombresMetodo[m.metodo] || m.metodo) + ' (' + m.cantidad + ')', money(m.total));
+    });
+  }
+  y += 6;
+  linea();
+
+  titulo('Clientes a crédito');
+  if(!d.clientes_detalle.length){
+    doc.setFont('courier','bold'); doc.setFontSize(10);
+    doc.text('Sin movimientos de crédito en el período', M, y); y += 16;
+  }else{
+    const c1 = M, c2 = M + 200, c3 = M + 310, c4 = RIGHT;
+    doc.setFont('courier','bold'); doc.setFontSize(9); doc.setTextColor(0);
+    doc.text('Cliente', c1, y);
+    doc.text('Ventas créd.', c2, y, {align:'right'});
+    doc.text('Pagos', c3, y, {align:'right'});
+    doc.text('Saldo', c4, y, {align:'right'});
+    y += 14;
+    doc.setFont('courier','bold');
+    d.clientes_detalle.forEach(function(c){
+      if(y > 780){ doc.addPage(); y = 50; }
+      const nombreCorto = doc.splitTextToSize(c.nombre, 190)[0];
+      doc.setFont('courier','bold'); doc.setFontSize(9);
+      doc.text(nombreCorto, c1, y);
+      doc.text(money(c.ventas_credito_periodo), c2, y, {align:'right'});
+      doc.text(money(c.pagos_periodo), c3, y, {align:'right'});
+      doc.setFont('courier','bold');
+      doc.text(money(c.saldo_actual), c4, y, {align:'right'});
+      y += 14;
+    });
+  }
+
+  const blob = doc.output('blob');
+  const urlBlob = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = urlBlob; a.download = 'reporte_' + new Date().toISOString().slice(0,10) + '.pdf';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(urlBlob); }, 3000);
+}
+
+function reporteDesdeHistorial(){
+  const dStr = document.getElementById('f-desde').value;
+  const hStr = document.getElementById('f-hasta').value;
+  let desdeISO=null, hastaISO=null, etiqueta='Todo el histórico';
+  if(dStr){ desdeISO = new Date(dStr+'T00:00:00').toISOString(); }
+  if(hStr){ hastaISO = new Date(hStr+'T23:59:59.999').toISOString(); }
+  if(dStr && hStr) etiqueta = dStr==hStr ? dStr : (dStr + ' a ' + hStr);
+  else if(dStr) etiqueta = 'Desde ' + dStr;
+  else if(hStr) etiqueta = 'Hasta ' + hStr;
+  generarReportePDF(desdeISO, hastaISO, etiqueta);
+}
 </script>
 </body>
 </html>

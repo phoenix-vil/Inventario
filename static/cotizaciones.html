@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#1a1a18">
+<link rel="icon" type="image/png" href="/static/icon-nav-v2.png" media="(prefers-color-scheme: light)">
+<link rel="icon" type="image/png" href="/static/icon-nav-blanco.png" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="/static/touch-icon-v3-180.png">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cotizaciones · Only Enterprises</title>
+<script type="module">
+import { BarcodeDetector } from 'https://cdn.jsdelivr.net/npm/barcode-detector@3/dist/es/ponyfill.min.js';
+window.BarcodeDetectorPolyfill = BarcodeDetector;
+</script>
+<link rel="stylesheet" href="/static/modern.css?v=1785433285">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f5f4f0;--bg2:#fff;--border:#e2e0d8;--text:#1a1a18;--text2:#6b6b66;
+  --blue:#185fa5;--blue-bg:#e6f1fb;--green:#3b6d11;--green-bg:#eaf3de;
+  --amber:#854f0b;--amber-bg:#faeeda;--red:#a32d2d;--red-bg:#fcebeb;--radius:10px
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1c1c1a;--bg2:#252522;--border:#3a3a36;--text:#e8e6dc;--text2:#9c9a92;
+  --blue:#85b7eb;--blue-bg:#042c53;--green:#97c459;--green-bg:#173404;
+  --amber:#ef9f27;--amber-bg:#412402;--red:#f09595;--red-bg:#501313
+}}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.topbar{background:var(--bg2);border-bottom:0.5px solid var(--border);padding:0 1rem;height:54px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:10}
+.topbar-title{font-size:17px;font-weight:600;flex:1;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topbar-right{display:flex;align-items:center;gap:6px;flex-shrink:0;min-width:44px;justify-content:flex-end}
+.btn-inicio{display:inline-flex;align-items:center;gap:5px;height:36px;padding:0 12px;border:0.5px solid var(--border);border-radius:8px;background:transparent;color:var(--text);text-decoration:none;flex-shrink:0}
+.btn-inicio:hover{background:var(--bg)}
+.nav-icon{display:block}
+.icon-btn{display:inline-flex;align-items:center;justify-content:center;height:36px;width:36px;border:0.5px solid var(--border);border-radius:8px;background:transparent;font-size:16px;cursor:pointer;color:var(--text)}
+.icon-btn:hover{background:var(--bg)}
+.container{max-width:640px;margin:0 auto;padding:1rem 1.25rem 3rem}
+
+.progreso{display:flex;gap:6px;margin-bottom:6px}
+.progreso-seg{flex:1;height:3px;background:var(--border);border-radius:2px}
+.progreso-seg.activo{background:var(--text)}
+.paso-label{font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:1rem}
+.paso-titulo{font-size:19px;font-weight:700;margin-bottom:1.25rem}
+.paso2-cliente{font-size:13px;color:var(--text2);margin-bottom:1rem}
+
+.search-row{display:flex;gap:8px;margin-bottom:.75rem}
+.search-row input{flex:1;height:46px;padding:0 14px;border:0.5px solid var(--border);border-radius:10px;background:var(--bg2);color:var(--text);font-size:16px;font-family:inherit}
+.search-row input:focus{outline:2px solid var(--blue);outline-offset:1px}
+.search-row button{height:46px;width:46px;border:0.5px solid var(--border);border-radius:10px;background:var(--bg2);font-size:20px;cursor:pointer;flex-shrink:0}
+#resultados{margin-top:6px;max-height:168px;overflow-y:auto;border-radius:10px;margin-bottom:1rem}
+.resultado-item{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg2);border:0.5px solid var(--border);border-bottom:none;cursor:pointer}
+.resultado-item:last-child{border-bottom:0.5px solid var(--border);border-radius:0 0 10px 10px}
+.resultado-item:first-child{border-radius:10px 10px 0 0}
+.resultado-item:hover{background:var(--bg)}
+.resultado-item .r-info{flex:1;min-width:0}
+.resultado-item .r-nombre{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.resultado-item .r-meta{font-size:12px;color:var(--text2)}
+.resultado-item .r-precio{font-size:14px;font-weight:700;color:var(--blue)}
+
+#qr-reader{width:100%;border-radius:8px;overflow:hidden;position:relative;margin-bottom:8px}
+#qr-reader video{width:100%;border-radius:8px;display:block}
+.scan-frame{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:70%;height:42%;pointer-events:none}
+.scan-frame::before{content:'';position:absolute;inset:0;border-radius:14px;box-shadow:0 0 0 2000px rgba(0,0,0,.55)}
+.scan-corner{position:absolute;width:28px;height:28px;border:3px solid #4fc3f7;border-radius:6px;filter:drop-shadow(0 0 4px rgba(79,195,247,.6))}
+.scan-corner.tl{top:-3px;left:-3px;border-right:none;border-bottom:none}
+.scan-corner.tr{top:-3px;right:-3px;border-left:none;border-bottom:none}
+.scan-corner.bl{bottom:-3px;left:-3px;border-right:none;border-top:none}
+.scan-corner.br{bottom:-3px;right:-3px;border-left:none;border-top:none}
+.scan-line{position:absolute;left:4%;right:4%;top:6%;height:2px;background:linear-gradient(90deg,transparent,#4fc3f7,transparent);box-shadow:0 0 10px #4fc3f7;animation:scanmove 2.2s ease-in-out infinite}
+@keyframes scanmove{0%,100%{top:6%}50%{top:92%}}
+
+.cart-empty{text-align:center;color:var(--text2);font-size:13px;padding:1.5rem 1rem;background:var(--bg2);border-radius:12px;border:0.5px dashed var(--border);margin-bottom:1rem}
+.cart-item{display:flex;align-items:center;gap:10px;background:var(--bg2);border:0.5px solid var(--border);border-radius:12px;padding:.75rem;margin-bottom:8px}
+.ci-info{flex:1;min-width:0}
+.ci-nombre{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ci-badge{display:inline-block;font-size:10px;font-weight:700;color:var(--blue);background:var(--blue-bg);padding:1px 6px;border-radius:5px;margin-left:5px;vertical-align:1px}
+.ci-precio{font-size:12px;color:var(--text2)}
+.ci-cant{display:flex;align-items:center;gap:4px;background:var(--bg);border-radius:8px;padding:2px}
+.ci-cant button{width:28px;height:28px;border:none;background:none;color:var(--text);font-size:16px;cursor:pointer;border-radius:6px}
+.ci-cant button:hover{background:var(--border)}
+.ci-cant span{min-width:34px;text-align:center;font-size:14px;font-weight:600}
+.ci-importe{min-width:74px;text-align:right;font-size:14px;font-weight:700}
+.ci-desc-btn{width:34px;height:34px;border-radius:9px;border:0.5px solid var(--green-bg);background:var(--green-bg);color:var(--green);font-size:15px;font-weight:700;cursor:pointer;flex-shrink:0}
+.ci-del{width:34px;height:34px;border-radius:9px;border:0.5px solid var(--red-bg);background:var(--red-bg);color:var(--red);font-size:15px;cursor:pointer;flex-shrink:0}
+
+.btn-custom{height:42px;border-radius:9px;border:0.5px dashed var(--border);background:transparent;color:var(--text2);font-weight:600;font-size:13px;cursor:pointer}
+.btn-custom:hover{background:var(--bg2);color:var(--text)}
+
+.bienvenida{text-align:center;padding:2rem 1rem 1.5rem}
+.bienvenida .emoji{font-size:38px;margin-bottom:8px}
+.bienvenida .titulo{font-size:16px;font-weight:600;margin-bottom:4px}
+.bienvenida .sub{font-size:13px;color:var(--text2);margin-bottom:1.25rem}
+.ultimas-title{font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:0 0 .5rem}
+
+.totales{background:var(--bg2);border:0.5px solid var(--border);border-radius:12px;padding:1rem;margin-bottom:1rem}
+.linea-total{display:flex;justify-content:space-between;font-size:14px;margin-bottom:6px}
+.linea-total.grande{font-size:18px;font-weight:700;border-top:0.5px solid var(--border);padding-top:8px;margin-top:8px;margin-bottom:0}
+
+.field{margin-bottom:.875rem}
+.field label{display:block;font-size:12px;color:var(--text2);margin-bottom:5px}
+.field input{width:100%;height:44px;padding:0 12px;border:0.5px solid var(--border);border-radius:10px;background:var(--bg2);color:var(--text);font-size:15px;box-sizing:border-box}
+
+.btn-generar{flex:1;height:50px;border:none;border-radius:12px;background:var(--text);color:var(--bg2);font-weight:700;font-size:15px;cursor:pointer}
+.btn-generar:disabled{opacity:.4;cursor:not-allowed}
+.btn-atras{width:90px;height:50px;border:0.5px solid var(--border);border-radius:12px;background:transparent;color:var(--text);font-weight:600;font-size:14px;cursor:pointer;flex-shrink:0}
+.fila-nav{display:flex;gap:8px}
+.metodo-btn{height:42px;border-radius:9px;border:0.5px solid var(--border);background:transparent;color:var(--text);font-weight:600;cursor:pointer;font-size:13px}
+.metodo-btn.activo{background:var(--text);color:var(--bg2);border-color:var(--text)}
+
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:100;padding:1rem}
+.overlay.open{display:flex}
+.modal{background:var(--bg2);border:0.5px solid var(--border);border-radius:14px;padding:1.5rem;width:400px;max-width:96vw;max-height:90vh;overflow-y:auto}
+.modal h2{font-size:17px;font-weight:600;margin-bottom:1rem}
+.modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:1.25rem}
+.modal-footer button{width:auto;min-width:96px;height:42px;padding:0 16px;border-radius:9px;border:0.5px solid var(--border);background:transparent;color:var(--text);font-size:14px;cursor:pointer}
+.modal-footer button.primary{background:var(--text);color:var(--bg2);border:none;font-weight:600}
+.modal-footer button:hover{background:var(--text);opacity:.85}
+.msg{font-size:13px;margin-bottom:8px;display:none}
+.msg.show{display:block}
+.msg.error{color:var(--red)}
+.msg.ok{color:var(--green)}
+
+.hist-item{display:flex;justify-content:space-between;align-items:center;padding:.75rem;background:var(--bg);border-radius:10px;margin-bottom:8px;cursor:pointer}
+.hist-item:hover{background:var(--border)}
+.hist-item .h-id{font-size:14px;font-weight:600}
+.hist-item .h-meta{font-size:12px;color:var(--text2)}
+.hist-item .h-total{font-size:15px;font-weight:700}
+
+.confirm-resumen{text-align:center;padding:.5rem 0 1.5rem}
+.confirm-resumen .emoji{font-size:40px;margin-bottom:8px}
+.confirm-resumen .id{font-size:15px;font-weight:600}
+.confirm-resumen .total{font-size:24px;font-weight:700;margin-top:4px}
+.tk-modal-actions{display:flex;flex-direction:column;gap:8px;width:100%}
+.tk-modal-actions .fila{display:flex;gap:8px;width:100%}
+.tk-btn-wa{width:100%;height:44px;border:none;border-radius:10px;background:#25D366;color:#fff;font-weight:700;font-size:15px;cursor:pointer;box-sizing:border-box;display:flex;align-items:center;justify-content:center;text-align:center}
+.tk-btn-sec{flex:1 1 0;height:44px;border:0.5px solid var(--border);border-radius:10px;background:transparent;color:var(--text);font-weight:600;font-size:14px;cursor:pointer;box-sizing:border-box;display:flex;align-items:center;justify-content:center;text-align:center}
+.tk-btn-cerrar{width:100%;height:44px;border:0.5px solid var(--border);border-radius:10px;background:transparent;color:var(--text);font-weight:600;font-size:14px;cursor:pointer;box-sizing:border-box;display:flex;align-items:center;justify-content:center;text-align:center}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/" class="btn-inicio" title="Inicio"><img src="/static/icon-nav-v2.png" alt="Inicio" class="nav-icon" style="height:32px;width:32px"></a>
+  <h1 class="topbar-title">📝 Cotizaciones</h1>
+  <div class="topbar-right">
+    <button class="icon-btn" onclick="abrirHistorial()" title="Historial de cotizaciones">🕐</button>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- ═══ Bienvenida ═══ -->
+  <div id="paso-bienvenida">
+    <div class="bienvenida">
+      <div class="emoji">📝</div>
+      <div class="titulo">Cotizaciones</div>
+      <div class="sub">Arma una nueva cotización en unos pasos</div>
+      <button class="btn-generar" style="width:100%" onclick="irPaso(1)">+ Nueva cotización</button>
+    </div>
+    <div id="ultimas-box"></div>
+  </div>
+
+  <!-- ═══ Barra de progreso (pasos 1-3) ═══ -->
+  <div id="progreso-box" style="display:none">
+    <div class="progreso">
+      <div class="progreso-seg" id="seg-1"></div>
+      <div class="progreso-seg" id="seg-2"></div>
+      <div class="progreso-seg" id="seg-3"></div>
+    </div>
+    <div class="paso-label" id="paso-label-txt"></div>
+  </div>
+
+  <!-- ═══ Paso 1: Cliente ═══ -->
+  <div id="paso-1" style="display:none">
+    <div class="paso-titulo">Datos del cliente</div>
+    <div class="field"><label>Nombre *</label><input id="c-nombre" placeholder="Nombre del cliente" autocomplete="off"></div>
+    <div class="field"><label>Teléfono *</label><input id="c-telefono" placeholder="10 dígitos" autocomplete="off" maxlength="10" inputmode="numeric" oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)"></div>
+    <div class="field"><label>Nota (opcional)</label><input id="c-nota" placeholder="Ej: incluye instalación" autocomplete="off"></div>
+    <div class="msg" id="paso1-msg"></div>
+    <button class="btn-generar" style="width:100%" onclick="irPaso2()">Siguiente →</button>
+  </div>
+
+  <!-- ═══ Paso 2: Articulos ═══ -->
+  <div id="paso-2" style="display:none">
+    <div class="paso-titulo">Artículos de la cotización</div>
+    <div class="paso2-cliente" id="paso2-cliente-label"></div>
+
+    <div class="search-row">
+      <input type="search" id="buscar" placeholder="Buscar producto por nombre..." oninput="buscarProducto()" autocomplete="off">
+      <button onclick="abrirEscaner()" title="Escanear">📷</button>
+    </div>
+    <div id="resultados"></div>
+
+    <div id="cart"></div>
+
+    <div style="display:flex;gap:8px;margin-bottom:1rem">
+      <button type="button" class="btn-custom" onclick="abrirCustom()" style="flex:1">+ Personalizado</button>
+      <button type="button" class="btn-custom" onclick="abrirDescuento()" style="flex:1;border-style:solid;border-color:var(--green-bg);background:var(--green-bg);color:var(--green)">% Descuento general</button>
+    </div>
+
+    <div class="totales">
+      <div class="linea-total"><span>Subtotal</span><span id="t-subtotal">$0.00</span></div>
+      <div class="linea-total" id="linea-desc" style="display:none"><span id="desc-label">Descuento</span><span id="t-desc" style="color:var(--red)"></span></div>
+      <div class="linea-total grande"><span>Total</span><span id="t-total">$0.00</span></div>
+    </div>
+
+    <div class="msg" id="paso2-msg"></div>
+    <div class="fila-nav">
+      <button class="btn-atras" onclick="irPaso(1)">← Atrás</button>
+      <button class="btn-generar" onclick="generarCotizacion()">Generar →</button>
+    </div>
+  </div>
+
+  <!-- ═══ Paso 3: Confirmacion ═══ -->
+  <div id="paso-3" style="display:none">
+    <div class="paso-titulo">Cotización generada</div>
+    <div class="confirm-resumen">
+      <div class="emoji">✅</div>
+      <div class="id" id="tk-resumen-id"></div>
+      <div class="total" id="tk-resumen-total"></div>
+    </div>
+    <div class="tk-modal-actions">
+      <button class="tk-btn-wa" onclick="tkCompartirWhatsApp()">Compartir por WhatsApp</button>
+      <div class="fila">
+        <button class="tk-btn-sec" onclick="tkDescargar()">Descargar</button>
+        <button class="tk-btn-sec" onclick="tkImprimir()">Imprimir</button>
+      </div>
+      <button class="tk-btn-sec" id="btn-cobrar-pos" onclick="cobrarEnPOS()" style="width:100%;flex:none">💳 Cobrar en Punto de Venta</button>
+      <button class="tk-btn-cerrar" onclick="irPaso(0)">+ Nueva cotización</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- Modal descuento general -->
+<div class="overlay" id="desc-modal">
+  <div class="modal">
+    <h2>Descuento general</h2>
+    <div class="field">
+      <label>Descuento</label>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <button type="button" id="desc-modo-pct" class="metodo-btn activo" onclick="setModoDesc('pct')" style="flex:1">% Porcentaje</button>
+        <button type="button" id="desc-modo-monto" class="metodo-btn" onclick="setModoDesc('monto')" style="flex:1">$ Monto</button>
+      </div>
+      <input type="number" id="d-valor" min="0" step="0.01" placeholder="0">
+    </div>
+    <div class="msg" id="desc-msg"></div>
+    <div class="modal-footer">
+      <button onclick="cerrarDescuento()">Cancelar</button>
+      <button class="primary" onclick="aplicarDescuento()">Aplicar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal descuento por articulo -->
+<div class="overlay" id="item-desc-modal">
+  <div class="modal">
+    <h2>Descuento por artículo</h2>
+    <p id="item-desc-nombre" style="font-size:13px;color:var(--text2);margin-bottom:12px"></p>
+    <div class="field">
+      <label>Descuento</label>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <button type="button" id="item-desc-modo-pct" class="metodo-btn activo" onclick="setModoDescItem('pct')" style="flex:1">% Porcentaje</button>
+        <button type="button" id="item-desc-modo-monto" class="metodo-btn" onclick="setModoDescItem('monto')" style="flex:1">$ Monto</button>
+      </div>
+      <input type="number" id="item-desc-valor" min="0" step="0.01" placeholder="0">
+    </div>
+    <div class="msg" id="item-desc-msg"></div>
+    <div class="modal-footer">
+      <button onclick="cerrarDescuentoItem()">Cancelar</button>
+      <button class="primary" onclick="aplicarDescuentoItem()">Aplicar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal articulo personalizado -->
+<div class="overlay" id="custom-modal">
+  <div class="modal">
+    <h2>Artículo personalizado</h2>
+    <div class="field"><label>Descripción *</label><input id="cu-desc" placeholder="Ej: Mano de obra, Instalación, Flete..." autocomplete="off"></div>
+    <div class="field"><label>Cantidad</label><input type="number" id="cu-cant" value="1" min="0.01" step="any"></div>
+    <div class="field"><label>Precio unitario *</label><input type="number" id="cu-precio" placeholder="0.00" min="0" step="0.01"></div>
+    <div class="msg" id="custom-msg"></div>
+    <div class="modal-footer">
+      <button onclick="cerrarCustom()">Cancelar</button>
+      <button class="primary" onclick="agregarCustom()">Agregar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal escaner -->
+<div class="overlay" id="scanner-modal">
+  <div class="modal">
+    <h2>Escanear código</h2>
+    <div id="qr-reader"><video id="scan-video" playsinline autoplay muted></video><div class="scan-frame"><span class="scan-corner tl"></span><span class="scan-corner tr"></span><span class="scan-corner bl"></span><span class="scan-corner br"></span><div class="scan-line"></div></div></div>
+    <div class="msg" id="scan-msg"></div>
+    <div class="modal-footer"><button onclick="cerrarEscaner()">Cerrar</button></div>
+  </div>
+</div>
+
+<!-- Modal historial -->
+<div class="overlay" id="hist-modal">
+  <div class="modal" style="width:460px">
+    <h2>Historial de cotizaciones</h2>
+    <div id="hist-lista"><div style="text-align:center;color:var(--text2);padding:2rem 0">Cargando...</div></div>
+    <div class="modal-footer">
+      <button onclick="cerrarHistorial()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="/static/auth.js"></script>
+<script>
+requireAuth();
+
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function money(n){return '$'+Number(n||0).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function fmtPct(p){const n=Math.round((Number(p)||0)*100)/100;return (n%1===0)?String(n):n.toFixed(2).replace(/0$/,'');}
+function extraerMensaje(detail, fallback){
+  if(!detail) return fallback;
+  if(typeof detail === 'string') return detail;
+  if(Array.isArray(detail)) return detail.map(e=>e.msg||JSON.stringify(e)).join(' — ');
+  return fallback;
+}
+
+let carrito = [];
+let descuentoExtra = 0;
+let modoDesc = 'pct';
+let modoDescItem = 'pct';
+let itemDescuentoActualId = null;
+let _buscarTimeout = null;
+let _customIdCounter = -1;
+
+// ─── Navegacion por pasos ────────────────────────────────────────────────
+const PASOS = { 1:'Datos del cliente', 2:'Artículos', 3:'Confirmación' };
+function irPaso(n){
+  document.getElementById('paso-bienvenida').style.display = n===0 ? 'block' : 'none';
+  document.getElementById('progreso-box').style.display = n===0 ? 'none' : 'block';
+  document.getElementById('paso-1').style.display = n===1 ? 'block' : 'none';
+  document.getElementById('paso-2').style.display = n===2 ? 'block' : 'none';
+  document.getElementById('paso-3').style.display = n===3 ? 'block' : 'none';
+
+  if(n>0){
+    for(let i=1;i<=3;i++){
+      document.getElementById('seg-'+i).classList.toggle('activo', i<=n);
+    }
+    document.getElementById('paso-label-txt').textContent = 'PASO ' + n + ' DE 3 · ' + PASOS[n];
+  }
+
+  if(n===0){
+    carrito = [];
+    descuentoExtra = 0;
+    document.getElementById('c-nombre').value = '';
+    document.getElementById('c-telefono').value = '';
+    document.getElementById('c-nota').value = '';
+    document.getElementById('buscar').value = '';
+    document.getElementById('resultados').innerHTML = '';
+    document.getElementById('paso1-msg').className = 'msg';
+    document.getElementById('paso2-msg').className = 'msg';
+    renderCarrito();
+    cargarUltimasCotizaciones();
+  }
+  if(n===2){
+    const nombre = document.getElementById('c-nombre').value.trim();
+    document.getElementById('paso2-cliente-label').textContent = '👤 ' + nombre;
+    renderCarrito();
+  }
+  window.scrollTo(0,0);
+}
+function irPaso2(){
+  const nombre = document.getElementById('c-nombre').value.trim();
+  const tel = document.getElementById('c-telefono').value.trim();
+  const msg = document.getElementById('paso1-msg');
+  if(!nombre){ msg.className='msg error show'; msg.textContent='Escribe el nombre del cliente'; return; }
+  if(tel.length!==10){ msg.className='msg error show'; msg.textContent='El teléfono debe tener 10 dígitos'; return; }
+  msg.className = 'msg';
+  irPaso(2);
+}
+
+// ─── Buscador ────────────────────────────────────────────────────────────
+function buscarProducto(){
+  clearTimeout(_buscarTimeout);
+  const q = document.getElementById('buscar').value.trim();
+  const cont = document.getElementById('resultados');
+  if(!q){ cont.innerHTML=''; return; }
+  _buscarTimeout = setTimeout(async ()=>{
+    try{
+      const r = await authFetch('/api/pos/buscar?q='+encodeURIComponent(q));
+      const data = await r.json();
+      if(!data.length){ cont.innerHTML='<div class="resultado-item" style="cursor:default;color:var(--text2)">Sin resultados</div>'; return; }
+      cont.innerHTML = data.map((p,i)=>`<div class="resultado-item" onclick="agregarPorIndice(${i})">
+        <div class="r-info">
+          <div class="r-nombre">${esc(p.nombre)}</div>
+          <div class="r-meta">${p.stock>0?'Stock: '+p.stock+' '+p.unidad:'Sin stock'} · ${esc(p.categoria||'')}</div>
+        </div>
+        <div class="r-precio">${money(p.precio_final)}</div>
+      </div>`).join('');
+      window._ultimosResultados = data;
+    }catch(e){}
+  }, 200);
+}
+function agregarPorIndice(i){
+  const p = (window._ultimosResultados||[])[i];
+  if(p) agregar(p);
+}
+function agregar(p){
+  const ex = carrito.find(c=>c.id===p.id && !c.personalizado);
+  if(ex){ ex.cantidad++; }
+  else{ carrito.push({id:p.id, nombre:p.nombre, precio:p.precio_final, precioOriginal:p.precio_venta, cantidad:1, unidad:p.unidad, personalizado:false}); }
+  renderCarrito();
+  const inp = document.getElementById('buscar');
+  inp.focus();
+  inp.select();
+}
+
+// ─── Escaner de codigo de barras ──────────────────────────────────────────
+let zxingStream = null;
+let scanLoop = null;
+
+async function abrirEscaner(){
+  const msg = document.getElementById('scan-msg');
+  msg.className = 'msg';
+  document.getElementById('scanner-modal').classList.add('open');
+  if(!window.isSecureContext){ msg.className='msg error show'; msg.textContent='La cámara requiere HTTPS.'; return; }
+  if(!navigator.mediaDevices){ msg.className='msg error show'; msg.textContent='Cámara no soportada.'; return; }
+  let intentos = 0;
+  while(!window.BarcodeDetectorPolyfill && intentos<20){ await new Promise(r=>setTimeout(r,150)); intentos++; }
+  if(!window.BarcodeDetectorPolyfill){ msg.className='msg error show'; msg.textContent='No se cargó el escáner. Recarga la página.'; return; }
+  const video = document.getElementById('scan-video');
+  try{
+    zxingStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080},advanced:[{focusMode:'continuous'}]},audio:false});
+    video.srcObject = zxingStream;
+    await video.play();
+    msg.className = 'msg show'; msg.textContent = `Cámara activa (${video.videoWidth}x${video.videoHeight})`;
+    const detector = new window.BarcodeDetectorPolyfill({formats:['ean_13','ean_8','upc_a','upc_e','code_128','code_39','qr_code','itf']});
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d', {willReadFrequently:true});
+    let detectando = false;
+    scanLoop = setInterval(async ()=>{
+      if(detectando || !video.videoWidth) return;
+      detectando = true;
+      try{
+        const vw=video.videoWidth, vh=video.videoHeight;
+        const cw=Math.floor(vw*0.7), ch=Math.floor(vh*0.42);
+        const cx=Math.floor((vw-cw)/2), cy=Math.floor((vh-ch)/2);
+        canvas.width=cw; canvas.height=ch;
+        ctx.drawImage(video, cx, cy, cw, ch, 0, 0, cw, ch);
+        const codigos = await detector.detect(canvas);
+        if(codigos.length>0){ clearInterval(scanLoop); scanLoop=null; onCodigo(codigos[0].rawValue); }
+      }catch(err){}
+      detectando = false;
+    }, 300);
+  }catch(e){ msg.className='msg error show'; msg.textContent='No se pudo acceder a la cámara: '+(e.message||e.name); }
+}
+async function cerrarEscaner(){
+  document.getElementById('scanner-modal').classList.remove('open');
+  if(scanLoop){ clearInterval(scanLoop); scanLoop=null; }
+  if(zxingStream){ zxingStream.getTracks().forEach(t=>t.stop()); zxingStream=null; }
+  const v = document.getElementById('scan-video');
+  if(v) v.srcObject = null;
+}
+async function onCodigo(codigo){
+  await cerrarEscaner();
+  try{
+    const r = await authFetch('/api/pos/buscar?q='+encodeURIComponent(codigo));
+    const items = await r.json();
+    const exacto = items.find(p=>p.codigo_barras===codigo) || items[0];
+    if(exacto){ agregar(exacto); }
+    else{
+      document.getElementById('buscar').value = codigo;
+      buscarProducto();
+    }
+  }catch(e){}
+}
+
+// ─── Articulo personalizado ──────────────────────────────────────────────
+function abrirCustom(){
+  document.getElementById('cu-desc').value = '';
+  document.getElementById('cu-cant').value = '1';
+  document.getElementById('cu-precio').value = '';
+  document.getElementById('custom-msg').className = 'msg';
+  document.getElementById('custom-modal').classList.add('open');
+  setTimeout(()=>document.getElementById('cu-desc').focus(), 60);
+}
+function cerrarCustom(){ document.getElementById('custom-modal').classList.remove('open'); }
+function agregarCustom(){
+  const desc = document.getElementById('cu-desc').value.trim();
+  const cant = parseFloat(document.getElementById('cu-cant').value);
+  const precio = parseFloat(document.getElementById('cu-precio').value);
+  const msg = document.getElementById('custom-msg');
+  if(!desc){ msg.className='msg error show'; msg.textContent='Escribe una descripción'; return; }
+  if(isNaN(cant)||cant<=0){ msg.className='msg error show'; msg.textContent='Cantidad inválida'; return; }
+  if(isNaN(precio)||precio<0){ msg.className='msg error show'; msg.textContent='Precio inválido'; return; }
+  carrito.push({id:_customIdCounter--, nombre:desc, precio:precio, precioOriginal:precio, cantidad:cant, unidad:'', personalizado:true});
+  cerrarCustom();
+  renderCarrito();
+}
+
+// ─── Carrito ─────────────────────────────────────────────────────────────
+function calcSubtotal(){
+  return carrito.reduce((s,c)=>s+c.precio*c.cantidad, 0);
+}
+function cambiarCantidad(id, delta){
+  const c = carrito.find(x=>x.id===id);
+  if(!c) return;
+  c.cantidad = Math.max(0, Math.round((c.cantidad+delta)*1000)/1000);
+  if(c.cantidad<=0){ carrito = carrito.filter(x=>x.id!==id); }
+  renderCarrito();
+}
+function quitar(id){
+  carrito = carrito.filter(x=>x.id!==id);
+  renderCarrito();
+}
+function renderCarrito(){
+  const cont = document.getElementById('cart');
+  if(!cont) return;
+  if(!carrito.length){
+    cont.innerHTML = '<div class="cart-empty">Aún no agregas artículos</div>';
+  }else{
+    cont.innerHTML = carrito.map(c=>`<div class="cart-item">
+      <div class="ci-info">
+        <div class="ci-nombre">${esc(c.nombre)}${c.personalizado?'<span class="ci-badge">Personalizado</span>':''}</div>
+        <div class="ci-precio">${money(c.precio)}${c.unidad?' / '+esc(c.unidad):' c/u'}</div>
+      </div>
+      <div class="ci-cant">
+        <button onclick="cambiarCantidad(${c.id},-1)">−</button>
+        <span>${c.cantidad}</span>
+        <button onclick="cambiarCantidad(${c.id},1)">+</button>
+      </div>
+      <div class="ci-importe">${money(c.precio*c.cantidad)}</div>
+      <button class="ci-desc-btn" onclick="descuentoItem(${c.id})" title="Descuento a este artículo">%</button>
+      <button class="ci-del" onclick="quitar(${c.id})">🗑</button>
+    </div>`).join('');
+  }
+  actualizarTotales();
+}
+function actualizarTotales(){
+  const subtotal = calcSubtotal();
+  const total = subtotal * (1 - descuentoExtra/100);
+  document.getElementById('t-subtotal').textContent = money(subtotal);
+  document.getElementById('t-total').textContent = money(total);
+  const linea = document.getElementById('linea-desc');
+  if(descuentoExtra>0){
+    linea.style.display='flex';
+    document.getElementById('desc-label').textContent = `Descuento ${fmtPct(descuentoExtra)}%`;
+    document.getElementById('t-desc').textContent = '-'+money(subtotal-total);
+  }else{
+    linea.style.display='none';
+  }
+}
+
+// ─── Descuento general ───────────────────────────────────────────────────
+function setModoDesc(modo){
+  modoDesc = modo;
+  document.getElementById('desc-modo-pct').classList.toggle('activo', modo==='pct');
+  document.getElementById('desc-modo-monto').classList.toggle('activo', modo==='monto');
+  document.getElementById('d-valor').placeholder = modo==='pct' ? '0' : '0.00';
+}
+function abrirDescuento(){
+  if(!carrito.length) return;
+  setModoDesc('pct');
+  document.getElementById('d-valor').value = descuentoExtra || '';
+  document.getElementById('desc-msg').className = 'msg';
+  document.getElementById('desc-modal').classList.add('open');
+}
+function cerrarDescuento(){ document.getElementById('desc-modal').classList.remove('open'); }
+function aplicarDescuento(){
+  const valor = parseFloat(document.getElementById('d-valor').value);
+  const msg = document.getElementById('desc-msg');
+  if(isNaN(valor)||valor<0){ msg.className='msg error show'; msg.textContent='Valor inválido'; return; }
+  let pct;
+  if(modoDesc==='monto'){
+    const subtotal = calcSubtotal();
+    if(subtotal<=0){ msg.className='msg error show'; msg.textContent='El carrito está vacío'; return; }
+    if(valor>subtotal){ msg.className='msg error show'; msg.textContent='El monto no puede ser mayor al subtotal'; return; }
+    pct = Math.min(100, (valor/subtotal)*100);
+  }else{
+    if(valor>100){ msg.className='msg error show'; msg.textContent='El porcentaje no puede ser mayor a 100'; return; }
+    pct = valor;
+  }
+  descuentoExtra = pct;
+  actualizarTotales();
+  cerrarDescuento();
+}
+
+// ─── Descuento por articulo ──────────────────────────────────────────────
+function setModoDescItem(modo){
+  modoDescItem = modo;
+  document.getElementById('item-desc-modo-pct').classList.toggle('activo', modo==='pct');
+  document.getElementById('item-desc-modo-monto').classList.toggle('activo', modo==='monto');
+  document.getElementById('item-desc-valor').placeholder = modo==='pct' ? '0' : '0.00';
+}
+function descuentoItem(id){
+  const c = carrito.find(x=>x.id===id);
+  if(!c) return;
+  itemDescuentoActualId = id;
+  setModoDescItem('pct');
+  const actual = (c.precioOriginal && c.precioOriginal>c.precio) ? Math.round((1-c.precio/c.precioOriginal)*100) : 0;
+  document.getElementById('item-desc-nombre').textContent = c.nombre + ' — ' + (c.cantidad || 1) + ' x ' + money(c.precioOriginal) + ' = ' + money(c.precioOriginal * (c.cantidad || 1));
+  document.getElementById('item-desc-valor').value = actual || '';
+  document.getElementById('item-desc-msg').className = 'msg';
+  document.getElementById('item-desc-modal').classList.add('open');
+}
+function cerrarDescuentoItem(){
+  document.getElementById('item-desc-modal').classList.remove('open');
+  itemDescuentoActualId = null;
+}
+function aplicarDescuentoItem(){
+  const c = carrito.find(x=>x.id===itemDescuentoActualId);
+  const msg = document.getElementById('item-desc-msg');
+  if(!c){ cerrarDescuentoItem(); return; }
+  const valor = parseFloat(document.getElementById('item-desc-valor').value);
+  if(isNaN(valor) || valor<0){ msg.className='msg error show'; msg.textContent='Valor inválido'; return; }
+  let nuevoPrecio;
+  if(modoDescItem==='monto'){
+    const cantItem = c.cantidad || 1;
+    const totalOriginal = c.precioOriginal * cantItem;
+    if(valor > totalOriginal){ msg.className='msg error show'; msg.textContent='El monto no puede ser mayor a ' + money(totalOriginal) + ' (' + cantItem + ' x ' + money(c.precioOriginal) + ')'; return; }
+    nuevoPrecio = Math.round((c.precioOriginal - (valor / cantItem)) * 100) / 100;
+  }else{
+    if(valor>100){ msg.className='msg error show'; msg.textContent='Porcentaje inválido (0-100)'; return; }
+    nuevoPrecio = Math.round(c.precioOriginal * (1 - valor/100) * 100) / 100;
+  }
+  c.precio = nuevoPrecio;
+  renderCarrito();
+  cerrarDescuentoItem();
+}
+
+// ─── Ultimas cotizaciones (pantalla de bienvenida) ───────────────────────
+async function cargarUltimasCotizaciones(){
+  const cont = document.getElementById('ultimas-box');
+  try{
+    const r = await authFetch('/api/cotizaciones');
+    const data = await r.json();
+    if(!data.length){ cont.innerHTML=''; return; }
+    const ultimas = data.slice(0,5);
+    cont.innerHTML = '<div class="ultimas-title">Últimas cotizaciones</div>' + ultimas.map(c=>{
+      const fecha = new Date(c.fecha).toLocaleString('es-MX',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+      const badgeVendida = c.venta_id ? ' <span style="font-size:10px;font-weight:700;color:var(--green);background:var(--green-bg);padding:1px 6px;border-radius:5px">Vendida</span>' : '';
+      return `<div class="hist-item" onclick="verCotizacion(${c.id})">
+        <div>
+          <div class="h-id">#${c.id}${c.cliente_nombre?' · '+esc(c.cliente_nombre):''}${badgeVendida}</div>
+          <div class="h-meta">${fecha} · ${c.num_items} artículo${c.num_items!==1?'s':''}</div>
+        </div>
+        <div class="h-total">${money(c.total)}</div>
+      </div>`;
+    }).join('');
+  }catch(e){ cont.innerHTML=''; }
+}
+
+// ─── Generar cotizacion ──────────────────────────────────────────────────
+function tkActualizarBotonCobrar(v){
+  const btn = document.getElementById('btn-cobrar-pos');
+  if(!btn) return;
+  if(v.venta_id){
+    btn.disabled = true;
+    btn.textContent = '✅ Ya vendida (venta #' + v.venta_id + ')';
+    btn.style.opacity = '.6';
+    btn.style.cursor = 'not-allowed';
+  }else{
+    btn.disabled = false;
+    btn.textContent = '💳 Cobrar en Punto de Venta';
+    btn.style.opacity = '1';
+    btn.style.cursor = 'pointer';
+  }
+}
+
+async function generarCotizacion(){
+  const msg = document.getElementById('paso2-msg');
+  if(!carrito.length){ msg.className='msg error show'; msg.textContent='Agrega al menos un artículo'; return; }
+  const body = {
+    items: carrito.map(c=>({
+      producto_id: c.personalizado ? null : c.id,
+      nombre: c.personalizado ? c.nombre : null,
+      cantidad: c.cantidad,
+      precio_unitario: c.precio,
+    })),
+    descuento_extra_pct: descuentoExtra,
+    cliente_nombre: document.getElementById('c-nombre').value.trim() || null,
+    cliente_telefono: document.getElementById('c-telefono').value.trim() || null,
+    nota: document.getElementById('c-nota').value.trim() || null,
+  };
+  try{
+    const r = await authFetch('/api/cotizaciones', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    const data = await r.json();
+    if(!r.ok){ msg.className='msg error show'; msg.textContent=extraerMensaje(data.detail,'No se pudo generar la cotización'); return; }
+    tkActual = data;
+    tkBlobActual = null;
+    document.getElementById('tk-resumen-id').textContent = 'Cotización #' + data.id + (data.cliente_nombre ? ' · ' + data.cliente_nombre : '');
+    document.getElementById('tk-resumen-total').textContent = money(data.total);
+    tkActualizarBotonCobrar(data);
+    irPaso(3);
+  }catch(e){ msg.className='msg error show'; msg.textContent='Error de conexión'; }
+}
+
+// ─── PDF profesional tamano carta ────────────────────────────────────────
+let _logoCacheDataUrl = null;
+function cargarImagenBase64(url){
+  if(_logoCacheDataUrl) return Promise.resolve(_logoCacheDataUrl);
+  return new Promise((resolve,reject)=>{
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = function(){
+      const c = document.createElement('canvas');
+      const esc2 = 360/img.width;
+      c.width = 360; c.height = Math.round(img.height*esc2);
+      c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+      _logoCacheDataUrl = c.toDataURL('image/png');
+      resolve(_logoCacheDataUrl);
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+cargarImagenBase64('/static/logo.png').catch(()=>{});
+
+let tkActual = null;
+let tkBlobActual = null;
+
+async function tkGenerarPDF(v){
+  const jsPDFCtor = window.jspdf.jsPDF;
+  const doc = new jsPDFCtor({unit:'pt', format:'letter', orientation:'portrait'});
+  const W = 612, M = 56, RIGHT = W - M;
+  let y = 50;
+
+  try{
+    const logoData = await cargarImagenBase64('/static/logo.png');
+    const lw = 91, lh = 49;
+    doc.addImage(logoData, 'PNG', (W-lw)/2, y, lw, lh);
+    y += lh + 16;
+  }catch(e){
+    doc.setFont('helvetica','bold'); doc.setFontSize(20); doc.setTextColor(0);
+    doc.text('ONLY ENTERPRISES', W/2, y+16, {align:'center'});
+    y += 40;
+  }
+
+  doc.setFont('helvetica','bold'); doc.setFontSize(22); doc.setTextColor(0);
+  doc.text('COTIZACIÓN', W/2, y, {align:'center'}); y += 20;
+
+  const fecha = new Date(v.fecha).toLocaleDateString('es-MX', {day:'2-digit', month:'long', year:'numeric'});
+  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(90);
+  doc.text('Folio #' + v.id + '   ·   ' + fecha, W/2, y, {align:'center'}); y += 24;
+
+  doc.setDrawColor(220); doc.line(M, y, RIGHT, y); y += 22;
+
+  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(120);
+  doc.text('CLIENTE', M, y);
+  doc.text('ATENDIÓ', M + 260, y);
+  y += 14;
+  doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(0);
+  doc.text(v.cliente_nombre || 'Público en general', M, y);
+  doc.text(v.operador || '-', M + 260, y);
+  y += 18;
+
+  if(v.cliente_telefono || v.sucursal){
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(120);
+    if(v.cliente_telefono) doc.text('TELÉFONO', M, y);
+    if(v.sucursal) doc.text('SUCURSAL', M + 260, y);
+    y += 14;
+    doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(0);
+    if(v.cliente_telefono) doc.text(v.cliente_telefono, M, y);
+    if(v.sucursal) doc.text(v.sucursal, M + 260, y);
+    y += 18;
+  }
+  y += 6;
+
+  const colCant = M, colDesc = M + 55, colPU = RIGHT - 180, colImp = RIGHT - 0;
+  const anchoDesc = colPU - colDesc - 10;
+
+  function encabezadoTabla(){
+    doc.setFillColor(30,30,28);
+    doc.rect(M, y, RIGHT-M, 24, 'F');
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(255);
+    doc.text('CANT.', colCant + 4, y+16);
+    doc.text('DESCRIPCIÓN', colDesc, y+16);
+    doc.text('P. UNITARIO', colPU, y+16, {align:'right'});
+    doc.text('IMPORTE', colImp, y+16, {align:'right'});
+    y += 24;
+  }
+  encabezadoTabla();
+
+  let filaPar = false;
+  (v.detalle || []).forEach(function(it){
+    const nombreLineas = doc.splitTextToSize(it.nombre, anchoDesc);
+    const altoFila = Math.max(22, nombreLineas.length * 12 + 8);
+
+    if(y + altoFila > 730){
+      doc.addPage();
+      y = 50;
+      encabezadoTabla();
+      filaPar = false;
+    }
+
+    if(filaPar){
+      doc.setFillColor(247,246,243);
+      doc.rect(M, y, RIGHT-M, altoFila, 'F');
+    }
+    filaPar = !filaPar;
+
+    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(0);
+    const cant = Number.isInteger(it.cantidad) ? String(it.cantidad) : it.cantidad.toFixed(2);
+    doc.text(cant, colCant + 4, y + 15);
+    doc.text(nombreLineas, colDesc, y + 15);
+    doc.text(money(it.precio_unitario), colPU, y + 15, {align:'right'});
+    doc.setFont('helvetica','bold');
+    doc.text(money(it.importe), colImp, y + 15, {align:'right'});
+    y += altoFila;
+  });
+
+  doc.setDrawColor(220); doc.line(M, y, RIGHT, y); y += 20;
+
+  const anchoCaja = 220, xCaja = RIGHT - anchoCaja;
+  doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(90);
+  doc.text('Subtotal', xCaja, y);
+  doc.text(money(v.subtotal), RIGHT, y, {align:'right'});
+  y += 18;
+
+  if(v.descuento_extra_pct > 0){
+    doc.setTextColor(163,45,45);
+    doc.text('Descuento (' + fmtPct(v.descuento_extra_pct) + '%)', xCaja, y);
+    doc.text('-' + money(v.subtotal - v.total), RIGHT, y, {align:'right'});
+    y += 18;
+  }
+
+  doc.setDrawColor(0); doc.setLineWidth(1); doc.line(xCaja, y, RIGHT, y); y += 20;
+  doc.setFont('helvetica','bold'); doc.setFontSize(16); doc.setTextColor(0);
+  doc.text('TOTAL', xCaja, y);
+  doc.text(money(v.total), RIGHT, y, {align:'right'});
+  y += 36;
+
+  if(v.nota){
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(120);
+    doc.text('NOTA', M, y); y += 14;
+    doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(0);
+    const notaLineas = doc.splitTextToSize(v.nota, RIGHT-M);
+    doc.text(notaLineas, M, y);
+    y += notaLineas.length * 13 + 14;
+  }
+
+  doc.setFont('helvetica','italic'); doc.setFontSize(9); doc.setTextColor(140);
+  doc.text('Precios sujetos a cambio sin previo aviso. Cotización válida por 15 días a partir de la fecha de emisión.', W/2, 760, {align:'center', maxWidth: RIGHT-M});
+
+  return doc.output('blob');
+}
+
+async function tkObtenerBlob(){
+  if(tkBlobActual) return tkBlobActual;
+  tkBlobActual = await tkGenerarPDF(tkActual);
+  return tkBlobActual;
+}
+async function tkDescargar(){
+  if(!tkActual) return;
+  const blob = await tkObtenerBlob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'cotizacion_' + tkActual.id + '.pdf';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 3000);
+}
+async function tkCompartirWhatsApp(){
+  if(!tkActual) return;
+  const blob = await tkObtenerBlob();
+  const archivo = new File([blob], 'cotizacion_'+tkActual.id+'.pdf', {type:'application/pdf'});
+  if(navigator.canShare && navigator.canShare({files:[archivo]})){
+    try{ await navigator.share({files:[archivo]}); return; }
+    catch(e){ if(e.name==='AbortError') return; }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'cotizacion_'+tkActual.id+'.pdf';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 3000);
+  alert('Tu navegador no permite compartir directo. Se descargó el PDF: adjúntalo manualmente en WhatsApp.');
+}
+function cobrarEnPOS(){
+  if(!tkActual || tkActual.venta_id) return;
+  window.location.href = '/pagos?cotizacion=' + tkActual.id;
+}
+
+async function tkImprimir(){
+  if(!tkActual) return;
+  const blob = await tkObtenerBlob();
+  const url = URL.createObjectURL(blob);
+  const win = window.open(url, '_blank');
+  if(win){
+    win.addEventListener('load', function(){
+      try{ win.print(); }catch(e){}
+    });
+  }
+}
+
+// ─── Historial ───────────────────────────────────────────────────────────
+async function abrirHistorial(){
+  document.getElementById('hist-modal').classList.add('open');
+  document.getElementById('hist-lista').innerHTML = '<div style="text-align:center;color:var(--text2);padding:2rem 0">Cargando...</div>';
+  try{
+    const r = await authFetch('/api/cotizaciones');
+    const data = await r.json();
+    if(!data.length){
+      document.getElementById('hist-lista').innerHTML = '<div style="text-align:center;color:var(--text2);padding:2rem 0">Sin cotizaciones todavía</div>';
+      return;
+    }
+    document.getElementById('hist-lista').innerHTML = data.map(c=>{
+      const fecha = new Date(c.fecha).toLocaleString('es-MX',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+      const badgeVendida = c.venta_id ? ' <span style="font-size:10px;font-weight:700;color:var(--green);background:var(--green-bg);padding:1px 6px;border-radius:5px">Vendida</span>' : '';
+      return `<div class="hist-item" onclick="verCotizacion(${c.id})">
+        <div>
+          <div class="h-id">#${c.id}${c.cliente_nombre?' · '+esc(c.cliente_nombre):''}${badgeVendida}</div>
+          <div class="h-meta">${fecha} · ${c.num_items} artículo${c.num_items!==1?'s':''} · ${esc(c.operador||'')}</div>
+        </div>
+        <div class="h-total">${money(c.total)}</div>
+      </div>`;
+    }).join('');
+  }catch(e){
+    document.getElementById('hist-lista').innerHTML = '<div style="text-align:center;color:var(--red);padding:2rem 0">Error al cargar</div>';
+  }
+}
+function cerrarHistorial(){ document.getElementById('hist-modal').classList.remove('open'); }
+async function verCotizacion(id){
+  try{
+    const r = await authFetch('/api/cotizaciones/'+id);
+    if(!r.ok) return;
+    const data = await r.json();
+    cerrarHistorial();
+    tkActual = data;
+    tkBlobActual = null;
+    document.getElementById('tk-resumen-id').textContent = 'Cotización #' + data.id + (data.cliente_nombre ? ' · ' + data.cliente_nombre : '');
+    document.getElementById('tk-resumen-total').textContent = money(data.total);
+    tkActualizarBotonCobrar(data);
+    irPaso(3);
+  }catch(e){}
+}
+
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ cerrarEscaner(); cerrarDescuento(); cerrarDescuentoItem(); cerrarCustom(); cerrarHistorial(); } });
+
+irPaso(0);
+</script>
+</body>
+</html>

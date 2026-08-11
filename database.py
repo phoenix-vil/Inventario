@@ -72,9 +72,32 @@ class Venta(Base):
     tpv_referencia = Column(String, nullable=True)
     tpv_autorizacion = Column(String, nullable=True)
     tpv_terminal = Column(String, nullable=True)
+    transferencia_referencia = Column(String, nullable=True)
     detalle_json = Column(String, nullable=False)
     pago_con = Column(Float, nullable=True)
     cambio = Column(Float, nullable=True)
+    cliente_id = Column(Integer, nullable=True)
+    estado = Column(String, default="activa")  # activa | parcial | cancelada | devolucion
+    venta_origen_id = Column(Integer, nullable=True)  # si es devolucion, la venta que la origino
+    total_devuelto = Column(Float, default=0.0)
+    devoluciones_json = Column(String, nullable=True)
+    creado_en = Column(DateTime, default=datetime.utcnow)
+
+
+class Cotizacion(Base):
+    __tablename__ = "cotizaciones"
+
+    id = Column(Integer, primary_key=True, index=True)
+    cliente_nombre = Column(String, nullable=True)
+    cliente_telefono = Column(String, nullable=True)
+    subtotal = Column(Float, nullable=False)
+    descuento_extra_pct = Column(Float, default=0.0)
+    total = Column(Float, nullable=False)
+    detalle_json = Column(String, nullable=False)
+    operador = Column(String, nullable=True)
+    sucursal = Column(String, nullable=True)
+    nota = Column(String, nullable=True)
+    venta_id = Column(Integer, nullable=True)
     creado_en = Column(DateTime, default=datetime.utcnow)
 
 
@@ -111,6 +134,58 @@ def verificar_password(password: str, password_hash: str, salt: str) -> bool:
 
 def generar_token() -> str:
     return secrets.token_urlsafe(32)
+
+
+class VentaPendiente(Base):
+    __tablename__ = "ventas_pendientes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    sucursal = Column(String, nullable=True)
+    operador = Column(String, nullable=True)
+    nota = Column(String, nullable=True)
+    carrito_json = Column(String, nullable=False)
+    descuento_extra_pct = Column(Float, default=0.0)
+    autorizado_por = Column(String, nullable=True)
+    creado_en = Column(DateTime, default=datetime.utcnow)
+
+
+class Gasto(Base):
+    __tablename__ = "gastos"
+
+    id = Column(Integer, primary_key=True, index=True)
+    concepto = Column(String, nullable=False)
+    categoria = Column(String, nullable=False)
+    monto = Column(Float, nullable=False)
+    metodo_pago = Column(String, default="efectivo")  # efectivo | tarjeta | transferencia
+    sucursal = Column(String, nullable=True)
+    operador = Column(String, nullable=True)
+    nota = Column(String, nullable=True)
+    fecha = Column(DateTime, default=datetime.utcnow)
+    creado_en = Column(DateTime, default=datetime.utcnow)
+
+
+class Cliente(Base):
+    __tablename__ = "clientes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    nombre = Column(String, nullable=False)
+    telefono = Column(String, nullable=True)
+    nota = Column(String, nullable=True)
+    limite_credito = Column(Float, nullable=True)
+    creado_en = Column(DateTime, default=datetime.utcnow)
+
+
+class PagoCredito(Base):
+    __tablename__ = "pagos_credito"
+
+    id = Column(Integer, primary_key=True, index=True)
+    cliente_id = Column(Integer, nullable=False, index=True)
+    monto = Column(Float, nullable=False)
+    metodo_pago = Column(String, default="efectivo")
+    operador = Column(String, nullable=True)
+    sucursal = Column(String, nullable=True)
+    nota = Column(String, nullable=True)
+    creado_en = Column(DateTime, default=datetime.utcnow)
 
 
 def get_db():

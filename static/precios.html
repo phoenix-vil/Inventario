@@ -2,8 +2,14 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#1a1a18">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="icon" type="image/png" href="/static/icon-nav-v2.png" media="(prefers-color-scheme: light)">
+<link rel="icon" type="image/png" href="/static/icon-nav-blanco.png" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="/static/touch-icon-v3-180.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Consulta de precios</title>
+<title>Precios · Only Enterprises</title>
 <script type="module">
 import { BarcodeDetector } from 'https://cdn.jsdelivr.net/npm/barcode-detector@3/dist/es/ponyfill.min.js';
 window.BarcodeDetectorPolyfill = BarcodeDetector;
@@ -104,37 +110,35 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .modal-footer{display:flex;justify-content:flex-end;margin-top:1rem}
 .modal-footer button{height:40px;padding:0 16px;border-radius:8px;font-size:14px;cursor:pointer;border:0.5px solid var(--border);background:transparent;color:var(--text)}
 .empty-result{text-align:center;padding:2rem;color:var(--text2);width:100%}
+.btn-vender{width:100%;height:50px;margin-top:1rem;border:none;border-radius:12px;background:var(--green);color:#fff;font-size:16px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:opacity .15s}
+.btn-vender:active{opacity:.8}
 .btn-nueva-busqueda{margin-top:1.5rem;width:100%;height:46px;border:0.5px solid var(--border);border-radius:12px;background:transparent;color:var(--text);font-size:14px;cursor:pointer;font-weight:500;transition:background .12s}
 .btn-nueva-busqueda:hover{background:var(--bg)}
 @media(max-width:400px){.price-main{font-size:34px}}
 </style>
-<link rel="stylesheet" href="/static/modern.css">
+<link rel="stylesheet" href="/static/modern.css?v=1785433285">
 </head>
 <body>
 
 <div class="topbar">
-  <a href="/" class="btn-inicio"><img src="/static/home-icon.webp" class="home-img" alt="Inicio"> Inicio</a>
+  <a href="/" class="btn-inicio" title="Inicio"><img src="/static/icon-nav-v2.png" alt="Inicio" class="nav-icon" style="height:32px;width:32px"></a>
   <h1 class="topbar-title">💲 Consulta de precios</h1>
   <div style="width:84px"></div>
 </div>
 
 <div class="hero">
-
-  <!-- Barra de búsqueda: SIEMPRE la primera cosa en pantalla.
-       Va antes del bloque decorativo a propósito: así, cuando ese bloque
-       se oculta/muestra al buscar, nunca desplaza al input (nada cambia
-       ARRIBA de él), evitando que el teclado se cierre mientras escribes. -->
-  <div class="search-bar">
-    <input type="search" id="buscar" placeholder="Buscar por nombre..." oninput="buscar()" autocomplete="off">
-  </div>
-
-  <!-- Decoración inicial: icono, título y botón de escáner (se ocultan al buscar) -->
+<!-- Decoración inicial: icono, título y botón de escáner (se ocultan al buscar) -->
   <div class="hero-idle" id="hero-deco">
     <div class="hero-icon">💲</div>
     <div>
       <div class="hero-title">¿Cuánto cuesta?</div>
       <div class="hero-sub">Escanea el código o busca por nombre</div>
     </div>
+
+  <div class="search-bar">
+    <input type="search" id="buscar" placeholder="Buscar por nombre..." oninput="buscar()" autocomplete="off">
+  </div>
+
 
     <button class="scan-btn-hero" onclick="abrirEscaner()">
       <span style="font-size:26px">📷</span> Escanear código de barras
@@ -168,7 +172,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 requireAuth();
 
 let debTimer;
-let ultimosCodigo=null; // para evitar buscar la misma cosa dos veces
+let ultimosCodigo=null;
+let _productosCache={}; // guarda productos por id para el botón vender // para evitar buscar la misma cosa dos veces
 
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function money(n){return '$'+Number(n).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -207,13 +212,13 @@ async function buscarPorCodigo(codigo){
 /* ── Mostrar resultados ── */
 function mostrarIdle(){
   ultimosCodigo=null;
-  document.getElementById('hero-deco').style.display='flex';
+  /* hero-deco siempre visible */
   document.getElementById('resultado-cont').style.display='none';
   document.getElementById('resultado-cont').innerHTML='';
 }
 
 function mostrarError(msg){
-  document.getElementById('hero-deco').style.display='none';
+  /* hero-deco visible para no mover el buscador */
   const cont=document.getElementById('resultado-cont');
   cont.style.display='block';
   cont.innerHTML=`<div class="empty-result">😕 ${esc(msg)}</div>
@@ -221,7 +226,7 @@ function mostrarError(msg){
 }
 
 function mostrarResultados(prods, query){
-  document.getElementById('hero-deco').style.display='none';
+  /* hero-deco visible para no mover el buscador */
   const cont=document.getElementById('resultado-cont');
   cont.style.display='block';
 
@@ -244,6 +249,7 @@ function mostrarResultados(prods, query){
 }
 
 function tarjetaGrande(p){
+  _productosCache[p.id]=p;
   const img=p.imagen_url
     ?`<img class="result-img" src="${esc(p.imagen_url)}" alt="${esc(p.nombre)}" onerror="this.parentElement.innerHTML='<div class=result-img-placeholder>🛍️</div>'">`
     :`<div class="result-img-placeholder">🛍️</div>`;
@@ -275,12 +281,14 @@ function tarjetaGrande(p){
       ${precios}
       <div class="price-unit">por ${esc(p.unidad)}${p.vendido_por_peso?' · precio por kg':''}</div>
       ${porPeso}
+      <button class="btn-vender" onclick="agregarYVender(${p.id})">🛒 Agregar al carrito y vender</button>
     </div>
   </div>`;
 }
 
 let listaResultados=[];
 function tarjetaChica(p,i){
+  _productosCache[p.id]=p;
   listaResultados[i]=p;
   const thumb=p.imagen_url
     ?`<img class="res-thumb" src="${esc(p.imagen_url)}" alt="" onerror="this.outerHTML='<div class=res-thumb-ph>🛍️</div>'">`
@@ -298,6 +306,22 @@ function tarjetaChica(p,i){
       ${tieneDesc?`<div style="text-align:right"><span class="disc-badge" style="font-size:11px">-${p.descuento_pct}%</span></div>`:''}
     </div>
   </div>`;
+}
+
+
+function agregarYVender(id){
+  const p = _productosCache[id];
+  if(!p){ alert('No se encontró el producto'); return; }
+  sessionStorage.setItem('only_enterprises_quick_add', JSON.stringify({
+    id: p.id,
+    nombre: p.nombre,
+    precio: p.precio_final,
+    precioOriginal: p.precio_venta,
+    stock: (p.stock!=null ? p.stock : 999),
+    unidad: p.unidad || 'pieza',
+    vendido_por_peso: p.vendido_por_peso || false
+  }));
+  window.location.href = '/pagos';
 }
 
 function nuevaBusqueda(){

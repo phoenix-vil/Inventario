@@ -10,14 +10,14 @@ class ProductoBase(BaseModel):
     codigo_barras: Optional[str] = Field(None, max_length=64)
     precio_venta: float = Field(..., gt=0)
     precio_costo: float = Field(default=0.0, ge=0)
-    stock: float = Field(default=0, ge=0)
+    stock: float = Field(default=0)
     stock_minimo: float = Field(default=5, ge=0)
     unidad: str = Field(default="pieza", max_length=50)
     vendido_por_peso: bool = Field(default=False)
     descuento_pct: float = Field(default=0.0, ge=0, le=100)
     descuento_desde: Optional[datetime] = None
     descuento_hasta: Optional[datetime] = None
-    imagen_url: Optional[str] = Field(None, max_length=500)
+    imagen_url: Optional[str] = None
 
 
 class ProductoCreate(ProductoBase):
@@ -31,14 +31,14 @@ class ProductoUpdate(BaseModel):
     codigo_barras: Optional[str] = Field(None, max_length=64)
     precio_venta: Optional[float] = Field(None, gt=0)
     precio_costo: Optional[float] = Field(None, ge=0)
-    stock: Optional[float] = Field(None, ge=0)
+    stock: Optional[float] = Field(None)
     stock_minimo: Optional[float] = Field(None, ge=0)
     unidad: Optional[str] = Field(None, max_length=50)
     vendido_por_peso: Optional[bool] = None
     descuento_pct: Optional[float] = Field(None, ge=0, le=100)
     descuento_desde: Optional[datetime] = None
     descuento_hasta: Optional[datetime] = None
-    imagen_url: Optional[str] = Field(None, max_length=500)
+    imagen_url: Optional[str] = None
 
 
 class DescuentoCategoria(BaseModel):
@@ -59,7 +59,8 @@ class AjusteStock(BaseModel):
 
 
 class ItemVenta(BaseModel):
-    producto_id: int
+    producto_id: Optional[int] = None
+    nombre: Optional[str] = None
     cantidad: float
     precio_unitario: float
     precio_original: Optional[float] = None
@@ -80,6 +81,23 @@ class RegistrarVenta(BaseModel):
     tpv_referencia: Optional[str] = None
     tpv_autorizacion: Optional[str] = None
     tpv_terminal: Optional[str] = None
+    transferencia_referencia: Optional[str] = None
+    cliente_id: Optional[int] = None
+
+
+class ItemCotizacion(BaseModel):
+    producto_id: Optional[int] = None
+    nombre: Optional[str] = None
+    cantidad: float
+    precio_unitario: float
+
+
+class RegistrarCotizacion(BaseModel):
+    items: list[ItemCotizacion]
+    descuento_extra_pct: float = Field(default=0.0, ge=0, le=100)
+    cliente_nombre: Optional[str] = None
+    cliente_telefono: Optional[str] = None
+    nota: Optional[str] = None
 
 
 class Login(BaseModel):
@@ -114,3 +132,40 @@ class ProductoOut(ProductoBase):
 
     class Config:
         from_attributes = True
+
+
+class TrasladoStock(BaseModel):
+    producto_id: int
+    sucursal_origen: str
+    sucursal_destino: str
+    cantidad: float = Field(..., gt=0)
+
+
+class CrearVentaPendiente(BaseModel):
+    carrito: list
+    descuento_extra_pct: float = 0.0
+    autorizado_por: Optional[str] = None
+    nota: Optional[str] = None
+    hoy_inicio: Optional[str] = None
+
+
+class CrearGasto(BaseModel):
+    concepto: str = Field(..., min_length=1, max_length=200)
+    categoria: str = Field(..., min_length=1, max_length=100)
+    monto: float = Field(..., gt=0)
+    metodo_pago: str = Field(default="efectivo")
+    fecha: Optional[datetime] = None
+    nota: Optional[str] = Field(None, max_length=500)
+
+
+class CrearCliente(BaseModel):
+    nombre: str = Field(..., min_length=1, max_length=200)
+    telefono: Optional[str] = Field(None, max_length=30)
+    nota: Optional[str] = Field(None, max_length=500)
+    limite_credito: Optional[float] = Field(None, ge=0)
+
+
+class CrearPagoCredito(BaseModel):
+    monto: float = Field(..., gt=0)
+    metodo_pago: str = Field(default="efectivo")
+    nota: Optional[str] = Field(None, max_length=500)

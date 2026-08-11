@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#1a1a18">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard · Only Enterprises</title>
+<link rel="icon" type="image/png" href="/static/icon-nav-v2.png" media="(prefers-color-scheme: light)">
+<link rel="icon" type="image/png" href="/static/icon-nav-blanco.png" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="/static/touch-icon-v3-180.png">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f5f4f0;--bg2:#fff;--border:#e2e0d8;--text:#1a1a18;--text2:#6b6b66;
+  --blue:#185fa5;--blue-bg:#e6f1fb;--green:#3b6d11;--green-bg:#eaf3de;
+  --amber:#854f0b;--amber-bg:#faeeda;--red:#a32d2d;--red-bg:#fcebeb
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1c1c1a;--bg2:#252522;--border:#3a3a36;--text:#e8e6dc;--text2:#9c9a92;
+  --blue:#85b7eb;--blue-bg:#042c53;--green:#97c459;--green-bg:#173404;
+  --amber:#ef9f27;--amber-bg:#412402;--red:#f09595;--red-bg:#501313
+}}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}
+
+/* Topbar homologado con el resto de la app */
+.topbar{background:color-mix(in srgb,var(--bg2) 88%,transparent);border-bottom:0.5px solid var(--border);padding:0 1rem;height:54px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:10;backdrop-filter:blur(10px)}
+.topbar-title{font-size:17px;font-weight:600;flex:1;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.btn-inicio{display:inline-flex;align-items:center;gap:5px;height:36px;padding:0 12px;border:0.5px solid var(--border);border-radius:8px;background:transparent;color:var(--text);text-decoration:none;flex-shrink:0;transition:background .12s}
+.btn-inicio:hover{background:var(--bg)}
+.topbar-right{display:flex;gap:6px;align-items:center;flex-shrink:0}
+.icon-btn{height:36px;width:36px;border:0.5px solid var(--border);border-radius:8px;background:transparent;font-size:16px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:background .12s;color:var(--text)}
+.icon-btn:hover{background:var(--bg)}
+
+.container{max-width:900px;margin:0 auto;padding:1.25rem}
+
+/* Pestañas de período */
+.tabs-periodo{display:flex;gap:8px;margin-bottom:1.25rem;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.tab-periodo{flex-shrink:0;height:38px;padding:0 18px;border:0.5px solid var(--border);border-radius:100px;background:var(--bg2);color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s}
+.tab-periodo.active{background:var(--text);color:var(--bg2);border-color:var(--text)}
+
+/* Tarjetas de estadísticas */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:1.25rem}
+.stat-card{background:var(--bg2);border:0.5px solid var(--border);border-radius:14px;padding:1.25rem;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.stat-icon{font-size:22px;margin-bottom:8px}
+.stat-label{font-size:12px;color:var(--text2);margin-bottom:4px}
+.stat-value{font-size:24px;font-weight:800;line-height:1.15}
+.stat-value.blue{color:var(--blue)}
+.stat-value.green{color:var(--green)}
+.stat-value.red{color:var(--red)}
+.stat-delta{font-size:12px;font-weight:600;margin-top:6px;min-height:16px}
+.stat-delta.up{color:var(--green)}
+.stat-delta.down{color:var(--red)}
+
+/* Tarjeta de gráfica */
+.chart-card{background:var(--bg2);border:0.5px solid var(--border);border-radius:14px;padding:1.25rem;margin-bottom:1.25rem;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.chart-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:10px}
+.chart-title{font-size:15px;font-weight:600}
+.chart-legend{display:flex;gap:14px;font-size:12px;color:var(--text2)}
+.legend-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:middle}
+.chart-toggle{display:flex;gap:4px}
+.chart-toggle button{height:30px;padding:0 12px;border:0.5px solid var(--border);border-radius:8px;background:transparent;color:var(--text2);font-size:12px;cursor:pointer;transition:all .12s}
+.chart-toggle button.active{background:var(--text);color:var(--bg2);border-color:var(--text)}
+.chart-area{display:flex;align-items:flex-end;gap:6px;height:170px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch}
+.chart-col{display:flex;flex-direction:column;align-items:center;flex:1;min-width:22px}
+.chart-bars-wrap{display:flex;align-items:flex-end;gap:2px;height:130px;width:100%}
+.chart-bar{flex:1;border-radius:4px 4px 0 0;min-height:2px;transition:height .4s ease}
+.chart-bar-venta{background:var(--blue)}
+.chart-bar-ganancia{background:var(--green)}
+.chart-label{font-size:9px;color:var(--text2);margin-top:6px;white-space:nowrap}
+
+/* Top productos */
+.section-title{font-size:15px;font-weight:600;margin-bottom:.75rem;display:flex;align-items:center;gap:6px}
+.card{background:var(--bg2);border:0.5px solid var(--border);border-radius:14px;padding:.5rem 1.25rem;box-shadow:0 1px 3px rgba(0,0,0,.04);margin-bottom:1.5rem}
+.tp-row{display:flex;align-items:center;gap:12px;padding:.75rem 0;border-bottom:0.5px solid var(--border)}
+.tp-row:last-child{border-bottom:none}
+.tp-first{background:linear-gradient(90deg,color-mix(in srgb,var(--amber-bg) 70%,transparent),transparent);border-radius:10px;padding:.75rem .5rem;margin:0 -0.5rem}
+.tp-rank{font-size:20px;width:30px;text-align:center;flex-shrink:0}
+.tp-img,.tp-img-ph{width:44px;height:44px;border-radius:8px;object-fit:cover;flex-shrink:0;background:var(--bg);border:0.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:20px}
+.tp-info{flex:1;min-width:0}
+.tp-name{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tp-meta{font-size:12px;color:var(--text2);margin-top:1px}
+.tp-bar-track{height:5px;background:var(--bg);border-radius:10px;margin-top:6px;overflow:hidden}
+.tp-bar-fill{height:100%;background:var(--blue);border-radius:10px;transition:width .5s ease}
+.tp-nums{text-align:right;flex-shrink:0}
+.tp-total{font-weight:700;font-size:14px}
+.tp-ganancia{font-size:11px;color:var(--green);font-weight:600}
+
+.empty{text-align:center;padding:2.5rem 1rem;color:var(--text2);font-size:14px}
+@media(max-width:600px){.topbar{padding:0 .625rem}.topbar-title{font-size:15px}.stat-value{font-size:20px}}
+</style>
+<link rel="stylesheet" href="/static/modern.css?v=1785433285">
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/" class="btn-inicio" title="Inicio"><img src="/static/icon-nav-v2.png" alt="Inicio" class="nav-icon" style="height:32px;width:32px"></a>
+  <h1 class="topbar-title">📊 Dashboard</h1>
+  <div class="topbar-right">
+    <button class="icon-btn" onclick="reporteDesdeDashboard()" title="Descargar reporte PDF" style="margin-right:6px">📄</button>
+    <button class="icon-btn" onclick="cargarTodo();cargarSerie();" title="Actualizar">↻</button>
+  </div>
+</div>
+
+<div class="container">
+
+  <div class="tabs-periodo" id="tabs-periodo">
+    <button class="tab-periodo active" data-periodo="hoy" onclick="cambiarPeriodo('hoy')">Hoy</button>
+    <button class="tab-periodo" data-periodo="semana" onclick="cambiarPeriodo('semana')">Semana</button>
+    <button class="tab-periodo" data-periodo="mes" onclick="cambiarPeriodo('mes')">Mes</button>
+    <button class="tab-periodo" data-periodo="todo" onclick="cambiarPeriodo('todo')">Todo</button>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-icon">💰</div>
+      <div class="stat-label">Total vendido</div>
+      <div class="stat-value blue" id="st-total">—</div>
+      <div class="stat-delta" id="st-total-delta"></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">📈</div>
+      <div class="stat-label">Ganancia<span id="st-margen-badge"></span></div>
+      <div class="stat-value green" id="st-ganancia">—</div>
+      <div class="stat-delta" id="st-ganancia-delta"></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">💸</div>
+      <div class="stat-label">Gastos</div>
+      <div class="stat-value red" id="st-gastos">—</div>
+      <div class="stat-delta">&nbsp;</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">↩️</div>
+      <div class="stat-label">Devoluciones</div>
+      <div class="stat-value red" id="st-devoluciones">—</div>
+      <div class="stat-delta" id="st-devoluciones-num">&nbsp;</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">🏆</div>
+      <div class="stat-label">Ganancia neta</div>
+      <div class="stat-value" id="st-ganancia-neta">—</div>
+      <div class="stat-delta">&nbsp;</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">🧾</div>
+      <div class="stat-label">Ventas</div>
+      <div class="stat-value" id="st-num-ventas">—</div>
+      <div class="stat-delta">&nbsp;</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">🎫</div>
+      <div class="stat-label">Ticket promedio</div>
+      <div class="stat-value" id="st-ticket">—</div>
+      <div class="stat-delta">&nbsp;</div>
+    </div>
+  </div>
+
+  <div class="card" style="padding:1rem 1.25rem;margin-bottom:1.25rem;display:flex;justify-content:space-between;align-items:center">
+    <div>
+      <div style="font-size:12px;color:var(--text2)">💳 Cuentas por cobrar (créditos pendientes)</div>
+      <div style="font-size:22px;font-weight:800;color:var(--red)" id="st-por-cobrar">—</div>
+    </div>
+    <a href="/clientes" style="font-size:13px;color:var(--blue);text-decoration:none;font-weight:600">Ver clientes ›</a>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-header">
+      <div class="chart-title">Tendencia de ventas</div>
+      <div class="chart-legend">
+        <span><span class="legend-dot" style="background:var(--blue)"></span>Vendido</span>
+        <span><span class="legend-dot" style="background:var(--green)"></span>Ganancia</span>
+      </div>
+      <div class="chart-toggle">
+        <button data-dias="7" onclick="cambiarDiasChart(7)">7 días</button>
+        <button data-dias="14" class="active" onclick="cambiarDiasChart(14)">14 días</button>
+        <button data-dias="30" onclick="cambiarDiasChart(30)">30 días</button>
+      </div>
+    </div>
+    <div class="chart-area" id="chart-bars">
+      <div class="empty">Cargando...</div>
+    </div>
+  </div>
+
+  <div class="section-title">🏆 Productos más vendidos</div>
+  <div class="card" id="top-productos">
+    <div class="empty">Cargando...</div>
+  </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="/static/auth.js"></script>
+<script>
+requireGerente();
+
+let periodoActual = 'hoy';
+let diasChart = 14;
+
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function money(n){return '$'+Number(n||0).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});}
+
+function limitesPeriodo(periodo){
+  const ahora = new Date();
+  let desde = null;
+  if(periodo === 'hoy'){
+    desde = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate(), 0,0,0);
+  } else if(periodo === 'semana'){
+    const diaSemana = (ahora.getDay()+6)%7; // 0 = lunes
+    desde = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate()-diaSemana, 0,0,0);
+  } else if(periodo === 'mes'){
+    desde = new Date(ahora.getFullYear(), ahora.getMonth(), 1, 0,0,0);
+  }
+  return desde ? desde.toISOString() : null;
+}
+
+function labelPeriodoAnterior(){
+  if(periodoActual==='hoy') return 'ayer';
+  if(periodoActual==='semana') return 'semana pasada';
+  if(periodoActual==='mes') return 'mes pasado';
+  return '';
+}
+
+function cambiarPeriodo(p){
+  periodoActual = p;
+  document.querySelectorAll('.tab-periodo').forEach(b=>b.classList.toggle('active', b.dataset.periodo===p));
+  cargarTodo();
+}
+
+function cambiarDiasChart(d){
+  diasChart = d;
+  document.querySelectorAll('.chart-toggle button').forEach(b=>b.classList.toggle('active', parseInt(b.dataset.dias)===d));
+  cargarSerie();
+}
+
+async function cargarTodo(){
+  await Promise.all([cargarResumen(), cargarTopProductos()]);
+}
+
+function renderDelta(elId, pct){
+  const el = document.getElementById(elId);
+  if(pct === null || pct === undefined){ el.textContent=''; return; }
+  const subio = pct >= 0;
+  el.className = 'stat-delta ' + (subio ? 'up' : 'down');
+  el.textContent = (subio?'▲ ':'▼ ') + Math.abs(pct) + '% vs ' + labelPeriodoAnterior();
+}
+
+async function cargarResumen(){
+  const desde = limitesPeriodo(periodoActual);
+  const params = new URLSearchParams();
+  if(desde) params.set('desde', desde);
+  params.set('periodo', periodoActual);
+  try{
+    const r = await authFetch('/api/dashboard/resumen?'+params.toString());
+    const d = await r.json();
+
+    document.getElementById('st-total').textContent = money(d.total_vendido);
+    const gEl = document.getElementById('st-ganancia');
+    gEl.textContent = money(d.ganancia);
+    gEl.className = 'stat-value ' + (d.ganancia >= 0 ? 'green' : 'red');
+    document.getElementById('st-margen-badge').textContent = d.total_vendido>0 ? ' · ' + d.margen_pct + '%' : '';
+
+    if(d.gastos !== undefined){
+      document.getElementById('st-gastos').textContent = money(d.gastos);
+      const _dv = document.getElementById('st-devoluciones');
+      if(_dv){
+        _dv.textContent = d.devoluciones_total ? '-' + money(d.devoluciones_total) : money(0);
+        const _dn = document.getElementById('st-devoluciones-num');
+        if(_dn) _dn.textContent = (d.devoluciones_num || 0) + ' movimiento(s)';
+      }
+      const gnEl = document.getElementById('st-ganancia-neta');
+      gnEl.textContent = money(d.ganancia_neta);
+      gnEl.className = 'stat-value ' + (d.ganancia_neta >= 0 ? 'green' : 'red');
+    }
+    document.getElementById('st-num-ventas').textContent = d.num_ventas;
+    document.getElementById('st-ticket').textContent = money(d.ticket_promedio);
+
+    if(d.comparativo){
+      renderDelta('st-total-delta', d.comparativo.variacion_total_pct);
+      renderDelta('st-ganancia-delta', d.comparativo.variacion_ganancia_pct);
+    } else {
+      document.getElementById('st-total-delta').textContent = '';
+      document.getElementById('st-ganancia-delta').textContent = '';
+    }
+  }catch(e){ console.error(e); }
+}
+
+async function cargarSerie(){
+  const cont = document.getElementById('chart-bars');
+  try{
+    const r = await authFetch('/api/dashboard/serie-diaria?dias='+diasChart);
+    const serie = await r.json();
+    renderChart(serie);
+  }catch(e){
+    cont.innerHTML = '<div class="empty">Error al cargar la gráfica</div>';
+  }
+}
+
+function renderChart(serie){
+  const cont = document.getElementById('chart-bars');
+  if(!serie.length){ cont.innerHTML = '<div class="empty">Sin datos</div>'; return; }
+  const maxVal = Math.max(1, ...serie.map(d=>Math.max(d.total, d.ganancia)));
+  cont.innerHTML = serie.map(d=>{
+    const alturaVenta = Math.max(2, Math.round((d.total/maxVal)*100));
+    const alturaGan = Math.max(0, Math.round((Math.max(0,d.ganancia)/maxVal)*100));
+    const fechaObj = new Date(d.fecha+'T00:00:00');
+    const diaLabel = fechaObj.toLocaleDateString('es-MX',{day:'numeric', month:'short'});
+    const tooltip = `${diaLabel}: ${money(d.total)} vendido, ${money(d.ganancia)} ganancia (${d.num_ventas} ventas)`;
+    return `<div class="chart-col" title="${esc(tooltip)}">
+      <div class="chart-bars-wrap">
+        <div class="chart-bar chart-bar-venta" style="height:${alturaVenta}%"></div>
+        <div class="chart-bar chart-bar-ganancia" style="height:${alturaGan}%"></div>
+      </div>
+      <div class="chart-label">${diaLabel}</div>
+    </div>`;
+  }).join('');
+}
+
+async function cargarTopProductos(){
+  const desde = limitesPeriodo(periodoActual);
+  const params = new URLSearchParams();
+  if(desde) params.set('desde', desde);
+  params.set('limit', '5');
+  const cont = document.getElementById('top-productos');
+  try{
+    const r = await authFetch('/api/dashboard/top-productos?'+params.toString());
+    const productos = await r.json();
+    renderTopProductos(productos);
+  }catch(e){
+    cont.innerHTML = '<div class="empty">Error al cargar</div>';
+  }
+}
+
+function renderTopProductos(productos){
+  const cont = document.getElementById('top-productos');
+  if(!productos.length){
+    cont.innerHTML = '<div class="empty">Sin ventas en este período</div>';
+    return;
+  }
+  const maxCant = Math.max(...productos.map(p=>p.cantidad_vendida), 1);
+  const medallas = ['🥇','🥈','🥉'];
+  cont.innerHTML = productos.map((p,i)=>{
+    const pct = Math.round((p.cantidad_vendida/maxCant)*100);
+    const medalla = medallas[i] || ('#'+(i+1));
+    const img = p.imagen_url
+      ? `<img src="${esc(p.imagen_url)}" class="tp-img" alt="" onerror="this.outerHTML='<div class=tp-img-ph>📦</div>'">`
+      : `<div class="tp-img-ph">📦</div>`;
+    return `<div class="tp-row ${i===0?'tp-first':''}">
+      <div class="tp-rank">${medalla}</div>
+      ${img}
+      <div class="tp-info">
+        <div class="tp-name">${esc(p.nombre)}</div>
+        <div class="tp-meta">${p.marca?esc(p.marca)+' · ':''}${p.cantidad_vendida} vendidos</div>
+        <div class="tp-bar-track"><div class="tp-bar-fill" style="width:${pct}%"></div></div>
+      </div>
+      <div class="tp-nums">
+        <div class="tp-total">${money(p.total_vendido)}</div>
+        <div class="tp-ganancia">+${money(p.ganancia)}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+
+async function cargarCuentasPorCobrar(){
+  try{
+    const r = await authFetch('/api/clientes-resumen');
+    const d = await r.json();
+    document.getElementById('st-por-cobrar').textContent = money(d.total_por_cobrar);
+  }catch(e){
+    document.getElementById('st-por-cobrar').textContent = '—';
+  }
+}
+
+cargarTodo();
+cargarSerie();
+cargarCuentasPorCobrar();
+
+// ─── Reporte completo en PDF ────────────────────────────────────────────
+let _logoCacheDataUrl = null;
+function cargarImagenBase64(url){
+  if(_logoCacheDataUrl) return Promise.resolve(_logoCacheDataUrl);
+  return new Promise(function(resolve, reject){
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = function(){
+      const canvas = document.createElement('canvas');
+      const escala = 240 / img.width;
+      canvas.width = 240;
+      canvas.height = Math.round(img.height * escala);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      _logoCacheDataUrl = canvas.toDataURL('image/png');
+      resolve(_logoCacheDataUrl);
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+async function generarReportePDF(desdeISO, hastaISO, etiquetaPeriodo){
+  let params = [];
+  if(desdeISO) params.push('desde=' + encodeURIComponent(desdeISO));
+  if(hastaISO) params.push('hasta=' + encodeURIComponent(hastaISO));
+  const url = '/api/reporte-completo' + (params.length ? '?' + params.join('&') : '');
+
+  let d;
+  try{
+    const r = await authFetch(url);
+    if(!r.ok){ alert('No se pudo generar el reporte'); return; }
+    d = await r.json();
+  }catch(e){ alert('Error de conexión al generar el reporte'); return; }
+
+  const nombresMetodo = {efectivo:'Efectivo', tarjeta:'Tarjeta', credito:'Crédito', transferencia:'Transferencia'};
+  const jsPDFCtor = window.jspdf.jsPDF;
+  const W = 595, M = 40, RIGHT = W - M;
+  const doc = new jsPDFCtor({unit:'pt', format:'a4', orientation:'portrait'});
+  let y = 40;
+
+  function linea(){
+    doc.setDrawColor(0);
+    doc.setLineDashPattern([3, 2], 0);
+    doc.line(M, y, RIGHT, y);
+    doc.setLineDashPattern([], 0);
+    y += 18;
+  }
+  function fila(etiqueta, valor, bold, size){
+    doc.setFont('courier','bold');
+    doc.setFontSize(size || 10);
+    doc.setTextColor(0);
+    doc.text(String(etiqueta), M, y);
+    doc.text(String(valor), RIGHT, y, {align:'right'});
+    y += (size || 10) + 6;
+  }
+  function titulo(txt){
+    doc.setFont('courier','bold'); doc.setFontSize(12); doc.setTextColor(0);
+    doc.text(txt, M, y);
+    y += 20;
+  }
+
+  try{
+    const logoData = await cargarImagenBase64('/static/logo.png');
+    const lw = 110, lh = 59;
+    doc.addImage(logoData, 'PNG', (W - lw)/2, y, lw, lh);
+    y += lh + 14;
+  }catch(e){
+    doc.setFont('courier','bold'); doc.setFontSize(15); doc.setTextColor(0);
+    doc.text('ONLY ENTERPRISES', W/2, y + 12, {align:'center'});
+    y += 32;
+  }
+
+  doc.setFont('courier','bold'); doc.setFontSize(15); doc.setTextColor(0);
+  doc.text('Reporte de ventas', W/2, y, {align:'center'}); y += 18;
+  doc.setFont('courier','bold'); doc.setFontSize(10);
+  doc.text(etiquetaPeriodo || '', W/2, y, {align:'center'}); y += 14;
+  doc.setFontSize(9);
+  doc.text('Generado: ' + new Date().toLocaleString('es-MX').replace(',',''), W/2, y, {align:'center'});
+  y += 18;
+  linea();
+
+  titulo('Resumen');
+  fila('Ventas totales (' + d.num_ventas + ' ventas)', money(d.total_vendido));
+  fila('Gastos (' + (d.num_gastos || 0) + ')', '-' + money(d.gastos));
+  if(d.devoluciones_num){
+    fila('Devoluciones (' + d.devoluciones_num + ')', '-' + money(d.devoluciones_total));
+  }
+  fila('Ganancia después de gastos', money(d.ganancia_neta), true, 12);
+  fila('Cuentas por cobrar', money(d.total_por_cobrar));
+  y += 6;
+  linea();
+
+  titulo('Métodos de pago');
+  if(!d.desglose_metodos_pago.length){
+    doc.setFont('courier','bold'); doc.setFontSize(10);
+    doc.text('Sin ventas en el período', M, y); y += 16;
+  }else{
+    d.desglose_metodos_pago.forEach(function(m){
+      fila((nombresMetodo[m.metodo] || m.metodo) + ' (' + m.cantidad + ')', money(m.total));
+    });
+  }
+  y += 6;
+  linea();
+
+  titulo('Clientes a crédito');
+  if(!d.clientes_detalle.length){
+    doc.setFont('courier','bold'); doc.setFontSize(10);
+    doc.text('Sin movimientos de crédito en el período', M, y); y += 16;
+  }else{
+    const c1 = M, c2 = M + 200, c3 = M + 310, c4 = RIGHT;
+    doc.setFont('courier','bold'); doc.setFontSize(9); doc.setTextColor(0);
+    doc.text('Cliente', c1, y);
+    doc.text('Ventas créd.', c2, y, {align:'right'});
+    doc.text('Pagos', c3, y, {align:'right'});
+    doc.text('Saldo', c4, y, {align:'right'});
+    y += 14;
+    doc.setFont('courier','bold');
+    d.clientes_detalle.forEach(function(c){
+      if(y > 780){ doc.addPage(); y = 50; }
+      const nombreCorto = doc.splitTextToSize(c.nombre, 190)[0];
+      doc.setFont('courier','bold'); doc.setFontSize(9);
+      doc.text(nombreCorto, c1, y);
+      doc.text(money(c.ventas_credito_periodo), c2, y, {align:'right'});
+      doc.text(money(c.pagos_periodo), c3, y, {align:'right'});
+      doc.setFont('courier','bold');
+      doc.text(money(c.saldo_actual), c4, y, {align:'right'});
+      y += 14;
+    });
+  }
+
+  const blob = doc.output('blob');
+  const urlBlob = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = urlBlob; a.download = 'reporte_' + new Date().toISOString().slice(0,10) + '.pdf';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(urlBlob); }, 3000);
+}
+
+function reporteDesdeDashboard(){
+  const desdeISO = limitesPeriodo(periodoActual);
+  const etiquetas = {hoy:'Hoy', semana:'Esta semana', mes:'Este mes', todo:'Todo el histórico'};
+  generarReportePDF(desdeISO, null, etiquetas[periodoActual] || '');
+}
+</script>
+</body>
+</html>

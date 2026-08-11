@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#1a1a18">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="icon" type="image/png" href="/static/icon-nav-v2.png" media="(prefers-color-scheme: light)">
+<link rel="icon" type="image/png" href="/static/icon-nav-blanco.png" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="/static/touch-icon-v3-180.png">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sucursales · Only Enterprises</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f5f4f0;--bg2:#fff;--border:#e2e0d8;--text:#1a1a18;--text2:#6b6b66;
+  --blue:#185fa5;--blue-bg:#e6f1fb;--green:#3b6d11;--green-bg:#eaf3de;
+  --red:#a32d2d;--red-bg:#fcebeb;--radius:10px
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1c1c1a;--bg2:#252522;--border:#3a3a36;--text:#e8e6dc;--text2:#9c9a92;
+  --blue:#85b7eb;--blue-bg:#042c53;--green:#97c459;--green-bg:#173404;
+  --red:#f09595;--red-bg:#501313
+}}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.topbar{background:var(--bg2);border-bottom:0.5px solid var(--border);padding:0 1rem;height:54px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:10}
+.topbar-title{font-size:17px;font-weight:600;flex:1;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topbar-right{display:flex;align-items:center;flex-shrink:0;min-width:84px;justify-content:flex-end}
+.btn-inicio{display:inline-flex;align-items:center;gap:5px;height:36px;padding:0 12px;border:0.5px solid var(--border);border-radius:8px;background:transparent;color:var(--text);font-size:13px;text-decoration:none;flex-shrink:0;white-space:nowrap}
+.btn-inicio:hover{background:var(--bg)}
+.container{max-width:600px;margin:0 auto;padding:1.25rem}
+.section-title{font-size:13px;font-weight:600;color:var(--text2);margin:1.5rem 0 .75rem;text-transform:uppercase;letter-spacing:.5px}
+.section-title:first-child{margin-top:0}
+.card{background:var(--bg2);border:0.5px solid var(--border);border-radius:12px;overflow:hidden}
+.user-row{display:flex;align-items:center;gap:10px;padding:.875rem 1rem;border-bottom:0.5px solid var(--border)}
+.user-row:last-child{border-bottom:none}
+.u-info{flex:1;min-width:0}
+.u-name{font-weight:600;font-size:14px}
+.u-actions{display:flex;gap:6px}
+.u-actions button{height:32px;padding:0 10px;border:0.5px solid var(--border);border-radius:7px;background:transparent;color:var(--text);font-size:12px;cursor:pointer}
+.u-actions button.danger{color:var(--red);border-color:transparent;background:var(--red-bg)}
+.form-card{background:var(--bg2);border:0.5px solid var(--border);border-radius:12px;padding:1.25rem}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:12px;color:var(--text2);margin-bottom:4px}
+.field input{width:100%;height:42px;padding:0 12px;border:0.5px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:16px;font-family:inherit}
+.btn{width:100%;height:46px;border:none;border-radius:10px;background:var(--text);color:var(--bg2);font-size:15px;font-weight:600;cursor:pointer;margin-top:4px}
+.msg{padding:10px;border-radius:8px;font-size:13px;margin-top:10px;display:none}
+.msg.show{display:block}
+.msg.error{background:var(--red-bg);color:var(--red)}
+.msg.ok{background:var(--green-bg);color:var(--green)}
+@media(max-width:560px){.topbar{padding:0 .625rem}.topbar-title{font-size:15px}.topbar-right{min-width:0}.container{padding:.875rem}}
+</style>
+<link rel="stylesheet" href="/static/modern.css">
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/" class="btn-inicio" title="Inicio"><img src="/static/icon-nav-v2.png" alt="Inicio" class="nav-icon" style="height:32px;width:32px"></a>
+  <h1 class="topbar-title">🏪 Sucursales</h1>
+  <div class="topbar-right"></div>
+</div>
+
+<div class="container">
+  <div class="section-title">Sucursales registradas</div>
+  <div class="card" id="lista-sucursales"></div>
+
+  <div class="section-title">Agregar sucursal</div>
+  <div class="form-card">
+    <div class="field"><label>Nombre / número de sucursal</label><input id="ns-nombre" placeholder="Ej: 2, Centro, Norte..." autocomplete="off"></div>
+    <button class="btn" onclick="crearSucursal()">Agregar sucursal</button>
+    <div class="msg" id="sucursal-msg"></div>
+  </div>
+</div>
+
+<script src="/static/auth.js"></script>
+<script>
+requireGerente();
+
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+async function cargarSucursales(){
+  try{
+    const r = await fetch('/api/sucursales');
+    const sucursales = await r.json();
+    const cont = document.getElementById('lista-sucursales');
+    if(!sucursales.length){cont.innerHTML='<div class="user-row"><div class="u-info">Sin sucursales registradas</div></div>';return;}
+    cont.innerHTML = sucursales.map(s=>`<div class="user-row">
+      <div class="u-info"><div class="u-name">${esc(s.nombre)}</div></div>
+      <div class="u-actions"><button class="danger" onclick="borrarSucursal(${s.id},'${esc(s.nombre)}')">🗑</button></div>
+    </div>`).join('');
+  }catch(e){}
+}
+
+async function crearSucursal(){
+  const msg = document.getElementById('sucursal-msg');
+  const nombre = document.getElementById('ns-nombre').value.trim();
+  if(!nombre){msg.className='msg error show';msg.textContent='Escribe un nombre para la sucursal';return;}
+  try{
+    const r = await authFetch('/api/sucursales',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre})});
+    const data = await r.json();
+    if(!r.ok){msg.className='msg error show';msg.textContent=data.detail||'Error';return;}
+    msg.className='msg ok show';msg.textContent=`Sucursal "${data.nombre}" agregada.`;
+    document.getElementById('ns-nombre').value='';
+    cargarSucursales();
+  }catch(e){msg.className='msg error show';msg.textContent='Error de conexión';}
+}
+
+async function borrarSucursal(id,nombre){
+  if(!(await confirmarPersonalizado(`¿Eliminar la sucursal "${nombre}"?`, 'Eliminar sucursal')))return;
+  try{
+    const r = await authFetch('/api/sucursales/'+id,{method:'DELETE'});
+    if(r.status===204){cargarSucursales();return;}
+    const data = await r.json();
+    alert(data.detail||'No se pudo eliminar');
+  }catch(e){alert('Error de conexión');}
+}
+
+cargarSucursales();
+</script>
+</body>
+</html>

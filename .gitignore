@@ -1,0 +1,22 @@
+# ─── Base de datos (datos reales, nunca se versiona) ───
+inventario.db
+inventario.db-journal
+inventario.db-wal
+inventario.db-shm
+*.db.bak
+inventario.db.backup-*
+
+# ─── Secretos ───
+.serper_key
+
+# ─── Python ───
+__pycache__/
+*.py[cod]
+
+# ─── Empaquetados y registros ───
+*.zip
+serper_log.csv
+
+# ─── Editor / sistema ───
+*.swp
+.DS_Store
