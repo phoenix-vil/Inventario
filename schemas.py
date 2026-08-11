@@ -18,6 +18,7 @@ class ProductoBase(BaseModel):
     descuento_desde: Optional[datetime] = None
     descuento_hasta: Optional[datetime] = None
     imagen_url: Optional[str] = None
+    tienda: Optional[str] = Field(None, max_length=50)
 
 
 class ProductoCreate(ProductoBase):
@@ -39,6 +40,7 @@ class ProductoUpdate(BaseModel):
     descuento_desde: Optional[datetime] = None
     descuento_hasta: Optional[datetime] = None
     imagen_url: Optional[str] = None
+    tienda: Optional[str] = Field(None, max_length=50)
 
 
 class DescuentoCategoria(BaseModel):
@@ -123,6 +125,15 @@ class CambiarPassword(BaseModel):
 
 class CrearSucursal(BaseModel):
     nombre: str = Field(..., min_length=1, max_length=50)
+
+
+class CrearTienda(BaseModel):
+    nombre: str = Field(..., min_length=1, max_length=50)
+
+
+class ClasificarProductosMasivo(BaseModel):
+    producto_ids: list[int] = Field(..., min_length=1)
+    tienda: Optional[str] = None  # None = quitar clasificación (queda visible en todas)
 
 
 class ProductoOut(ProductoBase):

@@ -31,6 +31,7 @@ class Producto(Base):
     descuento_desde = Column(DateTime, nullable=True)
     descuento_hasta = Column(DateTime, nullable=True)
     imagen_url = Column(String, nullable=True)
+    tienda = Column(String, nullable=True, index=True)  # submarca (Only Reef, Only Garden...). None = visible en todas
     creado_en = Column(DateTime, default=datetime.utcnow)
     actualizado_en = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -55,6 +56,7 @@ class Usuario(Base):
     password_hash = Column(String, nullable=False)
     salt = Column(String, nullable=False)
     rol = Column(String, default="gerente")  # gerente | cajero
+    tiendas = Column(String, nullable=True)  # nombres de tienda separados por coma; vacío/None = sin restricción (ve todas)
     creado_en = Column(DateTime, default=datetime.utcnow)
 
 
@@ -103,6 +105,16 @@ class Cotizacion(Base):
 
 class Sucursal(Base):
     __tablename__ = "sucursales"
+
+    id = Column(Integer, primary_key=True, index=True)
+    nombre = Column(String, nullable=False, unique=True)
+    creado_en = Column(DateTime, default=datetime.utcnow)
+
+
+class Tienda(Base):
+    """Submarca (Only Reef, Only Garden...). Distinta de Sucursal: una sucursal
+    física puede vender de más de una tienda (ej. Imprenta = Only Reef + Only Garden)."""
+    __tablename__ = "tiendas"
 
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String, nullable=False, unique=True)
@@ -205,6 +217,9 @@ def init_db():
             db.add(Usuario(usuario="admin", password_hash=h, salt=s, rol="gerente"))
         if db.query(Sucursal).count() == 0:
             db.add(Sucursal(nombre="1"))
+        if db.query(Tienda).count() == 0:
+            for nombre in ("Only Reef", "Only Garden", "Only Reptile", "Only Pets", "El Zar del LED"):
+                db.add(Tienda(nombre=nombre))
         db.commit()
     finally:
         db.close()

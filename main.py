@@ -16,10 +16,12 @@ from database import Cliente, PagoCredito
 from database import Gasto
 from database import VentaPendiente
 from database import Cotizacion
+from database import Tienda
 from schemas import (
     ProductoCreate, ProductoUpdate, ProductoOut, AjusteStock,
     AutorizarDescuento, RegistrarVenta, CrearUsuario, CambiarPassword,
     Login, LogoutReq, CrearSucursal, DescuentoCategoria, AsignarStockSucursal, TrasladoStock)
+from schemas import CrearTienda, ClasificarProductosMasivo
 from schemas import CrearCliente, CrearPagoCredito
 from schemas import CrearGasto
 from schemas import CrearVentaPendiente
@@ -128,6 +130,51 @@ def eliminar_sucursal(sucursal_id: int, sesion: Sesion = Depends(requerir_gerent
     db.commit()
 
 
+# ─── Tiendas (submarcas: Only Reef, Only Garden...) ────────────────────────
+@app.get("/api/tiendas")
+def listar_tiendas(db: Session = Depends(get_db)):
+    """Público (sin sesión), igual que /api/sucursales."""
+    rows = db.query(Tienda).order_by(Tienda.nombre).all()
+    return [{"id": t.id, "nombre": t.nombre} for t in rows]
+
+
+@app.post("/api/tiendas", status_code=201)
+def crear_tienda(data: CrearTienda, sesion: Sesion = Depends(requerir_gerente), db: Session = Depends(get_db)):
+    nombre = data.nombre.strip()
+    if not nombre:
+        raise HTTPException(status_code=400, detail="El nombre no puede estar vacío")
+    if db.query(Tienda).filter(Tienda.nombre == nombre).first():
+        raise HTTPException(status_code=409, detail="Esa tienda ya existe")
+    t = Tienda(nombre=nombre)
+    db.add(t)
+    db.commit()
+    db.refresh(t)
+    return {"id": t.id, "nombre": t.nombre}
+
+
+@app.delete("/api/tiendas/{tienda_id}", status_code=204)
+def eliminar_tienda(tienda_id: int, sesion: Sesion = Depends(requerir_gerente), db: Session = Depends(get_db)):
+    t = db.query(Tienda).filter(Tienda.id == tienda_id).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="Tienda no encontrada")
+    db.delete(t)
+    db.commit()
+
+
+@app.post("/api/productos/clasificar-masivo")
+def clasificar_productos_masivo(data: ClasificarProductosMasivo, sesion: Sesion = Depends(requerir_gerente), db: Session = Depends(get_db)):
+    if data.tienda:
+        if not db.query(Tienda).filter(Tienda.nombre == data.tienda).first():
+            raise HTTPException(status_code=404, detail="Esa tienda no existe")
+    actualizados = (
+        db.query(Producto)
+        .filter(Producto.id.in_(data.producto_ids))
+        .update({"tienda": data.tienda, "actualizado_en": datetime.utcnow()}, synchronize_session=False)
+    )
+    db.commit()
+    return {"actualizados": actualizados, "tienda": data.tienda}
+
+
 # ─── Ruta raíz → app web ───────────────────────────────────────────────────
 @app.get("/", response_class=FileResponse)
 def root():
@@ -174,6 +221,11 @@ def inventario_sucursales_page():
     return FileResponse("static/inv_sucursales.html")
 
 
+@app.get("/tiendas-clasificar", response_class=FileResponse)
+def tiendas_clasificar_page():
+    return FileResponse("static/tiendas_clasificar.html")
+
+
 # ─── Resumen / dashboard ───────────────────────────────────────────────────
 @app.get("/api/resumen")
 def resumen(db: Session = Depends(get_db)):
@@ -198,6 +250,8 @@ def resumen(db: Session = Depends(get_db)):
 def listar(
     q: Optional[str] = Query(None, description="Buscar por nombre o categoría"),
     categoria: Optional[str] = Query(None),
+    tienda: Optional[str] = Query(None),
+    sin_clasificar: bool = Query(False, description="Solo productos sin tienda asignada"),
     estado: Optional[str] = Query(None, description="ok | bajo | agotado"),
     skip: int = 0,
     limit: int = 200,
@@ -213,6 +267,10 @@ def listar(
         )
     if categoria:
         query = query.filter(Producto.categoria == categoria)
+    if sin_clasificar:
+        query = query.filter(Producto.tienda.is_(None))
+    elif tienda:
+        query = query.filter(Producto.tienda == tienda)
     if estado == "agotado":
         query = query.filter(Producto.stock == 0)
     elif estado == "bajo":

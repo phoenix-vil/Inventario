@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#1a1a18">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="icon" type="image/png" href="/static/icon-nav-v2.png" media="(prefers-color-scheme: light)">
+<link rel="icon" type="image/png" href="/static/icon-nav-blanco.png" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="/static/touch-icon-v3-180.png">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clasificar por tienda · Only Enterprises</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f5f4f0;--bg2:#fff;--border:#e2e0d8;--text:#1a1a18;--text2:#6b6b66;
+  --blue:#185fa5;--blue-bg:#e6f1fb;--green:#3b6d11;--green-bg:#eaf3de;
+  --amber:#854f0b;--amber-bg:#faeeda;--red:#a32d2d;--red-bg:#fcebeb
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1c1c1a;--bg2:#252522;--border:#3a3a36;--text:#e8e6dc;--text2:#9c9a92;
+  --blue:#85b7eb;--blue-bg:#042c53;--green:#97c459;--green-bg:#173404;
+  --amber:#ef9f27;--amber-bg:#412402;--red:#f09595;--red-bg:#501313
+}}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}
+.topbar{background:color-mix(in srgb,var(--bg2) 88%,transparent);border-bottom:0.5px solid var(--border);padding:0 1rem;height:54px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:10;backdrop-filter:blur(10px)}
+.topbar-title{font-size:17px;font-weight:600;flex:1;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.btn-inicio{display:inline-flex;align-items:center;gap:5px;height:36px;padding:0 12px;border:0.5px solid var(--border);border-radius:8px;background:transparent;color:var(--text);font-size:13px;text-decoration:none;flex-shrink:0;transition:background .12s}
+.btn-inicio:hover{background:var(--bg)}
+.icon-btn{height:36px;border:0.5px solid var(--border);border-radius:8px;background:transparent;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0 10px;transition:background .12s;color:var(--text)}
+.icon-btn:hover{background:var(--bg)}
+.container{max-width:1200px;margin:0 auto;padding:1.25rem 1.25rem 6rem}
+.filtros{display:flex;gap:8px;margin-bottom:1.25rem;flex-wrap:wrap;align-items:flex-end}
+.filtro-campo{display:flex;flex-direction:column;gap:4px}
+.filtro-campo label{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.4px}
+.filtros input,.filtros select{height:42px;padding:0 12px;border:0.5px solid var(--border);border-radius:10px;background:var(--bg2);color:var(--text);font-size:14px;font-family:inherit}
+.filtros input{min-width:200px}
+.filtros select{min-width:170px}
+.tienda-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:1.25rem}
+.stat{background:var(--bg2);border:0.5px solid var(--border);border-radius:12px;padding:.75rem 1rem;box-shadow:0 1px 3px rgba(0,0,0,.04);cursor:pointer;transition:border-color .12s}
+.stat.active{border-color:var(--blue);box-shadow:0 0 0 2px color-mix(in srgb,var(--blue) 25%,transparent)}
+.stat-label{font-size:12px;color:var(--text2);margin-bottom:3px}
+.stat-value{font-size:20px;font-weight:700}
+.stat.sin .stat-value{color:var(--amber)}
+.tabla-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px;background:var(--bg2);border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+th{text-align:left;padding:10px 12px;font-size:11px;font-weight:600;color:var(--text2);background:var(--bg);border-bottom:0.5px solid var(--border);text-transform:uppercase;letter-spacing:.4px;white-space:nowrap}
+td{padding:8px 12px;border-bottom:0.5px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--bg)}
+.td-marca{color:var(--text2);font-size:12px}
+.badge-tienda{font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;background:var(--green-bg);color:var(--green);white-space:nowrap}
+.badge-sin{font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;background:var(--amber-bg);color:var(--amber);white-space:nowrap}
+.row-sel{width:32px;height:16px}
+.empty{text-align:center;padding:3rem 1rem;color:var(--text2)}
+.barra-masiva{position:fixed;left:0;right:0;bottom:0;background:var(--bg2);border-top:0.5px solid var(--border);padding:.75rem 1.25rem;display:none;align-items:center;gap:10px;flex-wrap:wrap;z-index:20;box-shadow:0 -2px 10px rgba(0,0,0,.06)}
+.barra-masiva.show{display:flex}
+.barra-masiva select{height:38px;padding:0 10px;border:0.5px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:13px}
+.btn-primary{height:38px;padding:0 16px;border:none;border-radius:8px;background:var(--blue);color:#fff;font-size:13px;font-weight:600;cursor:pointer}
+.btn-primary:disabled{opacity:.4;cursor:not-allowed}
+.toast{position:fixed;bottom:5rem;left:50%;transform:translateX(-50%) translateY(20px);background:var(--text);color:var(--bg2);padding:.6rem 1.1rem;border-radius:10px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:30}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+@media(max-width:600px){.topbar{padding:0 .625rem}.topbar-title{font-size:15px}.filtros input,.filtros select{min-width:140px}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/inventario-sucursales" class="btn-inicio" title="Volver"><img src="/static/icon-nav-v2.png" alt="Inicio" style="height:32px;width:32px"></a>
+  <h1 class="topbar-title">🏷️ Clasificar por tienda</h1>
+  <div class="topbar-right">
+    <button class="icon-btn" onclick="cargar()">↻ Actualizar</button>
+  </div>
+</div>
+
+<div class="container">
+  <div class="filtros">
+    <div class="filtro-campo">
+      <label>Buscar</label>
+      <input type="search" id="f-buscar" placeholder="Nombre, marca o categoría..." oninput="render()">
+    </div>
+    <div class="filtro-campo">
+      <label>Categoría</label>
+      <select id="f-cat" onchange="render()"><option value="">Todas</option></select>
+    </div>
+  </div>
+
+  <div class="tienda-stats" id="tienda-stats"></div>
+
+  <div id="tabla-cont"><div class="empty">Cargando...</div></div>
+</div>
+
+<div class="barra-masiva" id="barra-masiva">
+  <strong id="bm-cnt">0 seleccionados</strong>
+  <select id="bm-tienda"><option value="">Todas las tiendas (sin clasificar)</option></select>
+  <button class="btn-primary" id="bm-btn" onclick="aplicarMasivo()">Asignar</button>
+  <button class="icon-btn" onclick="deseleccionarTodo()">Cancelar selección</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/static/auth.js"></script>
+<script>
+requireGerente();
+
+const SIN = '__sin_clasificar__';
+let productos = [], tiendas = [], filtroTienda = '';
+const seleccionados = new Set();
+
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function toast(msg,err=false){
+  const t=document.getElementById('toast');t.textContent=msg;
+  t.style.background=err?'var(--red)':'var(--text)';
+  t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);
+}
+
+async function cargar(){
+  document.getElementById('tabla-cont').innerHTML='<div class="empty">Cargando...</div>';
+  seleccionados.clear();
+  try{
+    const [rp, rt] = await Promise.all([
+      authFetch('/api/productos?limit=3000'),
+      authFetch('/api/tiendas'),
+    ]);
+    if(!rp.ok || !rt.ok) throw new Error();
+    productos = await rp.json();
+    tiendas = await rt.json();
+    poblarFiltros();
+    poblarStats();
+    render();
+  }catch(e){
+    document.getElementById('tabla-cont').innerHTML='<div class="empty">Error al cargar datos</div>';
+  }
+}
+
+function poblarFiltros(){
+  const cats=[...new Set(productos.map(p=>p.categoria))].sort();
+  document.getElementById('f-cat').innerHTML='<option value="">Todas</option>'+cats.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  const opciones = tiendas.map(t=>`<option value="${esc(t.nombre)}">${esc(t.nombre)}</option>`).join('');
+  document.getElementById('bm-tienda').innerHTML =
+    '<option value="">Todas las tiendas (sin clasificar)</option>' + opciones;
+}
+
+function poblarStats(){
+  const cont=document.getElementById('tienda-stats');
+  const sinCnt = productos.filter(p=>!p.tienda).length;
+  let html = `<div class="stat sin ${filtroTienda===SIN?'active':''}" onclick="setFiltroTienda('${SIN}')">
+    <div class="stat-label">⚠️ Sin clasificar</div><div class="stat-value">${sinCnt}</div></div>`;
+  html += `<div class="stat ${filtroTienda===''?'active':''}" onclick="setFiltroTienda('')">
+    <div class="stat-label">Todos los productos</div><div class="stat-value">${productos.length}</div></div>`;
+  tiendas.forEach(t=>{
+    const n = productos.filter(p=>p.tienda===t.nombre).length;
+    html += `<div class="stat ${filtroTienda===t.nombre?'active':''}" onclick="setFiltroTienda('${esc(t.nombre)}')">
+      <div class="stat-label">${esc(t.nombre)}</div><div class="stat-value">${n}</div></div>`;
+  });
+  cont.innerHTML = html;
+}
+
+function setFiltroTienda(v){ filtroTienda = v; poblarStats(); render(); }
+
+function filtrar(){
+  const q=document.getElementById('f-buscar').value.toLowerCase();
+  const cat=document.getElementById('f-cat').value;
+  return productos.filter(p=>{
+    const mq=!q||p.nombre.toLowerCase().includes(q)||(p.marca||'').toLowerCase().includes(q)||p.categoria.toLowerCase().includes(q);
+    const mc=!cat||p.categoria===cat;
+    const mt = filtroTienda===''?true : filtroTienda===SIN?!p.tienda : p.tienda===filtroTienda;
+    return mq&&mc&&mt;
+  });
+}
+
+function render(){
+  const lista=filtrar();
+  if(!lista.length){
+    document.getElementById('tabla-cont').innerHTML='<div class="empty">Sin resultados</div>';
+    actualizarBarra();
+    return;
+  }
+  let html='<div class="tabla-wrap"><table><thead><tr>'+
+    '<th><input type="checkbox" class="row-sel" id="chk-todo" onchange="toggleTodo(this)"></th>'+
+    '<th>Producto</th><th>Categoría</th><th>Marca</th><th>Tienda actual</th><th>Reasignar</th>'+
+    '</tr></thead><tbody>';
+  lista.forEach(p=>{
+    const badge = p.tienda ? `<span class="badge-tienda">${esc(p.tienda)}</span>` : `<span class="badge-sin">Sin clasificar</span>`;
+    const opciones = tiendas.map(t=>`<option value="${esc(t.nombre)}" ${p.tienda===t.nombre?'selected':''}>${esc(t.nombre)}</option>`).join('');
+    html += `<tr>
+      <td><input type="checkbox" class="row-sel" data-id="${p.id}" ${seleccionados.has(p.id)?'checked':''} onchange="toggleUno(${p.id},this)"></td>
+      <td>${esc(p.nombre)}</td>
+      <td>${esc(p.categoria)}</td>
+      <td class="td-marca">${esc(p.marca||'—')}</td>
+      <td>${badge}</td>
+      <td><select onchange="reasignarUno(${p.id},this.value)"><option value="">Sin clasificar</option>${opciones}</select></td>
+    </tr>`;
+  });
+  html+='</tbody></table></div>';
+  document.getElementById('tabla-cont').innerHTML=html;
+  actualizarBarra();
+}
+
+function toggleTodo(chk){
+  filtrar().forEach(p=> chk.checked ? seleccionados.add(p.id) : seleccionados.delete(p.id));
+  render();
+}
+function toggleUno(id,chk){
+  chk.checked ? seleccionados.add(id) : seleccionados.delete(id);
+  actualizarBarra();
+}
+function deseleccionarTodo(){ seleccionados.clear(); render(); }
+
+function actualizarBarra(){
+  const barra=document.getElementById('barra-masiva');
+  document.getElementById('bm-cnt').textContent=`${seleccionados.size} seleccionados`;
+  barra.classList.toggle('show', seleccionados.size>0);
+}
+
+async function reasignarUno(id, tienda){
+  try{
+    const r = await authFetch('/api/productos/clasificar-masivo', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({producto_ids:[id], tienda: tienda || null})
+    });
+    if(!r.ok) throw new Error();
+    const p = productos.find(x=>x.id===id);
+    if(p) p.tienda = tienda || null;
+    poblarStats();
+    toast('Producto reclasificado');
+  }catch(e){
+    toast('Error al reclasificar', true);
+  }
+}
+
+async function aplicarMasivo(){
+  if(!seleccionados.size) return;
+  const tienda = document.getElementById('bm-tienda').value;
+  const btn=document.getElementById('bm-btn');
+  btn.disabled=true;
+  try{
+    const r = await authFetch('/api/productos/clasificar-masivo', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({producto_ids:[...seleccionados], tienda: tienda || null})
+    });
+    if(!r.ok) throw new Error();
+    const data = await r.json();
+    productos.forEach(p=>{ if(seleccionados.has(p.id)) p.tienda = tienda || null; });
+    seleccionados.clear();
+    poblarStats();
+    render();
+    toast(`${data.actualizados} productos asignados a "${tienda || 'sin clasificar'}"`);
+  }catch(e){
+    toast('Error al aplicar la clasificación masiva', true);
+  }finally{
+    btn.disabled=false;
+  }
+}
+
+cargar();
+</script>
+</body>
+</html>
