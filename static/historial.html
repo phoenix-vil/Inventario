@@ -23,7 +23,7 @@
   --red:#f09595;--red-bg:#501313
 }}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
-.topbar{background:var(--bg2);border-bottom:0.5px solid var(--border);padding:0 1rem;height:54px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:10}
+.topbar{background:color-mix(in srgb, var(--bg2) 70%, transparent);backdrop-filter:blur(16px) saturate(160%);-webkit-backdrop-filter:blur(16px) saturate(160%);border-bottom:0.5px solid var(--border);padding:0 1rem;height:54px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:10}
 .topbar-title{font-size:17px;font-weight:600;flex:1;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .topbar-right{display:flex;align-items:center;gap:6px;flex-shrink:0;min-width:84px;justify-content:flex-end}
 .btn-inicio{display:inline-flex;align-items:center;gap:5px;height:36px;padding:0 12px;border:0.5px solid var(--border);border-radius:8px;background:transparent;color:var(--text);font-size:13px;text-decoration:none;flex-shrink:0;white-space:nowrap}
@@ -82,7 +82,7 @@ button.primary:hover{opacity:.85;background:var(--text)}
   .container{padding:.875rem}.stat-value{font-size:16px}
 }
 </style>
-<link rel="stylesheet" href="/static/modern.css?v=1785433285">
+<link rel="stylesheet" href="/static/modern.css?v=1786576341">
 </head>
 <body>
 
@@ -163,7 +163,7 @@ button.primary:hover{opacity:.85;background:var(--text)}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<script src="/static/auth.js"></script>
+<script src="/static/auth.js?v=1786686430"></script>
 <script>
 requireGerente();
 let ventas=[];
@@ -327,32 +327,7 @@ async function verDetalle(id){
 }
 function cerrarDetalle(){document.getElementById('detalle-modal').classList.remove('open');}
 
-let _logoCacheDataUrl = null;
-function cargarImagenBase64(url){
-  if(_logoCacheDataUrl){
-    return Promise.resolve(_logoCacheDataUrl);
-  }
-  return new Promise(function(resolve, reject){
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = function(){
-      const anchoDestino = 240;
-      const alto = Math.round(img.height * (anchoDestino / img.width));
-      const canvas = document.createElement('canvas');
-      canvas.width = anchoDestino;
-      canvas.height = alto;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, anchoDestino, alto);
-      const dataUrl = canvas.toDataURL('image/png');
-      _logoCacheDataUrl = dataUrl;
-      resolve(dataUrl);
-    };
-    img.onerror = reject;
-    img.src = url;
-  });
-}
-
-cargarImagenBase64('/static/logo.png').catch(function(){});
+precargarLogosActivos();
 
 async function generarPDFTicketVenta(v){
   const jsPDFCtor = window.jspdf.jsPDF;
@@ -410,12 +385,11 @@ async function compartirComoPDFVenta(v, nombreArchivo){
 
 function ticketDevolucionHTML(v){
   const fecha = new Date(v.fecha).toLocaleString('es-MX').replace(',', '');
-  const logoSrc = (typeof _logoCacheDataUrl !== 'undefined' && _logoCacheDataUrl) ? _logoCacheDataUrl : '/static/logo.png';
   const RAYA = '<svg width="100%" height="3" style="display:block;margin:6px 0"><line x1="0" y1="1.5" x2="100%" y2="1.5" stroke="#000" stroke-width="1" stroke-dasharray="4,3"/></svg>';
   const nombresMet = {efectivo:'EFECTIVO', tarjeta:'TARJETA', credito:'A CRÉDITO', transferencia:'TRANSFERENCIA'};
 
   let html = '<div class="tk-head">'
-    + '<img src="' + logoSrc + '" alt="Only Enterprises" style="height:44px;width:auto;margin-bottom:6px">'
+    + logosTicketHTML(88)
     + '<div class="tk-sub">COMPROBANTE DE DEVOLUCIÓN</div>'
     + (v.sucursal ? '<div class="tk-sub">Sucursal ' + esc(v.sucursal) + '</div>' : '')
     + '<div class="tk-sub">Devolución #' + v.id + '</div>'
@@ -461,10 +435,9 @@ function ticketDevolucionHTML(v){
 function ticketHTML(v){
   if(v && ((v.estado === 'devolucion') || (v.total < 0))) return ticketDevolucionHTML(v);
   const fecha=new Date(v.fecha).toLocaleString('es-MX').replace(',', '');
-  const logoSrc=_logoCacheDataUrl||'/static/logo.png';
   const RAYA='<svg width="100%" height="3" style="display:block;margin:6px 0"><line x1="0" y1="1.5" x2="100%" y2="1.5" stroke="#000" stroke-width="1" stroke-dasharray="4,3"/></svg>';
   let html=`<div class="tk-head">
-    <img src="${logoSrc}" alt="Only Enterprises" style="height:44px;width:auto;margin-bottom:6px">
+    ${logosTicketHTML(88)}
     ${v.sucursal?`<div class="tk-sub">Sucursal ${esc(v.sucursal)}</div>`:''}
     <div class="tk-sub">Ticket de venta #${v.id}</div>
     <div class="tk-sub">${fecha}</div>
@@ -528,12 +501,12 @@ function imprimirDetalle(){
   if(!ventaDetalle)return;
   const win=window.open('','_blank');
   win.document.write(`<html><head><title>Historial · Only Enterprises</title>
-    <style>@page{size:58mm auto;margin:0}body{font-family:monospace;font-size:11px;width:48mm;margin:0 auto;padding:2mm 0;line-height:1.35}img{max-width:34mm;height:auto}.tk-desc,.tk-ahorro,.tk-line span,.tk-total,.tk-sub,.tk-foot{color:#000 !important}.tk-desc,.tk-ahorro{font-weight:bold}
+    <style>@page{size:58mm auto;margin:0}body{font-family:monospace;font-size:11px;width:48mm;margin:0 auto;padding:2mm 0;line-height:1.35}img{max-width:42mm;height:auto}.tk-desc,.tk-ahorro,.tk-line span,.tk-total,.tk-sub,.tk-foot{color:#000 !important}.tk-desc,.tk-ahorro{font-weight:bold}
     .tk-line{display:flex;justify-content:space-between;margin-bottom:3px}
     .tk-total{font-weight:bold;font-size:15px;margin-top:6px;padding-top:6px}
     .tk-desc{color:#a32d2d}.tk-ahorro{color:#3b6d11;font-weight:bold}.tk-head,.tk-foot{text-align:center;margin:8px 0}
     .tk-negocio{font-size:18px;font-weight:bold}.tk-items{padding:6px 0;margin:6px 0}
-    </style></head><body>${ticketHTML(ventaDetalle).split(_logoCacheDataUrl||'@@X@@').join('/static/logo.png')}</body></html>`);
+    </style></head><body>${reemplazarLogosPorURL(ticketHTML(ventaDetalle))}</body></html>`);
   win.document.close();
   setTimeout(()=>win.print(),300);
 }
@@ -683,6 +656,7 @@ async function generarReportePDF(desdeISO, hastaISO, etiquetaPeriodo){
   }
 
   try{
+    // Reporte consolidado (todas las tiendas): logo genérico, no el de una sola tienda.
     const logoData = await cargarImagenBase64('/static/logo.png');
     const lw = 110, lh = 59;
     doc.addImage(logoData, 'PNG', (W - lw)/2, y, lw, lh);

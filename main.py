@@ -134,12 +134,33 @@ def validar_tiendas(lista: Optional[List[str]], db: Session):
 
 def aplicar_filtro_tienda(query, sesion: Optional[Sesion]):
     """Restringe un query de Producto a la(s) tienda(s) activa(s) de la sesión.
-    Sin sesión, o sesión sin tienda activa (ej. Dirección General) -> sin restricción.
+    Sin sesión, o sesión sin tienda activa (ej. Only Enterprises) -> sin restricción.
     Los productos sin tienda clasificada (None) siempre son visibles."""
     if sesion and sesion.tienda:
         tiendas_activas = texto_a_tiendas(sesion.tienda)
         query = query.filter(or_(Producto.tienda.is_(None), Producto.tienda.in_(tiendas_activas)))
     return query
+
+
+def sucursal_restriccion(sesion: Optional[Sesion]) -> Optional[str]:
+    """Nombre exacto de sucursal al que deben restringirse las transacciones
+    (ventas, gastos, cotizaciones, créditos, dashboard...) de esta sesión.
+    A diferencia del catálogo de productos (que se comparte por tienda, ej.
+    Only Reef se vende igual en Plaza que en Imprenta), cada sucursal física
+    lleva su propia caja: Imprenta no debe ver las ventas de Plaza aunque
+    ambas vendan Only Reef. None = sin restricción (ej. Only Enterprises, o
+    una sucursal todavía sin tienda asignada)."""
+    if sesion and sesion.tienda and sesion.sucursal:
+        return sesion.sucursal
+    return None
+
+
+def verificar_venta_visible(db: Session, sesion: Optional[Sesion], v: Venta):
+    """404 si la venta no es de la sucursal de esta sesión (no se expone qué
+    existe en otras sucursales)."""
+    restriccion = sucursal_restriccion(sesion)
+    if restriccion is not None and v.sucursal != restriccion:
+        raise HTTPException(status_code=404, detail="Venta no encontrada")
 
 
 @app.get("/api/sucursales")
@@ -779,6 +800,9 @@ def listar_ventas(
         query = query.filter(Venta.metodo_pago == metodo_pago)
     if sucursal:
         query = query.filter(Venta.sucursal == sucursal)
+    restriccion = sucursal_restriccion(sesion)
+    if restriccion is not None:
+        query = query.filter(Venta.sucursal == restriccion)
     ventas = query.order_by(Venta.creado_en.desc()).limit(limit).all()
     return [
         {
@@ -838,6 +862,9 @@ def resumen_ventas(
         query = query.filter(Venta.metodo_pago == metodo_pago)
     if sucursal:
         query = query.filter(Venta.sucursal == sucursal)
+    restriccion = sucursal_restriccion(sesion)
+    if restriccion is not None:
+        query = query.filter(Venta.sucursal == restriccion)
     ventas = query.all()
     total_vendido = round(sum(v.total for v in ventas), 2)
     total_efectivo = round(sum(v.total for v in ventas if (v.metodo_pago or "efectivo") == "efectivo"), 2)
@@ -891,7 +918,11 @@ def resumen_ventas(
 
 @app.get("/api/ventas-operadores")
 def operadores_con_ventas(sesion: Sesion = Depends(requerir_gerente), db: Session = Depends(get_db)):
-    rows = db.query(Venta.operador).distinct().all()
+    query = db.query(Venta.operador).distinct()
+    restriccion = sucursal_restriccion(sesion)
+    if restriccion is not None:
+        query = query.filter(Venta.sucursal == restriccion)
+    rows = query.all()
     return sorted([r[0] for r in rows if r[0]])
 
 
@@ -968,6 +999,7 @@ def obtener_venta(venta_id: int, sesion: Sesion = Depends(requerir_gerente), db:
     v = db.query(Venta).filter(Venta.id == venta_id).first()
     if not v:
         raise HTTPException(status_code=404, detail="Venta no encontrada")
+    verificar_venta_visible(db, sesion, v)
     detalle = json.loads(v.detalle_json)
     ahorro_productos = round(sum(it.get("ahorro", 0) or 0 for it in detalle), 2)
     ahorro_descuento_extra = round(v.subtotal - v.total, 2)
@@ -1022,6 +1054,7 @@ def devolver_items(
     v = db.query(Venta).filter(Venta.id == venta_id).first()
     if not v:
         raise HTTPException(status_code=404, detail="Venta no encontrada")
+    verificar_venta_visible(db, sesion, v)
     if (v.estado or "activa") == "devolucion":
         raise HTTPException(status_code=400, detail="Ese registro ya es una devolución")
     if (v.estado or "activa") == "devuelta":
@@ -1126,6 +1159,7 @@ def cancelar_venta(
     v = db.query(Venta).filter(Venta.id == venta_id).first()
     if not v:
         raise HTTPException(status_code=404, detail="Venta no encontrada")
+    verificar_venta_visible(db, sesion, v)
     if (v.estado or "activa") == "devolucion":
         raise HTTPException(status_code=400, detail="Ese registro ya es una devolución")
     if (v.estado or "activa") == "devuelta":
@@ -1270,6 +1304,9 @@ def marcar_cotizacion_vendida(cotizacion_id: int, data: dict = Body(...), sesion
     c = db.query(Cotizacion).filter(Cotizacion.id == cotizacion_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="Cotización no encontrada")
+    restriccion = sucursal_restriccion(sesion)
+    if restriccion is not None and c.sucursal != restriccion:
+        raise HTTPException(status_code=404, detail="Cotización no encontrada")
     venta_id = data.get("venta_id")
     if not venta_id:
         raise HTTPException(status_code=400, detail="Falta venta_id")
@@ -1291,6 +1328,9 @@ def listar_cotizaciones(
         q = q.filter(Cotizacion.creado_en >= d)
     if h:
         q = q.filter(Cotizacion.creado_en <= h)
+    restriccion = sucursal_restriccion(sesion)
+    if restriccion is not None:
+        q = q.filter(Cotizacion.sucursal == restriccion)
     cots = q.order_by(Cotizacion.creado_en.desc()).all()
     return [
         {
@@ -1311,6 +1351,9 @@ def listar_cotizaciones(
 def obtener_cotizacion(cotizacion_id: int, sesion: Sesion = Depends(requerir_sesion), db: Session = Depends(get_db)):
     c = db.query(Cotizacion).filter(Cotizacion.id == cotizacion_id).first()
     if not c:
+        raise HTTPException(status_code=404, detail="Cotización no encontrada")
+    restriccion = sucursal_restriccion(sesion)
+    if restriccion is not None and c.sucursal != restriccion:
         raise HTTPException(status_code=404, detail="Cotización no encontrada")
     return {
         "id": c.id,
@@ -1463,12 +1506,14 @@ def _costo_por_producto_dash(db, ids):
     return {pid: (costo or 0) for pid, costo in rows}
 
 
-def _calcular_periodo_dash(db, desde_dt, hasta_dt):
+def _calcular_periodo_dash(db, desde_dt, hasta_dt, restriccion=None):
     q = db.query(Venta)
     if desde_dt:
         q = q.filter(Venta.creado_en >= desde_dt)
     if hasta_dt:
         q = q.filter(Venta.creado_en < hasta_dt)
+    if restriccion is not None:
+        q = q.filter(Venta.sucursal == restriccion)
     ventas = q.all()
 
     ids = set()
@@ -1509,7 +1554,8 @@ def dashboard_resumen(
     db: Session = Depends(get_db),
 ):
     d = _rango_utc_dash(desde)
-    actual = _calcular_periodo_dash(db, d, None)
+    restriccion = sucursal_restriccion(sesion)
+    actual = _calcular_periodo_dash(db, d, None, restriccion)
 
     comparativo = None
     if d and periodo in ("hoy", "semana", "mes"):
@@ -1526,7 +1572,7 @@ def dashboard_resumen(
                 anterior_desde = d.replace(month=d.month - 1, day=1)
             anterior_hasta = d
 
-        previo = _calcular_periodo_dash(db, anterior_desde, anterior_hasta)
+        previo = _calcular_periodo_dash(db, anterior_desde, anterior_hasta, restriccion)
 
         def variacion(actual_v, prev_v):
             if prev_v <= 0:
@@ -1544,6 +1590,8 @@ def dashboard_resumen(
     gastos_q = db.query(Gasto)
     if d:
         gastos_q = gastos_q.filter(Gasto.fecha >= d)
+    if restriccion is not None:
+        gastos_q = gastos_q.filter(Gasto.sucursal == restriccion)
     gastos_total = round(sum(g.monto for g in gastos_q.all()), 2)
     actual["gastos"] = gastos_total
     actual["ganancia_neta"] = round(actual["ganancia"] - gastos_total, 2)
@@ -1552,6 +1600,8 @@ def dashboard_resumen(
     dev_q = db.query(Venta).filter(Venta.total < 0)
     if d:
         dev_q = dev_q.filter(Venta.creado_en >= d)
+    if restriccion is not None:
+        dev_q = dev_q.filter(Venta.sucursal == restriccion)
     _devs = dev_q.all()
     actual["devoluciones_total"] = round(sum(abs(x.total) for x in _devs), 2)
     actual["devoluciones_num"] = len(_devs)
@@ -1568,7 +1618,11 @@ def dashboard_serie_diaria(
 ):
     ahora = datetime.utcnow()
     desde = (ahora - timedelta(days=dias - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
-    ventas = db.query(Venta).filter(Venta.creado_en >= desde).all()
+    ventas_q = db.query(Venta).filter(Venta.creado_en >= desde)
+    restriccion = sucursal_restriccion(sesion)
+    if restriccion is not None:
+        ventas_q = ventas_q.filter(Venta.sucursal == restriccion)
+    ventas = ventas_q.all()
 
     ids = set()
     for v in ventas:
@@ -1616,6 +1670,9 @@ def dashboard_top_productos(
     q = db.query(Venta)
     if d:
         q = q.filter(Venta.creado_en >= d)
+    restriccion = sucursal_restriccion(sesion)
+    if restriccion is not None:
+        q = q.filter(Venta.sucursal == restriccion)
     ventas = q.all()
 
     acumulado = {}
@@ -1805,6 +1862,9 @@ def listar_gastos(
         q = q.filter(Gasto.categoria == categoria)
     if sucursal:
         q = q.filter(Gasto.sucursal == sucursal)
+    restriccion = sucursal_restriccion(sesion)
+    if restriccion is not None:
+        q = q.filter(Gasto.sucursal == restriccion)
     rows = q.order_by(Gasto.fecha.desc()).all()
     return [{
         "id": g.id,
@@ -1838,6 +1898,9 @@ def resumen_gastos(
         q = q.filter(Gasto.fecha >= d)
     if h:
         q = q.filter(Gasto.fecha <= h)
+    restriccion = sucursal_restriccion(sesion)
+    if restriccion is not None:
+        q = q.filter(Gasto.sucursal == restriccion)
     gastos = q.all()
     total = round(sum(g.monto for g in gastos), 2)
 
@@ -1918,6 +1981,52 @@ def _asignar_pagos_fifo(ventas, total_pagos):
             restante = 0.0
         resultado[v.id] = {"pagado": round(pagado, 2), "saldo": round(v.total - pagado, 2)}
     return resultado
+
+
+# Declarado ANTES que /api/clientes/{cliente_id}: FastAPI resuelve las rutas en
+# orden y "abonos-periodo" encajaría como cliente_id, dando un 422 de entero.
+@app.get("/api/clientes/abonos-periodo")
+def abonos_periodo(
+    desde: Optional[str] = Query(None),
+    hasta: Optional[str] = Query(None),
+    sucursal: Optional[str] = Query(None),
+    sesion: Sesion = Depends(requerir_gerente),
+    db: Session = Depends(get_db),
+):
+    d, h = _rango_utc_gastos(desde, hasta)
+    q = db.query(PagoCredito)
+    if d:
+        q = q.filter(PagoCredito.creado_en >= d)
+    if h:
+        q = q.filter(PagoCredito.creado_en <= h)
+    if sucursal:
+        q = q.filter(PagoCredito.sucursal == sucursal)
+    restriccion = sucursal_restriccion(sesion)
+    if restriccion is not None:
+        q = q.filter(PagoCredito.sucursal == restriccion)
+    pagos = q.order_by(PagoCredito.creado_en.desc()).all()
+    total = round(sum(p.monto for p in pagos), 2)
+
+    cliente_ids = list(set(p.cliente_id for p in pagos))
+    clientes_map = {}
+    if cliente_ids:
+        rows = db.query(Cliente.id, Cliente.nombre).filter(Cliente.id.in_(cliente_ids)).all()
+        clientes_map = {r[0]: r[1] for r in rows}
+
+    return {
+        "total": total,
+        "num_abonos": len(pagos),
+        "abonos": [{
+            "id": p.id,
+            "cliente_nombre": clientes_map.get(p.cliente_id, "Cliente"),
+            "monto": p.monto,
+            "metodo_pago": p.metodo_pago,
+            "operador": p.operador,
+            "sucursal": p.sucursal,
+            "fecha": p.creado_en.isoformat() + "Z",
+            "nota": p.nota,
+        } for p in pagos],
+    }
 
 
 @app.get("/api/clientes/{cliente_id}")
@@ -2010,12 +2119,15 @@ def reporte_completo(
     db: Session = Depends(get_db),
 ):
     d, h = _rango_utc_gastos(desde, hasta)
+    restriccion = sucursal_restriccion(sesion)
 
     ventas_q = db.query(Venta)
     if d:
         ventas_q = ventas_q.filter(Venta.creado_en >= d)
     if h:
         ventas_q = ventas_q.filter(Venta.creado_en <= h)
+    if restriccion is not None:
+        ventas_q = ventas_q.filter(Venta.sucursal == restriccion)
     ventas = ventas_q.all()
 
     total_vendido = round(sum(v.total for v in ventas), 2)
@@ -2037,6 +2149,8 @@ def reporte_completo(
         gastos_q = gastos_q.filter(Gasto.fecha >= d)
     if h:
         gastos_q = gastos_q.filter(Gasto.fecha <= h)
+    if restriccion is not None:
+        gastos_q = gastos_q.filter(Gasto.sucursal == restriccion)
     gastos_lista = gastos_q.all()
     gastos_total = round(sum(g.monto for g in gastos_lista), 2)
 
@@ -2105,44 +2219,3 @@ def clientes_page():
 @app.get("/sucursales", response_class=FileResponse)
 def sucursales_page():
     return FileResponse("static/sucursales.html")
-
-@app.get("/api/clientes/abonos-periodo")
-def abonos_periodo(
-    desde: Optional[str] = Query(None),
-    hasta: Optional[str] = Query(None),
-    sucursal: Optional[str] = Query(None),
-    sesion: Sesion = Depends(requerir_gerente),
-    db: Session = Depends(get_db),
-):
-    d, h = _rango_utc_gastos(desde, hasta)
-    q = db.query(PagoCredito)
-    if d:
-        q = q.filter(PagoCredito.creado_en >= d)
-    if h:
-        q = q.filter(PagoCredito.creado_en <= h)
-    if sucursal:
-        q = q.filter(PagoCredito.sucursal == sucursal)
-    pagos = q.order_by(PagoCredito.creado_en.desc()).all()
-    total = round(sum(p.monto for p in pagos), 2)
-
-    cliente_ids = list(set(p.cliente_id for p in pagos))
-    clientes_map = {}
-    if cliente_ids:
-        rows = db.query(Cliente.id, Cliente.nombre).filter(Cliente.id.in_(cliente_ids)).all()
-        clientes_map = {r[0]: r[1] for r in rows}
-
-    return {
-        "total": total,
-        "num_abonos": len(pagos),
-        "abonos": [{
-            "id": p.id,
-            "cliente_nombre": clientes_map.get(p.cliente_id, "Cliente"),
-            "monto": p.monto,
-            "metodo_pago": p.metodo_pago,
-            "operador": p.operador,
-            "sucursal": p.sucursal,
-            "fecha": p.creado_en.isoformat() + "Z",
-            "nota": p.nota,
-        } for p in pagos],
-    }
-

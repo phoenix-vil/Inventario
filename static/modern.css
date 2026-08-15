@@ -9,10 +9,12 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* Topbar con leve transparencia y blur */
+/* Topbar efecto vidrio: bastante transparencia + blur/saturación, para que
+   se note el fondo (y la marca de agua de la tienda) detrás. */
 .topbar {
-  backdrop-filter: blur(10px);
-  background: color-mix(in srgb, var(--bg2) 88%, transparent);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  background: color-mix(in srgb, var(--bg2) 70%, transparent);
   box-shadow: 0 1px 0 rgba(0,0,0,.04);
 }
 
@@ -112,10 +114,12 @@ tbody tr { transition: background-color .1s ease; }
   .nav-icon{filter:invert(1)}
 }
 
-/* Logo principal: negro en modo claro, blanco en modo oscuro (auto-invertido) */
+/* Logo principal: negro en modo claro, blanco en modo oscuro (auto-invertido).
+   Solo aplica al logo genérico de Only Enterprises (monocromático) — los
+   logos a color de cada tienda (clase logo-generico ausente) no se invierten. */
 .brand-logo{display:block;margin-left:auto;margin-right:auto}
 @media(prefers-color-scheme:dark){
-  .brand-logo{filter:invert(1)}
+  .brand-logo.logo-generico{filter:invert(1)}
 }
 
 /* Quitar las flechas de subir/bajar de los campos numericos en toda la app */

@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="/static/touch-icon-v3-180.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Devoluciones · Only Enterprises</title>
-<link rel="stylesheet" href="/static/modern.css">
+<link rel="stylesheet" href="/static/modern.css?v=1786576341">
 <style>
 .msg{padding:10px;border-radius:8px;font-size:13px;margin-top:8px;display:none}
 .msg.show{display:block}
@@ -30,7 +30,7 @@
   --red:#f09595;--red-bg:#501313
 }}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
-.topbar{background:var(--bg2);border-bottom:0.5px solid var(--border);padding:0 1rem;height:54px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:10}
+.topbar{background:color-mix(in srgb, var(--bg2) 70%, transparent);backdrop-filter:blur(16px) saturate(160%);-webkit-backdrop-filter:blur(16px) saturate(160%);border-bottom:0.5px solid var(--border);padding:0 1rem;height:54px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:10}
 .topbar-title{font-size:17px;font-weight:600;flex:1;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .topbar-right{display:flex;align-items:center;gap:6px;flex-shrink:0;min-width:84px;justify-content:flex-end}
 .btn-inicio{display:inline-flex;align-items:center;gap:5px;height:36px;padding:0 12px;border:0.5px solid var(--border);border-radius:8px;background:transparent;color:var(--text);font-size:13px;text-decoration:none;flex-shrink:0;white-space:nowrap}
@@ -172,7 +172,7 @@ button.primary:hover{opacity:.85;background:var(--text)}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<script src="/static/auth.js"></script>
+<script src="/static/auth.js?v=1786686430"></script>
 <script>
 requireGerente();
 
@@ -404,38 +404,19 @@ function extraerMensaje(detail, fallback){
 }
 
 // ─── Ticket de devolucion / cancelacion ─────────────────────────────────
-let _logoCacheDataUrl = null;
 let tkActual = null;
 
-function cargarImagenBase64(url){
-  if(_logoCacheDataUrl) return Promise.resolve(_logoCacheDataUrl);
-  return new Promise(function(resolve, reject){
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = function(){
-      const c = document.createElement('canvas');
-      const esc = 240 / img.width;
-      c.width = 240; c.height = Math.round(img.height * esc);
-      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      _logoCacheDataUrl = c.toDataURL('image/png');
-      resolve(_logoCacheDataUrl);
-    };
-    img.onerror = reject;
-    img.src = url;
-  });
-}
-cargarImagenBase64('/static/logo.png').catch(function(){});
+precargarLogosActivos();
 
 function fmtPct(p){const n=Math.round((Number(p)||0)*100)/100;return (n%1===0)?String(n):n.toFixed(2).replace(/0$/,'');}
 
 function tkGenerarHTML(v){
   const fecha = new Date(v.fecha).toLocaleString('es-MX').replace(',', '');
-  const logoSrc = _logoCacheDataUrl || '/static/logo.png';
   const RAYA = '<svg width="100%" height="3" style="display:block;margin:6px 0"><line x1="0" y1="1.5" x2="100%" y2="1.5" stroke="#000" stroke-width="1" stroke-dasharray="4,3"/></svg>';
   const nombresMet = {efectivo:'EFECTIVO', tarjeta:'TARJETA', credito:'A CRÉDITO', transferencia:'TRANSFERENCIA'};
 
   let html = '<div class="tk-head">'
-    + '<img src="' + logoSrc + '" alt="Only Enterprises" style="height:44px;width:auto;margin-bottom:6px">'
+    + logosTicketHTML(88)
     + '<div class="tk-sub">COMPROBANTE DE DEVOLUCIÓN</div>'
     + (v.sucursal ? '<div class="tk-sub">Sucursal ' + esc(v.sucursal) + '</div>' : '')
     + '<div class="tk-sub">Devolución #' + v.id + '</div>'
@@ -550,12 +531,12 @@ async function tkCompartirWhatsApp(){
 function tkImprimir(){
   if(!tkActual) return;
   const win = window.open('', '_blank');
-  const estilos = '<style>@page{size:58mm auto;margin:0}body{font-family:monospace;font-size:11px;width:48mm;margin:0 auto;padding:2mm 0;line-height:1.35;color:#000}img{max-width:34mm;height:auto}.tk-desc,.tk-ahorro,.tk-line span,.tk-total,.tk-sub,.tk-foot{color:#000 !important}.tk-desc,.tk-ahorro{font-weight:bold}'
+  const estilos = '<style>@page{size:58mm auto;margin:0}body{font-family:monospace;font-size:11px;width:48mm;margin:0 auto;padding:2mm 0;line-height:1.35;color:#000}img{max-width:42mm;height:auto}.tk-desc,.tk-ahorro,.tk-line span,.tk-total,.tk-sub,.tk-foot{color:#000 !important}.tk-desc,.tk-ahorro{font-weight:bold}'
     + '.tk-head,.tk-foot{text-align:center;margin:8px 0}.tk-sub{font-size:12px;color:#000;text-align:center}'
     + '.tk-line{display:flex;justify-content:space-between;margin-bottom:3px}'
     + '.tk-desc{color:#a32d2d}'
     + '.tk-total{font-weight:700;font-size:16px;margin-top:8px;padding-top:8px}</style>';
-  win.document.write('<html><head><title>Comprobante de devolución</title>' + estilos + '</head><body>' + tkGenerarHTML(tkActual).split(_logoCacheDataUrl||'@@X@@').join('/static/logo.png') + '</body></html>');
+  win.document.write('<html><head><title>Comprobante de devolución</title>' + estilos + '</head><body>' + reemplazarLogosPorURL(tkGenerarHTML(tkActual)) + '</body></html>');
   win.document.close();
   setTimeout(function(){ win.print(); }, 300);
 }

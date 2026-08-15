@@ -7,6 +7,7 @@ function getSesion() {
 function requireAuth() {
   const s = getSesion();
   if (!s || !s.token) { location.href = '/login'; return null; }
+  aplicarTemaTienda();
   return s;
 }
 
@@ -19,6 +20,277 @@ function requireGerente() {
 function esGerente() {
   const s = getSesion();
   return s && s.rol === 'gerente';
+}
+
+// ─── Logo según la tienda activa de la sesión ───────────────────────────────
+// Cada submarca tiene su logo. Si la sesión no tiene una tienda única activa
+// (sin restricción, ej. Only Enterprises, o una sucursal con varias tiendas
+// como Imprenta), se usa el logo genérico de Only Enterprises.
+const LOGOS_TIENDA = {
+  'Only Reef': '/static/logo-only-reef.png',
+  'Only Garden': '/static/logo-only-garden.png',
+  'Only Pets': '/static/logo-only-pets.png',
+  'Only Reptile': '/static/logo-only-reptile.png',
+  'El Zar del LED': '/static/logo-zar-del-led.png',
+};
+// Logos de la(s) tienda(s) que recibe: varios cuando la sucursal tiene más de
+// una activa (ej. Imprenta = Only Reef + Only Garden), y el genérico de Only
+// Enterprises si no hay ninguna conocida.
+function logosActivos(tiendas) {
+  const conocidas = (tiendas || []).filter(t => LOGOS_TIENDA[t]);
+  return conocidas.length ? conocidas.map(t => LOGOS_TIENDA[t]) : ['/static/logo.png'];
+}
+
+// Pinta uno o más logos dentro de un contenedor. El genérico de Only
+// Enterprises se marca con logo-generico (se invierte en modo oscuro, ver
+// modern.css); los de tienda son a color y no se invierten. Con más de un
+// logo activo (Imprenta), se reduce un poco el tamaño para que quepan.
+function renderLogos(contenedorId, tiendas, altoBase) {
+  const cont = document.getElementById(contenedorId);
+  if (!cont) return;
+  const logos = logosActivos(tiendas);
+  const alto = logos.length > 1 ? Math.round(altoBase * 0.72) : altoBase;
+  cont.innerHTML = logos.map(src => {
+    const generico = src === '/static/logo.png';
+    return `<img class="brand-logo${generico ? ' logo-generico' : ''}" src="${src}" alt="Only Enterprises" style="height:${alto}px;width:auto;margin:0">`;
+  }).join('');
+}
+
+// Devuelve {w, h} de una imagen (dataURL o URL). Los logos de tienda son
+// verticales (icono + texto), a diferencia del logo ancho de Only
+// Enterprises, así que el PDF debe calcular el ancho según la proporción
+// real en vez de usar una caja fija, o se ve estirado.
+function medirImagen(src) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+    img.onerror = () => resolve({ w: 1, h: 1 });
+    img.src = src;
+  });
+}
+
+// ─── Diseño de la app por tienda ─────────────────────────────────────────────
+// Retiñe el acento principal que ya usan casi todas las pantallas (--blue /
+// --blue-bg: botones, selección, foco, insignias) al color de cada tienda, y
+// agrega de fondo, muy tenue, las formas reales del ícono del logo como marca
+// de agua — no un color inventado, la forma del logo. Mismos tonos (t1/t2)
+// que el fondo animado del login, para que se sienta la misma identidad.
+// Se activa solo con sesión.tienda === [una sola tienda]; con varias (ej.
+// Imprenta) o ninguna (Only Enterprises) no cambia nada.
+const TEMA_APP_TIENDA = {
+  'Only Reef': {
+    icono: '/static/logo-only-reef-icono.png',
+    t1: '#0d3d66', t2: '#4fc3d9',
+    claro: { acento: '#186a94', acentoBg: '#e6f1fb' },
+    oscuro: { acento: '#5cc6dd', acentoBg: '#042c53' },
+  },
+  'Only Garden': {
+    icono: '/static/logo-only-garden-icono.png',
+    t1: '#0d3d17', t2: '#4caf50',
+    claro: { acento: '#388e3c', acentoBg: '#eaf3de' },
+    oscuro: { acento: '#8fd06a', acentoBg: '#173404' },
+  },
+  'Only Pets': {
+    icono: '/static/logo-only-pets-icono.png',
+    t1: '#122a52', t2: '#29b6d8',
+    claro: { acento: '#0f7a94', acentoBg: '#e6f1fb' },
+    oscuro: { acento: '#4fc3e0', acentoBg: '#042c53' },
+  },
+  'Only Reptile': {
+    icono: '/static/logo-only-reptile-icono.png',
+    t1: '#0f3d16', t2: '#7bc47f',
+    claro: { acento: '#2e7d32', acentoBg: '#eaf3de' },
+    oscuro: { acento: '#97c459', acentoBg: '#173404' },
+  },
+  'El Zar del LED': {
+    // El texto va tejido en el propio escudo (no hay wordmark aparte que
+    // recortar), así que la marca de agua usa el logo completo.
+    icono: '/static/logo-zar-del-led.png',
+    t1: '#3a0d0d', t2: '#c9a227',
+    // Dorado en vez de rojo para el acento: el rojo ya significa "eliminar/
+    // error" en el resto de la app (--red), usarlo de acento confundiría.
+    claro: { acento: '#a5820f', acentoBg: '#faf3d9' },
+    oscuro: { acento: '#e0b636', acentoBg: '#3a2e05' },
+  },
+};
+// Only Enterprises (o cualquier sucursal sin tienda asignada): mismo fondo y
+// vidrio que las demás, pero solo con la "O" del logo genérico, sin
+// recolorear acentos (botones se quedan con el azul de siempre — "obscuro
+// que ya tiene").
+const TEMA_GENERICO = { icono: '/static/logo-o.png', t1: '#1a1a18', t2: '#3a3a36' };
+
+function aplicarTemaTienda() {
+  const s = getSesion();
+  const tiendas = (s && s.tienda) || [];
+  const oscuro = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+  if (tiendas.length === 0) {
+    _inyectarMarcaDeAguaTienda(TEMA_GENERICO.icono);
+    _inyectarFondoTienda(TEMA_GENERICO.t1, TEMA_GENERICO.t2);
+    _inyectarIconosTienda(); // sin color de fondo, borde neutro
+    return;
+  }
+
+  if (tiendas.length === 1 && TEMA_APP_TIENDA[tiendas[0]]) {
+    const tema = TEMA_APP_TIENDA[tiendas[0]];
+    const paleta = oscuro ? tema.oscuro : tema.claro;
+    document.documentElement.style.setProperty('--blue', paleta.acento);
+    document.documentElement.style.setProperty('--blue-bg', paleta.acentoBg);
+    _inyectarMarcaDeAguaTienda(tema.icono);
+    _inyectarFondoTienda(tema.t1, tema.t2);
+    _inyectarBotonesTienda();
+    return;
+  }
+
+  // Sucursales con más de una tienda a la vez (ej. Imprenta = Only Reef +
+  // Only Garden): se mezclan los dos acentos, y cada tienda pone su logo en
+  // una esquina distinta en vez de competir por la misma.
+  const temas = tiendas.map(t => TEMA_APP_TIENDA[t]).filter(Boolean);
+  if (temas.length < 2) return;
+  const [a, b] = temas;
+  const pa = oscuro ? a.oscuro : a.claro;
+  const pb = oscuro ? b.oscuro : b.claro;
+  document.documentElement.style.setProperty('--blue', `color-mix(in srgb, ${pa.acento} 50%, ${pb.acento} 50%)`);
+  document.documentElement.style.setProperty('--blue-bg', `color-mix(in srgb, ${pa.acentoBg} 50%, ${pb.acentoBg} 50%)`);
+  _inyectarMarcaDeAguaTienda(a.icono, 'right:-30px;bottom:-20px;width:340px;transform:rotate(-6deg)', 'marca-agua-tienda');
+  _inyectarMarcaDeAguaTienda(b.icono, 'left:-30px;top:64px;width:260px;transform:rotate(8deg)', 'marca-agua-tienda-2');
+  _inyectarFondoTienda(a.t1, b.t1);
+  _inyectarBotonesTienda();
+}
+
+function _inyectarMarcaDeAguaTienda(src, posicion, id) {
+  id = id || 'marca-agua-tienda';
+  if (document.getElementById(id) || !document.body) return;
+  const img = document.createElement('img');
+  img.id = id;
+  img.src = src;
+  img.alt = '';
+  img.style.cssText = 'position:fixed;' + (posicion || 'right:-30px;bottom:-20px;width:420px;transform:rotate(-6deg)')
+    + ';max-width:65vw;height:auto;opacity:.16;pointer-events:none;z-index:0;filter:saturate(1.3)';
+  document.body.prepend(img);
+}
+
+// Fondo con el mismo tono y movimiento que el del login (degradado que se
+// desplaza despacio), pero diluido para no competir con tablas/tarjetas.
+function _inyectarFondoTienda(t1, t2) {
+  if (document.getElementById('fondo-tienda') || !document.body) return;
+  const style = document.createElement('style');
+  style.textContent = `
+    #fondo-tienda{position:fixed;inset:0;z-index:0;pointer-events:none;
+      background:
+        radial-gradient(circle at 12% 8%, color-mix(in srgb, ${t1} 28%, transparent), transparent 52%),
+        radial-gradient(circle at 88% 92%, color-mix(in srgb, ${t2} 24%, transparent), transparent 55%);
+      background-size:160% 160%;
+      animation:fondo-tienda-mover 42s ease-in-out infinite}
+    @keyframes fondo-tienda-mover{0%,100%{background-position:0% 0%}50%{background-position:100% 100%}}
+    @media(prefers-reduced-motion:reduce){#fondo-tienda{animation:none}}
+  `;
+  document.head.appendChild(style);
+  const div = document.createElement('div');
+  div.id = 'fondo-tienda';
+  document.body.prepend(div);
+}
+
+// Botones principales e íconos del menú con el acento de la tienda en vez
+// del negro/blanco/ámbar genérico. La mayoría de las pantallas (precios,
+// POS, etc.) ya usan var(--blue)/var(--green) en su botón principal, así que
+// heredan el cambio solos; aquí solo se cubren los que usan un color fijo.
+function _inyectarBotonesTienda() {
+  if (document.getElementById('botones-tienda')) return;
+  const style = document.createElement('style');
+  style.id = 'botones-tienda';
+  style.textContent = `.btn, button.primary, .btn-primary, .btn-agregar{
+    background:var(--blue) !important;color:#fff !important;border-color:var(--blue) !important}`;
+  document.head.appendChild(style);
+  _inyectarIconosTienda('var(--blue)');
+}
+
+// Empareja los íconos del menú principal (precios/pagos/clientes/gastos/
+// inventario, hoy en 3 colores distintos) a un solo tono: sin relleno, solo
+// un borde — de la tienda si la hay, o neutro para Only Enterprises.
+function _inyectarIconosTienda(colorBorde) {
+  if (document.getElementById('iconos-tienda')) return;
+  const style = document.createElement('style');
+  style.id = 'iconos-tienda';
+  style.textContent = `.icon-precios, .icon-pagos, .icon-inv{
+    background:transparent !important;border:1px solid ${colorBorde || 'var(--border)'}}`;
+  document.head.appendChild(style);
+}
+
+// ─── Caché de logos en base64 (compartida por tickets/recibos/cotizaciones) ─
+// Antes cada pantalla duplicaba esto con una sola casilla de caché (_logoCacheDataUrl),
+// lo que pisaba el logo cacheado si una misma página usaba más de uno (ej.
+// historial.html: el logo de la tienda en el ticket Y el genérico en el
+// reporte consolidado). Aquí el caché es por URL (+ resolución, ej. las
+// cotizaciones en PDF carta usan más resolución que un ticket de 58mm).
+const _logoCache = {};
+function cargarImagenBase64(url, anchoDestino = 240) {
+  const clave = url + '@' + anchoDestino;
+  if (_logoCache[clave]) return Promise.resolve(_logoCache[clave]);
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const alto = Math.round(img.height * (anchoDestino / img.width));
+      const canvas = document.createElement('canvas');
+      canvas.width = anchoDestino;
+      canvas.height = alto;
+      canvas.getContext('2d').drawImage(img, 0, 0, anchoDestino, alto);
+      const dataUrl = canvas.toDataURL('image/png');
+      _logoCache[clave] = dataUrl;
+      resolve(dataUrl);
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+// Precarga (sin bloquear) el o los logos de la tienda activa de la sesión.
+function precargarLogosActivos() {
+  const s = getSesion();
+  logosActivos(s && s.tienda).forEach(src => cargarImagenBase64(src).catch(() => {}));
+}
+
+// HTML de <img> para insertar en un ticket/recibo/cotización: uno o varios
+// logos según cuántas tiendas tenga activa la sesión (Imprenta = 2). Usa el
+// data-URL cacheado si ya está listo (necesario para que html2canvas/jsPDF
+// lo capturen sin depender de una carga de red durante la captura); si no,
+// cae al archivo directo (el navegador lo resuelve igual en pantalla).
+function logosTicketHTML(alturaPx) {
+  const s = getSesion();
+  const logos = logosActivos(s && s.tienda);
+  const alto = logos.length > 1 ? Math.round(alturaPx * 0.72) : alturaPx;
+  return logos.map(src => {
+    const cached = _logoCache[src + '@240'];
+    return `<img class="tk-logo" src="${cached || src}" alt="Only Enterprises" style="height:${alto}px;width:auto;margin:0 4px 6px">`;
+  }).join('');
+}
+
+// Versión "silueta" de cada logo (negro sólido donde hay forma, sin
+// degradado) para impresoras térmicas: son de 1 bit, así que cualquier gris
+// intermedio lo resuelven a puntos (dithering) y las partes más delgadas del
+// logo (ej. la punta de la luna) se pierden. Con negro sólido no hay nada
+// que difuminar.
+const LOGOS_SILUETA = {
+  '/static/logo.png': '/static/logo-silueta.png',
+  '/static/logo-only-reef.png': '/static/logo-only-reef-silueta.png',
+  '/static/logo-only-garden.png': '/static/logo-only-garden-silueta.png',
+  '/static/logo-only-pets.png': '/static/logo-only-pets-silueta.png',
+  '/static/logo-only-reptile.png': '/static/logo-only-reptile-silueta.png',
+  '/static/logo-zar-del-led.png': '/static/logo-zar-del-led-silueta.png',
+};
+
+// Para la ventana de impresión: reemplaza cualquier data-URL cacheado que
+// haya quedado embebido en el HTML de vuelta por la versión silueta (no la
+// de color original — evita además mandar un document.write() con base64
+// gigante a la ventana nueva).
+function reemplazarLogosPorURL(html) {
+  let out = html;
+  Object.keys(_logoCache).forEach(clave => {
+    const url = clave.slice(0, clave.lastIndexOf('@'));
+    out = out.split(_logoCache[clave]).join(LOGOS_SILUETA[url] || url);
+  });
+  return out;
 }
 
 async function logout() {
