@@ -1930,6 +1930,42 @@ def gastos_page():
 
 
 # ─── Clientes y ventas a credito ────────────────────────────────────────────
+def normalizar_telefono(valor: Optional[str]) -> Optional[str]:
+    """Deja el teléfono en 10 dígitos pelados, o lanza 400 si no es válido.
+
+    Se aceptan las formas en que la gente lo escribe de verdad —"55 2767 1391",
+    "(55) 2767-1391", "+52 55 2767 1391"— y se guarda siempre igual, para que
+    dos veces el mismo número no queden como dos textos distintos. El campo es
+    opcional: vacío se guarda como None.
+
+    Un número mexicano son 10 dígitos (LADA + número) y ninguna LADA empieza
+    con 0 ni con 1, así que eso también se rechaza.
+    """
+    if valor is None:
+        return None
+    digitos = "".join(c for c in valor if c.isdigit())
+    if not digitos:
+        # Vacío = el cliente no dio teléfono. Pero si escribió algo que no
+        # tiene ni un dígito, es un error suyo: mejor decírselo que guardar
+        # el campo en blanco a sus espaldas.
+        if valor.strip():
+            raise HTTPException(status_code=400, detail="El teléfono debe tener 10 dígitos (escribiste 0)")
+        return None
+    # Lada de país opcional: +52 (12 dígitos) o el viejo +521 de celular (13).
+    if len(digitos) == 13 and digitos.startswith("521"):
+        digitos = digitos[3:]
+    elif len(digitos) == 12 and digitos.startswith("52"):
+        digitos = digitos[2:]
+    if len(digitos) != 10:
+        raise HTTPException(
+            status_code=400,
+            detail=f"El teléfono debe tener 10 dígitos (escribiste {len(digitos)})",
+        )
+    if digitos[0] in "01":
+        raise HTTPException(status_code=400, detail="El teléfono no puede empezar con 0 ni con 1")
+    return digitos
+
+
 def _saldo_cliente(db, cliente_id):
     ventas = db.query(Venta).filter(Venta.cliente_id == cliente_id, Venta.metodo_pago == "credito").all()
     suma_ventas = sum(v.total for v in ventas)
@@ -1942,7 +1978,7 @@ def _saldo_cliente(db, cliente_id):
 def crear_cliente(data: CrearCliente, sesion: Sesion = Depends(requerir_sesion), db: Session = Depends(get_db)):
     c = Cliente(
         nombre=data.nombre.strip(),
-        telefono=data.telefono,
+        telefono=normalizar_telefono(data.telefono),
         nota=data.nota,
         limite_credito=data.limite_credito,
     )
@@ -2063,7 +2099,7 @@ def editar_cliente(cliente_id: int, data: CrearCliente, sesion: Sesion = Depends
     if not c:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
     c.nombre = data.nombre.strip()
-    c.telefono = data.telefono
+    c.telefono = normalizar_telefono(data.telefono)
     c.nota = data.nota
     c.limite_credito = data.limite_credito
     db.commit()

@@ -127,7 +127,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <div class="modal">
     <h2 id="cliente-modal-titulo">+ Nuevo cliente</h2>
     <div class="field"><label>Nombre *</label><input type="text" id="cl-nombre" placeholder="Nombre completo"></div>
-    <div class="field"><label>Teléfono</label><input type="text" id="cl-telefono" placeholder="10 dígitos"></div>
+    <div class="field"><label>Teléfono</label><input type="tel" inputmode="numeric" autocomplete="tel" id="cl-telefono" placeholder="10 dígitos, ej. 5527671391" oninput="limitarTel(this)"></div>
     <div class="field"><label>Límite de crédito (opcional)</label><input type="number" id="cl-limite" min="0" step="0.01" placeholder="Sin límite"></div>
     <div class="field"><label>Nota</label><textarea id="cl-nota" placeholder="Notas adicionales..."></textarea></div>
     <div class="msg" id="cliente-msg"></div>
@@ -211,6 +211,35 @@ function filtrarClientes(){
   renderClientes(filtrados);
 }
 
+// ─── Teléfono ───────────────────────────────────────────────────────────────
+// Se escribe y se guarda en 10 dígitos pelados (el backend valida lo mismo y
+// es quien manda); los espacios se ponen solo al mostrarlo. Mientras se teclea
+// no se formatea, porque reacomodar el texto mueve el cursor y en el iPhone se
+// vuelve incómodo escribir.
+function soloDigitosTel(v){ return (v||'').replace(/\D/g,'').slice(0,10); }
+
+function limitarTel(input){ input.value = soloDigitosTel(input.value); }
+
+// 55, 56 (CDMX), 33 (Guadalajara) y 81 (Monterrey) son ladas de 2 dígitos; el
+// resto del país las tiene de 3. Si el número guardado no trae 10 dígitos (los
+// registrados antes de esta validación), se muestra tal cual está.
+function formatearTel(v){
+  const d = soloDigitosTel(v);
+  if(d.length !== 10) return v || '';
+  return ['55','56','33','81'].includes(d.slice(0,2))
+    ? d.slice(0,2)+' '+d.slice(2,6)+' '+d.slice(6)
+    : d.slice(0,3)+' '+d.slice(3,6)+' '+d.slice(6);
+}
+
+// Mismas reglas que normalizar_telefono() en main.py. Devuelve el mensaje de
+// error, o null si está bien (vacío también está bien: el campo es opcional).
+function errorTelefono(digitos){
+  if(!digitos) return null;
+  if(digitos.length !== 10) return 'El teléfono debe tener 10 dígitos (escribiste '+digitos.length+')';
+  if(digitos[0]==='0' || digitos[0]==='1') return 'El teléfono no puede empezar con 0 ni con 1';
+  return null;
+}
+
 function renderClientes(lista){
   const cont = document.getElementById('lista-clientes');
   if(!lista.length){
@@ -224,7 +253,7 @@ function renderClientes(lista){
     return `<div class="cliente-row" onclick="abrirDetalle(${c.id})">
       <div>
         <div class="cliente-nombre">${esc(c.nombre)}</div>
-        ${c.telefono?`<div class="cliente-tel">${esc(c.telefono)}</div>`:''}
+        ${c.telefono?`<div class="cliente-tel">${esc(formatearTel(c.telefono))}</div>`:''}
       </div>
       ${saldoHtml}
     </div>`;
@@ -247,7 +276,7 @@ function abrirEditarCliente(){
   const c = clientesCache.find(x=>x.id===clienteActualId);
   document.getElementById('cliente-modal-titulo').textContent = '✏️ Editar cliente';
   document.getElementById('cl-nombre').value = c ? c.nombre : '';
-  document.getElementById('cl-telefono').value = c ? (c.telefono||'') : '';
+  document.getElementById('cl-telefono').value = c ? soloDigitosTel(c.telefono) : '';
   document.getElementById('cl-limite').value = c && c.limite_credito ? c.limite_credito : '';
   document.getElementById('cl-nota').value = '';
   document.getElementById('cliente-msg').className='msg';
@@ -262,12 +291,15 @@ function cerrarModalCliente(){
 async function guardarCliente(){
   const msg = document.getElementById('cliente-msg');
   const nombre = document.getElementById('cl-nombre').value.trim();
-  const telefono = document.getElementById('cl-telefono').value.trim() || null;
+  const digitosTel = soloDigitosTel(document.getElementById('cl-telefono').value);
+  const telefono = digitosTel || null;
   const limiteRaw = document.getElementById('cl-limite').value;
   const limite_credito = limiteRaw ? parseFloat(limiteRaw) : null;
   const nota = document.getElementById('cl-nota').value.trim() || null;
 
   if(!nombre){ msg.className='msg error show'; msg.textContent='Escribe el nombre del cliente'; return; }
+  const errTel = errorTelefono(digitosTel);
+  if(errTel){ msg.className='msg error show'; msg.textContent=errTel; return; }
 
   const url = clienteActualId ? '/api/clientes/'+clienteActualId : '/api/clientes';
   const metodo = clienteActualId ? 'PATCH' : 'POST';

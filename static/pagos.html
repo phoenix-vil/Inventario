@@ -276,7 +276,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <button type="button" onclick="mostrarNuevoCliente()" style="background:none;border:none;color:var(--blue);font-size:13px;cursor:pointer;padding:4px 0;text-decoration:underline">+ Crear cliente nuevo</button>
       <div id="c-cliente-nuevo" style="display:none;margin-top:8px;padding:.875rem;background:var(--bg);border-radius:10px">
         <div class="field"><label>Nombre *</label><input type="text" id="c-nuevo-nombre" placeholder="Nombre del cliente"></div>
-        <div class="field"><label>Teléfono (opcional)</label><input type="text" id="c-nuevo-telefono" placeholder="10 dígitos"></div>
+        <div class="field"><label>Teléfono (opcional)</label><input type="tel" inputmode="numeric" autocomplete="tel" id="c-nuevo-telefono" placeholder="10 dígitos, ej. 5527671391" oninput="limitarTelPOS(this)"></div>
         <button type="button" onclick="crearClienteRapido()" style="width:100%;height:40px;border:none;border-radius:8px;background:var(--blue);color:#fff;font-weight:600;cursor:pointer">Crear y seleccionar</button>
       </div>
     </div>
@@ -843,10 +843,17 @@ function mostrarNuevoCliente(){
   document.getElementById('c-nuevo-nombre').focus();
 }
 
+// El teléfono se captura y se manda en 10 dígitos pelados; normalizar_telefono()
+// en main.py valida lo mismo del lado del servidor.
+function limitarTelPOS(input){ input.value = (input.value||'').replace(/\D/g,'').slice(0,10); }
+
 async function crearClienteRapido(){
   const nombre = document.getElementById('c-nuevo-nombre').value.trim();
   if(!nombre){ alert('Escribe el nombre del cliente'); return; }
-  const telefono = document.getElementById('c-nuevo-telefono').value.trim() || null;
+  const digitosTel = (document.getElementById('c-nuevo-telefono').value||'').replace(/\D/g,'').slice(0,10);
+  if(digitosTel && digitosTel.length !== 10){ alert('El teléfono debe tener 10 dígitos (escribiste '+digitosTel.length+')'); return; }
+  if(digitosTel && (digitosTel[0]==='0' || digitosTel[0]==='1')){ alert('El teléfono no puede empezar con 0 ni con 1'); return; }
+  const telefono = digitosTel || null;
   try{
     const r = await authFetch('/api/clientes', {
       method:'POST', headers:{'Content-Type':'application/json'},
