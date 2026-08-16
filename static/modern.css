@@ -114,6 +114,10 @@ tbody tr { transition: background-color .1s ease; }
   .nav-icon{filter:invert(1)}
 }
 
+/* Insignia de descuento (-15%). Misma pinta en consulta de precios, inventario
+   y donde haga falta: antes cada pantalla la dibujaba a su manera. */
+.disc-badge{display:inline-block;font-size:13px;font-weight:700;padding:3px 10px;border-radius:20px;background:var(--red-bg);color:var(--red)}
+
 /* Logo principal: negro en modo claro, blanco en modo oscuro (auto-invertido).
    Solo aplica al logo genérico de Only Enterprises (monocromático) — los
    logos a color de cada tienda (clase logo-generico ausente) no se invierten. */
