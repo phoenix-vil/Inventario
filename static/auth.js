@@ -22,6 +22,16 @@ function esGerente() {
   return s && s.rol === 'gerente';
 }
 
+// Para las pantallas que administran la empresa entera (inventario por
+// sucursal, alta de sucursales, clasificación por tienda). El backend las
+// protege con requerir_enterprise; esto solo evita que una sesión de sucursal
+// que llegue por URL se quede viendo una pantalla que no le va a cargar.
+function requireEnterprise() {
+  const s = requireGerente();
+  if (s && !sesionVeTodo()) { location.href = '/'; return null; }
+  return s;
+}
+
 // true solo para las sesiones que ven el negocio completo: las de una sucursal
 // sin tienda asignada (Only Enterprises). El resto está restringida a su propia
 // sucursal, así que no tiene caso ofrecerle filtrar por otras — es el mismo

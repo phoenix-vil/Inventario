@@ -69,6 +69,21 @@ def requerir_gerente(authorization: Optional[str] = Header(None), db: Session = 
     return s
 
 
+def requerir_enterprise(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)) -> Sesion:
+    """Gerente con una sesión sin tienda asignada, es decir Only Enterprises.
+    Para lo que gobierna la empresa entera y no una sola sucursal: dar de alta
+    sucursales, clasificar productos por tienda y comparar el inventario de
+    todas las sucursales."""
+    s = get_sesion(authorization, db)
+    if not s:
+        raise HTTPException(status_code=401, detail="Sesión inválida o expirada")
+    if s.rol != "gerente":
+        raise HTTPException(status_code=403, detail="Acción permitida solo para gerentes")
+    if s.tienda:
+        raise HTTPException(status_code=403, detail="Disponible solo desde Only Enterprises")
+    return s
+
+
 def sesion_opcional(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)) -> Optional[Sesion]:
     """Igual que requerir_sesion pero sin exigir sesión válida: None si no hay token o es inválido."""
     return get_sesion(authorization, db)
@@ -199,7 +214,7 @@ def listar_sucursales(db: Session = Depends(get_db)):
 
 
 @app.post("/api/sucursales", status_code=201)
-def crear_sucursal(data: CrearSucursal, sesion: Sesion = Depends(requerir_gerente), db: Session = Depends(get_db)):
+def crear_sucursal(data: CrearSucursal, sesion: Sesion = Depends(requerir_enterprise), db: Session = Depends(get_db)):
     nombre = data.nombre.strip()
     if not nombre:
         raise HTTPException(status_code=400, detail="El nombre no puede estar vacío")
@@ -214,7 +229,7 @@ def crear_sucursal(data: CrearSucursal, sesion: Sesion = Depends(requerir_gerent
 
 
 @app.patch("/api/sucursales/{sucursal_id}")
-def editar_sucursal(sucursal_id: int, data: EditarSucursal, sesion: Sesion = Depends(requerir_gerente), db: Session = Depends(get_db)):
+def editar_sucursal(sucursal_id: int, data: EditarSucursal, sesion: Sesion = Depends(requerir_enterprise), db: Session = Depends(get_db)):
     s = db.query(Sucursal).filter(Sucursal.id == sucursal_id).first()
     if not s:
         raise HTTPException(status_code=404, detail="Sucursal no encontrada")
@@ -236,7 +251,7 @@ def editar_sucursal(sucursal_id: int, data: EditarSucursal, sesion: Sesion = Dep
 
 
 @app.delete("/api/sucursales/{sucursal_id}", status_code=204)
-def eliminar_sucursal(sucursal_id: int, sesion: Sesion = Depends(requerir_gerente), db: Session = Depends(get_db)):
+def eliminar_sucursal(sucursal_id: int, sesion: Sesion = Depends(requerir_enterprise), db: Session = Depends(get_db)):
     s = db.query(Sucursal).filter(Sucursal.id == sucursal_id).first()
     if not s:
         raise HTTPException(status_code=404, detail="Sucursal no encontrada")
@@ -255,7 +270,7 @@ def listar_tiendas(db: Session = Depends(get_db)):
 
 
 @app.post("/api/tiendas", status_code=201)
-def crear_tienda(data: CrearTienda, sesion: Sesion = Depends(requerir_gerente), db: Session = Depends(get_db)):
+def crear_tienda(data: CrearTienda, sesion: Sesion = Depends(requerir_enterprise), db: Session = Depends(get_db)):
     nombre = data.nombre.strip()
     if not nombre:
         raise HTTPException(status_code=400, detail="El nombre no puede estar vacío")
@@ -269,7 +284,7 @@ def crear_tienda(data: CrearTienda, sesion: Sesion = Depends(requerir_gerente), 
 
 
 @app.delete("/api/tiendas/{tienda_id}", status_code=204)
-def eliminar_tienda(tienda_id: int, sesion: Sesion = Depends(requerir_gerente), db: Session = Depends(get_db)):
+def eliminar_tienda(tienda_id: int, sesion: Sesion = Depends(requerir_enterprise), db: Session = Depends(get_db)):
     t = db.query(Tienda).filter(Tienda.id == tienda_id).first()
     if not t:
         raise HTTPException(status_code=404, detail="Tienda no encontrada")
@@ -278,7 +293,7 @@ def eliminar_tienda(tienda_id: int, sesion: Sesion = Depends(requerir_gerente), 
 
 
 @app.post("/api/productos/clasificar-masivo")
-def clasificar_productos_masivo(data: ClasificarProductosMasivo, sesion: Sesion = Depends(requerir_gerente), db: Session = Depends(get_db)):
+def clasificar_productos_masivo(data: ClasificarProductosMasivo, sesion: Sesion = Depends(requerir_enterprise), db: Session = Depends(get_db)):
     if data.tienda:
         if not db.query(Tienda).filter(Tienda.nombre == data.tienda).first():
             raise HTTPException(status_code=404, detail="Esa tienda no existe")
@@ -963,7 +978,7 @@ def operadores_con_ventas(sesion: Sesion = Depends(requerir_gerente), db: Sessio
 
 
 @app.get("/api/inventario/por-sucursal")
-def inventario_por_sucursal(sesion: Sesion = Depends(requerir_gerente), db: Session = Depends(get_db)):
+def inventario_por_sucursal(sesion: Sesion = Depends(requerir_enterprise), db: Session = Depends(get_db)):
     productos = db.query(Producto).order_by(Producto.categoria, Producto.nombre).all()
     ventas = db.query(Venta).all()
     asignaciones = db.query(StockSucursal).all()
@@ -1030,6 +1045,76 @@ def inventario_por_sucursal(sesion: Sesion = Depends(requerir_gerente), db: Sess
         })
 
     return {"sucursales": sucursales, "productos": resultado, "sucursales_registradas": sucursales_reg}
+
+
+@app.get("/api/inventario/buscar-en-sucursales")
+def buscar_en_sucursales(
+    q: str = Query(..., min_length=1, description="Nombre o código de barras"),
+    sesion: Sesion = Depends(requerir_gerente),
+    db: Session = Depends(get_db),
+):
+    """¿Queda producto en otra sucursal? Consulta puntual, no un listado que se
+    pueda navegar: responde solo por lo que se busca y solo en las sucursales
+    de la misma tienda (ver sucursales_visibles). Sustituye, para una sesión de
+    sucursal, el inventario comparado que ahora es de Only Enterprises."""
+    termino = q.strip()
+    if not termino:
+        return {"sucursales": [], "productos": []}
+
+    visibles = sucursales_visibles(db, sesion)
+    if visibles is None:
+        visibles = [s.nombre for s in db.query(Sucursal).order_by(Sucursal.nombre).all()]
+
+    productos = db.query(Producto).filter(
+        or_(
+            Producto.nombre.ilike(f"%{termino}%"),
+            Producto.codigo_barras == termino,
+        )
+    ).order_by(Producto.nombre).limit(25).all()
+    if not productos:
+        return {"sucursales": visibles, "productos": []}
+
+    ids = {p.id for p in productos}
+
+    asignado: dict = {}
+    for a in db.query(StockSucursal).filter(StockSucursal.producto_id.in_(ids)).all():
+        asignado.setdefault(a.producto_id, {})[a.sucursal] = a.cantidad
+
+    # Lo vendido sale del detalle de cada venta, que es JSON: hay que abrirlas.
+    vendido: dict = {}
+    for v in db.query(Venta).filter(Venta.sucursal.in_(visibles)).all():
+        for it in json.loads(v.detalle_json):
+            pid = it.get("producto_id")
+            if pid in ids:
+                por_suc = vendido.setdefault(pid, {})
+                por_suc[v.sucursal] = por_suc.get(v.sucursal, 0) + it.get("cantidad", 0)
+
+    resultado = []
+    for p in productos:
+        a_por_suc = asignado.get(p.id, {})
+        v_por_suc = vendido.get(p.id, {})
+        filas = []
+        for suc in visibles:
+            asig = round(a_por_suc.get(suc, 0), 3)
+            vend = round(v_por_suc.get(suc, 0), 3)
+            filas.append({
+                "sucursal": suc,
+                "asignado": asig,
+                "vendido": vend,
+                "restante": round(asig - vend, 3),
+            })
+        resultado.append({
+            "id": p.id,
+            "nombre": p.nombre,
+            "categoria": p.categoria,
+            "marca": p.marca,
+            "codigo_barras": p.codigo_barras,
+            "unidad": p.unidad,
+            "vendido_por_peso": bool(p.vendido_por_peso),
+            "stock_global": p.stock,
+            "por_sucursal": filas,
+        })
+    return {"sucursales": visibles, "productos": resultado}
 
 
 @app.get("/api/ventas/{venta_id}")

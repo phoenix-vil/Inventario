@@ -90,8 +90,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <a href="/dashboard" id="btn-dashboard" class="config-gerente-only" style="display:none;padding:10px 14px;color:var(--text);text-decoration:none;font-size:14px;border-bottom:0.5px solid var(--border)">📊 Dashboard</a>
         <a href="/cotizaciones" style="display:block;padding:10px 14px;color:var(--text);text-decoration:none;font-size:14px;border-bottom:0.5px solid var(--border)">📝 Cotizaciones</a>
         <a href="/usuarios" class="config-gerente-only" style="display:none;padding:10px 14px;color:var(--text);text-decoration:none;font-size:14px;border-bottom:0.5px solid var(--border)">👥 Usuarios</a>
-        <a href="/sucursales" class="config-gerente-only" style="display:none;padding:10px 14px;color:var(--text);text-decoration:none;font-size:14px;border-bottom:0.5px solid var(--border)">🏪 Sucursales</a>
-        <a href="/tiendas-clasificar" class="config-gerente-only" style="display:none;padding:10px 14px;color:var(--text);text-decoration:none;font-size:14px;border-bottom:0.5px solid var(--border)">🏷️ Clasificar por tienda</a>
+        <a href="/sucursales" class="config-enterprise-only" style="display:none;padding:10px 14px;color:var(--text);text-decoration:none;font-size:14px;border-bottom:0.5px solid var(--border)">🏪 Sucursales</a>
+        <a href="/tiendas-clasificar" class="config-enterprise-only" style="display:none;padding:10px 14px;color:var(--text);text-decoration:none;font-size:14px;border-bottom:0.5px solid var(--border)">🏷️ Clasificar por tienda</a>
         <button onclick="logout()" style="display:block;width:100%;text-align:left;padding:10px 14px;color:var(--text);background:none;border:none;font-size:14px;cursor:pointer">🚪 Cerrar sesión</button>
       </div>
     </div>
@@ -168,7 +168,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="arrow">›</div>
   </a>
 
-  <a class="menu-btn solo-gerente" href="/inventario-sucursales" style="display:none">
+  <a class="menu-btn solo-enterprise" href="/inventario-sucursales" style="display:none">
     <div class="icon icon-inv">🏪</div>
     <div class="menu-text">
       <div class="menu-title">Inventario por sucursal</div>
@@ -197,6 +197,13 @@ if (sesion) {
   if (sesion.rol === 'gerente') {
     document.querySelectorAll('.solo-gerente').forEach(el => el.style.display = 'flex');
     document.querySelectorAll('.config-gerente-only').forEach(el => el.style.display = 'block');
+    // Administrar la empresa entera (inventario comparado entre sucursales,
+    // alta de sucursales, clasificación por tienda) es solo de Only
+    // Enterprises; un gerente de sucursal ni siquiera ve estas opciones.
+    if (sesionVeTodo()) {
+      document.querySelectorAll('.solo-enterprise').forEach(el => el.style.display = 'flex');
+      document.querySelectorAll('.config-enterprise-only').forEach(el => el.style.display = 'block');
+    }
   }
 }
 

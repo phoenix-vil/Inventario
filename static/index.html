@@ -128,6 +128,7 @@ button.danger:hover{background:var(--red-bg)}
   <h1 class="topbar-title">📦 Inventario</h1>
   <div class="topbar-right">
     <span id="sync-indicator" style="font-size:12px;color:var(--text2)"></span>
+    <button onclick="abrirBuscarSucursales()" title="Buscar en otra sucursal">🏪 <span class="btn-label">Otra sucursal</span></button>
     <button onclick="abrirEscaner('buscar')">📷 <span class="btn-label">Escanear</span></button>
     <button class="primary" onclick="abrirModal()">+ <span class="btn-label">Agregar</span></button>
   </div>
@@ -239,6 +240,26 @@ button.danger:hover{background:var(--red-bg)}
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- Modal: ¿hay existencias en otra sucursal? -->
+<div class="overlay" id="overlay-otra-suc" onclick="if(event.target.id==='overlay-otra-suc')cerrarBuscarSucursales()">
+  <div class="modal">
+    <h2>🏪 Buscar en otra sucursal</h2>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:1rem">Escribe el nombre o el código de barras del producto para ver qué queda en las sucursales de tu tienda.</p>
+    <div class="field">
+      <label>Nombre o código de barras</label>
+      <div style="display:flex;gap:8px">
+        <input type="search" id="os-q" placeholder="Ej. Canutillo o 7501234567890" style="flex:1" onkeydown="if(event.key==='Enter')buscarEnSucursales()">
+        <button onclick="abrirEscaner('otra-suc')" title="Escanear código">📷</button>
+      </div>
+    </div>
+    <div id="os-resultados" style="max-height:50vh;overflow:auto"></div>
+    <div class="modal-footer">
+      <button onclick="cerrarBuscarSucursales()">Cerrar</button>
+      <button class="primary" onclick="buscarEnSucursales()">Buscar</button>
+    </div>
+  </div>
+</div>
 
 <!-- Modal descuento por categoría -->
 <div class="overlay" id="overlay-desc-cat" onclick="if(event.target.id==='overlay-desc-cat')cerrarDescuentoCategoria()">
@@ -508,6 +529,51 @@ async function eliminar(id) {
   } catch(e) { toast('Error: ' + e.message, true); }
 }
 
+// ─── ¿Hay existencias en otra sucursal? ─────────────────────────────────────
+// Consulta puntual por nombre o código de barras. El inventario comparado de
+// todas las sucursales es de Only Enterprises; una sesión de sucursal usa esto
+// para saber si el producto que le falta está en otra sucursal de su tienda.
+function abrirBuscarSucursales() {
+  document.getElementById('os-resultados').innerHTML = '';
+  const campo = document.getElementById('os-q');
+  campo.value = document.getElementById('buscar').value.trim();
+  document.getElementById('overlay-otra-suc').classList.add('open');
+  setTimeout(() => campo.focus(), 60);
+  if (campo.value) buscarEnSucursales();
+}
+
+function cerrarBuscarSucursales() {
+  document.getElementById('overlay-otra-suc').classList.remove('open');
+}
+
+async function buscarEnSucursales() {
+  const q = document.getElementById('os-q').value.trim();
+  const cont = document.getElementById('os-resultados');
+  if (!q) { cont.innerHTML = ''; return; }
+  cont.innerHTML = '<div style="padding:1rem;text-align:center;color:var(--text2);font-size:13px">Buscando…</div>';
+  try {
+    const d = await fetchJSON('/api/inventario/buscar-en-sucursales?q=' + encodeURIComponent(q));
+    if (!d.productos.length) {
+      cont.innerHTML = `<div style="padding:1rem;text-align:center;color:var(--text2);font-size:13px">Ningún producto coincide con “${esc(q)}”</div>`;
+      return;
+    }
+    cont.innerHTML = d.productos.map(p => {
+      const conStock = p.por_sucursal.filter(s => s.restante > 0);
+      const cant = n => p.vendido_por_peso ? n.toFixed(3) + ' kg' : n;
+      const tags = conStock.length
+        ? conStock.map(s => `<span style="display:inline-block;background:var(--green-bg);color:var(--green);border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600;margin:2px 4px 2px 0">🏪 ${esc(s.sucursal)}: ${cant(s.restante)}</span>`).join('')
+        : `<span style="display:inline-block;background:var(--bg);color:var(--text2);border-radius:20px;padding:3px 10px;font-size:12px;margin:2px 0">Sin existencias asignadas · global: ${cant(p.stock_global)}</span>`;
+      return `<div style="padding:.75rem 0;border-bottom:0.5px solid var(--border)">
+        <div style="font-weight:600;font-size:14px">${esc(p.nombre)}</div>
+        <div style="font-size:11px;color:var(--text2);margin-bottom:6px">${esc(p.categoria)}${p.marca ? ' · ' + esc(p.marca) : ''}${p.codigo_barras ? ' · ' + esc(p.codigo_barras) : ''}</div>
+        <div>${tags}</div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    cont.innerHTML = '<div style="padding:1rem;text-align:center;color:var(--red);font-size:13px">No se pudo consultar</div>';
+  }
+}
+
 function toast(msg, error = false) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -574,7 +640,7 @@ async function aplicarDescuentoCategoria() {
 // ─── Escáner de código de barras (ZXing) ───────────────────────────────────
 let zxingStream = null;
 let scanLoop = null;
-let scanModo = 'buscar'; // 'buscar' = buscar producto existente | 'form' = llenar campo del formulario
+let scanModo = 'buscar'; // 'buscar' = buscar producto existente | 'form' = llenar campo del formulario | 'otra-suc' = buscar existencias en otras sucursales
 
 async function abrirEscaner(modo) {
   scanModo = modo;
@@ -691,6 +757,15 @@ async function onCodigoEscaneado(codigo) {
     document.getElementById('f-codigo').value = codigo;
     await cerrarEscaner();
     toast('Código capturado: ' + codigo);
+    return;
+  }
+
+  // Modo "otra-suc": el código va al buscador de existencias en otras
+  // sucursales, que ya está abierto detrás del escáner.
+  if (scanModo === 'otra-suc') {
+    document.getElementById('os-q').value = codigo;
+    await cerrarEscaner();
+    await buscarEnSucursales();
     return;
   }
 
