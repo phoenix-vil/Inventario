@@ -22,6 +22,15 @@ function esGerente() {
   return s && s.rol === 'gerente';
 }
 
+// true solo para las sesiones que ven el negocio completo: las de una sucursal
+// sin tienda asignada (Only Enterprises). El resto está restringida a su propia
+// sucursal, así que no tiene caso ofrecerle filtrar por otras — es el mismo
+// criterio que sucursal_restriccion() en main.py, que es quien manda.
+function sesionVeTodo() {
+  const s = getSesion();
+  return !!s && !(s.tienda && s.tienda.length);
+}
+
 // ─── Logo según la tienda activa de la sesión ───────────────────────────────
 // Cada submarca tiene su logo. Si la sesión no tiene una tienda única activa
 // (sin restricción, ej. Only Enterprises, o una sucursal con varias tiendas

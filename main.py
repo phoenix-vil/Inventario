@@ -155,6 +155,34 @@ def sucursal_restriccion(sesion: Optional[Sesion]) -> Optional[str]:
     return None
 
 
+def sucursales_visibles(db: Session, sesion: Optional[Sesion]) -> Optional[List[str]]:
+    """Sucursales cuyo inventario puede consultar esta sesión: la suya y las
+    demás que vendan alguna de sus mismas tiendas — desde Plaza se ve también
+    Imprenta, porque las dos venden Only Reef, pero no Reptile. None = todas,
+    sin restricción (Only Enterprises).
+
+    Ojo: esto es solo para *ver*. El destino de un traslado puede ser cualquier
+    sucursal: mandar producto a otra tienda es una operación física legítima,
+    y no revela su inventario."""
+    if not (sesion and sesion.tienda):
+        return None
+    mias = set(texto_a_tiendas(sesion.tienda))
+    nombres = [
+        s.nombre for s in db.query(Sucursal).order_by(Sucursal.nombre).all()
+        if mias & set(texto_a_tiendas(s.tiendas))
+    ]
+    if sesion.sucursal and sesion.sucursal not in nombres:
+        nombres.append(sesion.sucursal)
+    return nombres
+
+
+def verificar_sucursal_visible(db: Session, sesion: Optional[Sesion], sucursal: str):
+    """404 si el inventario de esa sucursal no le corresponde a esta sesión."""
+    visibles = sucursales_visibles(db, sesion)
+    if visibles is not None and sucursal not in visibles:
+        raise HTTPException(status_code=404, detail="Sucursal no encontrada")
+
+
 def verificar_venta_visible(db: Session, sesion: Optional[Sesion], v: Venta):
     """404 si la venta no es de la sucursal de esta sesión (no se expone qué
     existe en otras sucursales)."""
@@ -482,12 +510,16 @@ def descuento_categoria(data: DescuentoCategoria, sesion: Sesion = Depends(reque
 # ─── Stock asignado por sucursal ─────────────────────────────────────────────
 @app.get("/api/stock-sucursal/{sucursal}")
 def stock_sucursal(sucursal: str, sesion: Sesion = Depends(requerir_gerente), db: Session = Depends(get_db)):
+    verificar_sucursal_visible(db, sesion, sucursal)
     rows = db.query(StockSucursal).filter(StockSucursal.sucursal == sucursal).all()
     return {r.producto_id: r.cantidad for r in rows}
 
 
 @app.post("/api/stock-sucursal")
 def asignar_stock(data: AsignarStockSucursal, sesion: Sesion = Depends(requerir_gerente), db: Session = Depends(get_db)):
+    # No se asigna stock a una sucursal cuyo inventario ni siquiera se ve
+    verificar_sucursal_visible(db, sesion, data.sucursal)
+
     # Verificar que el producto existe y tiene suficiente stock global
     p = db.query(Producto).filter(Producto.id == data.producto_id).first()
     if not p:
@@ -527,6 +559,10 @@ def asignar_stock(data: AsignarStockSucursal, sesion: Sesion = Depends(requerir_
 def trasladar_stock(data: TrasladoStock, sesion: Sesion = Depends(requerir_gerente), db: Session = Depends(get_db)):
     if data.sucursal_origen == data.sucursal_destino:
         raise HTTPException(status_code=400, detail="La sucursal de origen y destino no pueden ser la misma")
+
+    # Solo se saca stock de una sucursal cuyo inventario se ve; el destino
+    # puede ser cualquiera (mandar producto a otra tienda es legítimo).
+    verificar_sucursal_visible(db, sesion, data.sucursal_origen)
 
     p = db.query(Producto).filter(Producto.id == data.producto_id).first()
     if not p:
@@ -960,8 +996,10 @@ def inventario_por_sucursal(sesion: Sesion = Depends(requerir_gerente), db: Sess
             asignado[a.producto_id] = {}
         asignado[a.producto_id][a.sucursal] = a.cantidad
 
-    # Solo sucursales actualmente registradas (ignorar las borradas que aparecen en ventas)
-    sucursales = sucursales_reg  # ya ordenadas
+    # Solo sucursales actualmente registradas (ignorar las borradas que aparecen en ventas),
+    # y de esas, únicamente las que esta sesión puede ver (las de su misma tienda).
+    visibles = sucursales_visibles(db, sesion)
+    sucursales = sucursales_reg if visibles is None else [s for s in sucursales_reg if s in visibles]
 
     resultado = []
     for p in productos:

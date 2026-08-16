@@ -358,9 +358,12 @@ function render(){
   if(!suc){document.getElementById('tabla-cont').innerHTML='<div class="empty">Selecciona una sucursal</div>';return;}
 
   if(suc===NO_ASIG){
-    // Solo productos sin asignación en NINGUNA sucursal
+    // Solo productos sin asignación en NINGUNA sucursal. Se mira
+    // stock_disponible (global: stock menos lo asignado en toda la empresa) y
+    // no por_sucursal, que ahora solo trae las sucursales que esta sesión ve:
+    // si no, un producto asignado en otra tienda saldría aquí como no asignado.
     const sinNinguna=filtrar(data.productos,suc).filter(p=>
-      data.sucursales.every(s=>!(p.por_sucursal[s]||{}).asignado)
+      p.stock_disponible >= p.stock_global
     );
     if(!sinNinguna.length){
       document.getElementById('tabla-cont').innerHTML='<div class="empty">✅ Todo el inventario tiene asignación en alguna sucursal</div>';
@@ -602,11 +605,15 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')cerrarEscaner();});
 let trProductoSel = null;
 
 function abrirTraslado(){
+  // Origen: solo las sucursales cuyo inventario ve esta sesión (de su misma
+  // tienda). Destino: cualquiera de las registradas — mandar producto a otra
+  // tienda es válido, aunque no puedas ver su inventario.
+  const destinos = (data && data.sucursales_registradas) || [];
   if(!data || !data.sucursales.length){
     toast('Necesitas al menos 2 sucursales registradas para trasladar', true);
     return;
   }
-  if(data.sucursales.length < 2){
+  if(destinos.length < 2){
     toast('Necesitas al menos 2 sucursales para poder trasladar stock', true);
     return;
   }
@@ -620,8 +627,9 @@ function abrirTraslado(){
   const origSel = document.getElementById('tr-origen');
   const destSel = document.getElementById('tr-destino');
   origSel.innerHTML = data.sucursales.map(s=>`<option value="${esc(s)}">Suc. ${esc(s)}</option>`).join('');
-  destSel.innerHTML = data.sucursales.map(s=>`<option value="${esc(s)}">Suc. ${esc(s)}</option>`).join('');
-  if(data.sucursales.length>1) destSel.value = data.sucursales[1];
+  destSel.innerHTML = destinos.map(s=>`<option value="${esc(s)}">Suc. ${esc(s)}</option>`).join('');
+  const otroDestino = destinos.find(s=>s!==origSel.value);
+  if(otroDestino) destSel.value = otroDestino;
 
   const _btnR = document.getElementById('tr-btn-confirmar');
   if(_btnR){ _btnR.disabled=false; _btnR.textContent='🔄 Confirmar traslado'; }

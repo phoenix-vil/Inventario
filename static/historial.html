@@ -119,7 +119,9 @@ button.primary:hover{opacity:.85;background:var(--text)}
         <option value="transferencia">Transferencia</option>
       </select>
     </div>
-    <div class="filtro-campo">
+    <!-- Solo para sesiones sin restricción (Only Enterprises); ver
+         cargarSucursalesSelect(). -->
+    <div class="filtro-campo" id="campo-sucursal" style="display:none">
       <label>Sucursal</label>
       <select id="f-sucursal"><option value="">Todas</option></select>
     </div>
@@ -259,7 +261,9 @@ function renderDesglose(lista){
 function renderDesgloseSucursal(lista){
   const titulo=document.getElementById('suc-titulo');
   const cont=document.getElementById('suc-desglose');
-  if(!lista.length){titulo.style.display='none';cont.style.display='none';return;}
+  // Con una sesión de sucursal el desglose sería siempre una sola fila con su
+  // propia sucursal, repitiendo lo que ya dicen las tarjetas de arriba.
+  if(!lista.length || !sesionVeTodo()){titulo.style.display='none';cont.style.display='none';return;}
   titulo.style.display='block';
   cont.style.display='block';
   cont.innerHTML=lista.map(s=>`
@@ -272,12 +276,18 @@ function renderDesgloseSucursal(lista){
     </div>`).join('');
 }
 
+// El filtro de sucursal solo existe para quien ve el negocio completo (Only
+// Enterprises). Una sesión de sucursal solo recibe del backend sus propios
+// movimientos, así que ofrecerle elegir otra sucursal solo serviría para que
+// la pantalla se quedara vacía sin explicación.
 async function cargarSucursalesSelect(){
+  if(!sesionVeTodo()) return;
   try{
     const r=await fetch('/api/sucursales');
     const sucursales=await r.json();
     const sel=document.getElementById('f-sucursal');
     sel.innerHTML='<option value="">Todas</option>'+sucursales.map(s=>`<option value="${esc(s.nombre)}">${esc(s.nombre)}</option>`).join('');
+    document.getElementById('campo-sucursal').style.display='';
   }catch(e){}
 }
 
