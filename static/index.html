@@ -129,6 +129,7 @@ button.danger:hover{background:var(--red-bg)}
   <div class="topbar-right">
     <span id="sync-indicator" style="font-size:12px;color:var(--text2)"></span>
     <button onclick="abrirBuscarSucursales()" title="Buscar en otra sucursal">🏪 <span class="btn-label">Otra sucursal</span></button>
+    <button id="btn-enviar-suc" style="display:none" onclick="abrirEnviarSucursal()" title="Enviar producto a otra sucursal">📤 <span class="btn-label">Enviar</span></button>
     <button onclick="abrirEscaner('buscar')">📷 <span class="btn-label">Escanear</span></button>
     <button class="primary" onclick="abrirModal()">+ <span class="btn-label">Agregar</span></button>
   </div>
@@ -257,6 +258,35 @@ button.danger:hover{background:var(--red-bg)}
     <div class="modal-footer">
       <button onclick="cerrarBuscarSucursales()">Cerrar</button>
       <button class="primary" onclick="buscarEnSucursales()">Buscar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: enviar producto a otra sucursal -->
+<div class="overlay" id="overlay-enviar-suc" onclick="if(event.target.id==='overlay-enviar-suc')cerrarEnviarSucursal()">
+  <div class="modal">
+    <h2>📤 Enviar a otra sucursal</h2>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:1rem">Mueve producto de <strong id="env-origen">tu sucursal</strong> a otra. Se descuenta de tu inventario y se suma al de la sucursal destino.</p>
+    <div class="field">
+      <label>Producto (nombre o código de barras)</label>
+      <div style="display:flex;gap:8px">
+        <input type="search" id="env-q" placeholder="Ej. Canutillo o 7501234567890" style="flex:1" onkeydown="if(event.key==='Enter')buscarParaEnviar()">
+        <button onclick="abrirEscaner('enviar')" title="Escanear código">📷</button>
+      </div>
+    </div>
+    <div id="env-resultados" style="max-height:32vh;overflow:auto"></div>
+    <div id="env-form" style="display:none;border-top:0.5px solid var(--border);padding-top:.75rem;margin-top:.5rem">
+      <div style="font-weight:600;font-size:14px" id="env-prod-nombre"></div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:.75rem" id="env-prod-stock"></div>
+      <div class="field-row">
+        <div class="field"><label>Cantidad</label><input type="number" id="env-cantidad" min="0" step="1" placeholder="0"></div>
+        <div class="field"><label>Sucursal destino</label><select id="env-destino"></select></div>
+      </div>
+      <div class="field" id="env-msg" style="display:none;font-size:13px"></div>
+    </div>
+    <div class="modal-footer">
+      <button onclick="cerrarEnviarSucursal()">Cancelar</button>
+      <button class="primary" id="env-btn" onclick="confirmarEnvio()" disabled>Enviar</button>
     </div>
   </div>
 </div>
@@ -574,6 +604,144 @@ async function buscarEnSucursales() {
   }
 }
 
+// ─── Enviar producto a otra sucursal ────────────────────────────────────────
+// El inventario comparado y los traslados libres son de Only Enterprises; una
+// sucursal solo puede mandar lo suyo, así que el origen es siempre su propia
+// sucursal (el backend lo exige igual) y aquí ni se elige.
+let envProducto = null;
+
+(function mostrarBotonEnviar() {
+  const s = getSesion();
+  if (s && !sesionVeTodo()) document.getElementById('btn-enviar-suc').style.display = '';
+})();
+
+async function abrirEnviarSucursal() {
+  const s = getSesion();
+  envProducto = null;
+  document.getElementById('env-origen').textContent = 'Suc. ' + s.sucursal;
+  document.getElementById('env-q').value = '';
+  document.getElementById('env-resultados').innerHTML = '';
+  document.getElementById('env-form').style.display = 'none';
+  document.getElementById('env-msg').style.display = 'none';
+  document.getElementById('env-btn').disabled = true;
+  document.getElementById('overlay-enviar-suc').classList.add('open');
+
+  try {
+    const r = await fetch('/api/sucursales');
+    const sucursales = await r.json();
+    document.getElementById('env-destino').innerHTML = sucursales
+      .filter(x => x.nombre !== s.sucursal)
+      .map(x => `<option value="${esc(x.nombre)}">Suc. ${esc(x.nombre)}</option>`).join('');
+  } catch (e) { /* si falla, el select queda vacío y el envío avisa */ }
+
+  setTimeout(() => document.getElementById('env-q').focus(), 60);
+}
+
+function cerrarEnviarSucursal() {
+  document.getElementById('overlay-enviar-suc').classList.remove('open');
+}
+
+// Reutiliza la búsqueda de existencias, que ya devuelve lo que resta en cada
+// sucursal visible; de ahí se toma solo lo de la propia.
+async function buscarParaEnviar() {
+  const q = document.getElementById('env-q').value.trim();
+  const cont = document.getElementById('env-resultados');
+  if (!q) { cont.innerHTML = ''; return; }
+  cont.innerHTML = '<div style="padding:1rem;text-align:center;color:var(--text2);font-size:13px">Buscando…</div>';
+  try {
+    const d = await fetchJSON('/api/inventario/buscar-en-sucursales?q=' + encodeURIComponent(q));
+    if (!d.productos.length) {
+      cont.innerHTML = `<div style="padding:1rem;text-align:center;color:var(--text2);font-size:13px">Ningún producto coincide con “${esc(q)}”</div>`;
+      return;
+    }
+    const mia = getSesion().sucursal;
+    cont.innerHTML = d.productos.map(p => {
+      const propio = p.por_sucursal.find(x => x.sucursal === mia) || {restante: 0};
+      const cant = p.vendido_por_peso ? propio.restante.toFixed(3) + ' kg' : propio.restante;
+      const color = propio.restante > 0 ? 'var(--green)' : 'var(--text2)';
+      return `<div onclick="elegirProductoEnvio(${p.id})" style="padding:.6rem 0;border-bottom:0.5px solid var(--border);cursor:pointer">
+        <div style="font-weight:600;font-size:14px">${esc(p.nombre)}</div>
+        <div style="font-size:11px;color:var(--text2)">${esc(p.categoria)}${p.marca ? ' · ' + esc(p.marca) : ''}</div>
+        <div style="font-size:12px;color:${color};font-weight:600">Tienes ${cant} en Suc. ${esc(mia)}</div>
+      </div>`;
+    }).join('');
+    // Se guardan para no volver a pedirlos al elegir uno
+    cont.dataset.productos = JSON.stringify(d.productos);
+  } catch (e) {
+    cont.innerHTML = '<div style="padding:1rem;text-align:center;color:var(--red);font-size:13px">No se pudo consultar</div>';
+  }
+}
+
+function elegirProductoEnvio(id) {
+  const cont = document.getElementById('env-resultados');
+  const lista = JSON.parse(cont.dataset.productos || '[]');
+  const p = lista.find(x => x.id === id);
+  if (!p) return;
+  const mia = getSesion().sucursal;
+  const propio = p.por_sucursal.find(x => x.sucursal === mia) || {restante: 0};
+  envProducto = {id: p.id, nombre: p.nombre, disponible: propio.restante, porPeso: p.vendido_por_peso};
+
+  document.getElementById('env-prod-nombre').textContent = p.nombre;
+  document.getElementById('env-prod-stock').textContent =
+    'Disponible en Suc. ' + mia + ': ' + (p.vendido_por_peso ? propio.restante.toFixed(3) + ' kg' : propio.restante);
+  const inp = document.getElementById('env-cantidad');
+  inp.step = p.vendido_por_peso ? '0.001' : '1';
+  inp.max = propio.restante;
+  inp.value = '';
+  document.getElementById('env-form').style.display = '';
+  document.getElementById('env-btn').disabled = false;
+  document.getElementById('env-msg').style.display = 'none';
+  cont.innerHTML = '';
+  setTimeout(() => inp.focus(), 60);
+}
+
+async function confirmarEnvio() {
+  const msg = document.getElementById('env-msg');
+  const mostrarError = t => {
+    msg.style.display = '';
+    msg.style.color = 'var(--red)';
+    msg.textContent = t;
+  };
+  if (!envProducto) { mostrarError('Elige primero un producto'); return; }
+  const cantidad = parseFloat(document.getElementById('env-cantidad').value);
+  const destino = document.getElementById('env-destino').value;
+  if (!cantidad || cantidad <= 0) { mostrarError('Escribe cuánto vas a enviar'); return; }
+  if (cantidad > envProducto.disponible) {
+    mostrarError('Solo tienes ' + envProducto.disponible + ' disponible(s) en tu sucursal');
+    return;
+  }
+  if (!destino) { mostrarError('No hay otra sucursal a la que enviar'); return; }
+
+  const btn = document.getElementById('env-btn');
+  btn.disabled = true;
+  btn.textContent = 'Enviando…';
+  try {
+    const r = await authFetch('/api/stock-sucursal/trasladar', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        producto_id: envProducto.id,
+        sucursal_origen: getSesion().sucursal,
+        sucursal_destino: destino,
+        cantidad: cantidad,
+      })
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      mostrarError(typeof d.detail === 'string' ? d.detail : 'No se pudo enviar');
+      btn.disabled = false; btn.textContent = 'Enviar';
+      return;
+    }
+    cerrarEnviarSucursal();
+    toast(`✓ ${cantidad} de ${envProducto.nombre} enviado a Suc. ${destino}`);
+    await Promise.all([cargarProductos(), cargarResumen()]);
+  } catch (e) {
+    mostrarError('Error de conexión');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Enviar';
+  }
+}
+
 function toast(msg, error = false) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -640,7 +808,7 @@ async function aplicarDescuentoCategoria() {
 // ─── Escáner de código de barras (ZXing) ───────────────────────────────────
 let zxingStream = null;
 let scanLoop = null;
-let scanModo = 'buscar'; // 'buscar' = buscar producto existente | 'form' = llenar campo del formulario | 'otra-suc' = buscar existencias en otras sucursales
+let scanModo = 'buscar'; // 'buscar' = buscar producto existente | 'form' = llenar campo del formulario | 'otra-suc' = buscar existencias en otras sucursales | 'enviar' = elegir producto a enviar a otra sucursal
 
 async function abrirEscaner(modo) {
   scanModo = modo;
@@ -766,6 +934,14 @@ async function onCodigoEscaneado(codigo) {
     document.getElementById('os-q').value = codigo;
     await cerrarEscaner();
     await buscarEnSucursales();
+    return;
+  }
+
+  // Modo "enviar": igual, pero para el modal de enviar a otra sucursal.
+  if (scanModo === 'enviar') {
+    document.getElementById('env-q').value = codigo;
+    await cerrarEscaner();
+    await buscarParaEnviar();
     return;
   }
 

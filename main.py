@@ -575,9 +575,16 @@ def trasladar_stock(data: TrasladoStock, sesion: Sesion = Depends(requerir_geren
     if data.sucursal_origen == data.sucursal_destino:
         raise HTTPException(status_code=400, detail="La sucursal de origen y destino no pueden ser la misma")
 
-    # Solo se saca stock de una sucursal cuyo inventario se ve; el destino
-    # puede ser cualquiera (mandar producto a otra tienda es legítimo).
-    verificar_sucursal_visible(db, sesion, data.sucursal_origen)
+    # Una sesión de sucursal solo saca de su propio inventario — ni siquiera de
+    # otra de su misma tienda, que puede consultar pero no administrar. El
+    # destino, en cambio, puede ser cualquiera: mandar producto a otra tienda
+    # es una operación física legítima y no revela su inventario.
+    restriccion = sucursal_restriccion(sesion)
+    if restriccion is not None and data.sucursal_origen != restriccion:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Solo puedes enviar producto desde tu sucursal ({restriccion})",
+        )
 
     p = db.query(Producto).filter(Producto.id == data.producto_id).first()
     if not p:
