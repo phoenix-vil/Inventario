@@ -20,3 +20,6 @@ serper_log.csv
 # ─── Editor / sistema ───
 *.swp
 .DS_Store
+
+# APK del contenedor Android: se genera con ~/android-build/compilar.sh
+*.apk
