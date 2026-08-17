@@ -145,6 +145,12 @@ button.primary:hover{opacity:.85;background:var(--text)}
 
   <div class="section-title" id="suc-titulo" style="font-size:13px;font-weight:600;color:var(--text2);margin:1.5rem 0 .75rem;text-transform:uppercase;letter-spacing:.5px;display:none">Ventas por sucursal</div>
   <div class="card" id="suc-desglose" style="display:none"></div>
+
+  <!-- Detalle de los abonos cobrados en el periodo. Faltaba: renderAbonos()
+       existía desde siempre, pero nunca llegó a ejecutarse porque el endpoint
+       de abonos devolvía 422 por un orden de rutas equivocado. -->
+  <div class="section-title" id="abonos-titulo" style="font-size:13px;font-weight:600;color:var(--text2);margin:1.5rem 0 .75rem;text-transform:uppercase;letter-spacing:.5px;display:none">💰 Abonos cobrados</div>
+  <div class="card" id="abonos-lista" style="display:none"></div>
 </div>
 
 <!-- Modal detalle de venta -->
@@ -210,6 +216,9 @@ async function cargar(){
       authFetch('/api/clientes/abonos-periodo?'+params.toString())
     ]);
     ventas=await rv.json();
+    // La lista de ventas primero: es lo principal de la pantalla, y así un
+    // fallo en cualquiera de los desgloses de abajo no la deja en blanco.
+    render();
     const resumen=await rs.json();
     document.getElementById('s-num').textContent=resumen.num_ventas;
     document.getElementById('s-total').textContent=money(resumen.total_vendido);
@@ -223,13 +232,13 @@ async function cargar(){
       document.getElementById('s-abonos').textContent=money(abonosData.total||0);
       renderAbonos(abonosData.abonos||[]);
     }
-    render();
   }catch(e){console.error(e);}
 }
 
 function renderAbonos(lista){
   const titulo=document.getElementById('abonos-titulo');
   const cont=document.getElementById('abonos-lista');
+  if(!titulo||!cont)return;
   if(!lista.length){titulo.style.display='none';cont.style.display='none';return;}
   titulo.style.display='block';
   cont.style.display='block';
