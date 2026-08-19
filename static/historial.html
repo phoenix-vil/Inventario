@@ -707,14 +707,24 @@ async function generarReportePDF(desdeISO, hastaISO, etiquetaPeriodo){
   linea();
 
   titulo('Métodos de pago');
+  // Debajo del efectivo se muestra, en negativo, lo que salió del cajón para
+  // pagar gastos: así el renglón del efectivo no se lee como dinero disponible.
+  const gastosEf = (d.cuadre_caja && d.cuadre_caja.gastos_efectivo) || 0;
+  let pintadoEfectivo = false;
   if(!d.desglose_metodos_pago.length){
     doc.setFont('courier','bold'); doc.setFontSize(10);
     doc.text('Sin ventas en el período', M, y); y += 16;
   }else{
     d.desglose_metodos_pago.forEach(function(m){
       fila((nombresMetodo[m.metodo] || m.metodo) + ' (' + m.cantidad + ')', money(m.total));
+      if(m.metodo === 'efectivo'){
+        pintadoEfectivo = true;
+        if(gastosEf > 0) fila('  Gastos pagados en efectivo', '-' + money(gastosEf));
+      }
     });
   }
+  // Puede haber gastos en efectivo en un periodo sin ninguna venta en efectivo
+  if(gastosEf > 0 && !pintadoEfectivo) fila('  Gastos pagados en efectivo', '-' + money(gastosEf));
   y += 6;
   linea();
 
