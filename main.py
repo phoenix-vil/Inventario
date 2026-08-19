@@ -2277,6 +2277,53 @@ def registrar_pago_credito(cliente_id: int, data: CrearPagoCredito, sesion: Sesi
     }
 
 
+def _bloque_reporte(ventas_b, gastos_b, abonos_b):
+    """Las cifras de un conjunto de movimientos: sirve igual para una sola
+    sucursal que para el consolidado de todas, así los dos siempre se calculan
+    con el mismo criterio."""
+    total_vendido = round(sum(v.total for v in ventas_b), 2)
+    gastos_total = round(sum(g.monto for g in gastos_b), 2)
+
+    por_metodo = {}
+    for v in ventas_b:
+        m = v.metodo_pago or "efectivo"
+        if m not in por_metodo:
+            por_metodo[m] = {"cantidad": 0, "total": 0.0}
+        por_metodo[m]["cantidad"] += 1
+        por_metodo[m]["total"] += v.total
+    desglose_metodos = sorted(
+        [{"metodo": k, "cantidad": v["cantidad"], "total": round(v["total"], 2)} for k, v in por_metodo.items()],
+        key=lambda x: x["total"], reverse=True
+    )
+
+    devs = [x for x in ventas_b if x.total < 0]
+
+    ventas_efectivo = round(sum(v.total for v in ventas_b if (v.metodo_pago or "efectivo") == "efectivo"), 2)
+    abonos_efectivo = round(sum(p.monto for p in abonos_b if (p.metodo_pago or "efectivo") == "efectivo"), 2)
+    gastos_efectivo = round(sum(g.monto for g in gastos_b if (g.metodo_pago or "efectivo") == "efectivo"), 2)
+
+    return {
+        "total_vendido": total_vendido,
+        "num_ventas": len(ventas_b),
+        "gastos": gastos_total,
+        "num_gastos": len(gastos_b),
+        "devoluciones_total": round(sum(abs(x.total) for x in devs), 2),
+        "devoluciones_num": len(devs),
+        "ganancia_neta": round(total_vendido - gastos_total, 2),
+        "abonos_total": round(sum(p.monto for p in abonos_b), 2),
+        "num_abonos": len(abonos_b),
+        "desglose_metodos_pago": desglose_metodos,
+        # Lo que debe haber en el cajón no son solo las ventas en efectivo: los
+        # abonos cobrados en efectivo entran, y los gastos pagados en efectivo salen.
+        "cuadre_caja": {
+            "ventas_efectivo": ventas_efectivo,
+            "abonos_efectivo": abonos_efectivo,
+            "gastos_efectivo": gastos_efectivo,
+            "esperado_en_caja": round(ventas_efectivo + abonos_efectivo - gastos_efectivo, 2),
+        },
+    }
+
+
 @app.get("/api/reporte-completo")
 def reporte_completo(
     desde: Optional[str] = Query(None),
@@ -2296,20 +2343,6 @@ def reporte_completo(
         ventas_q = ventas_q.filter(Venta.sucursal == restriccion)
     ventas = ventas_q.all()
 
-    total_vendido = round(sum(v.total for v in ventas), 2)
-
-    por_metodo = {}
-    for v in ventas:
-        m = v.metodo_pago or "efectivo"
-        if m not in por_metodo:
-            por_metodo[m] = {"cantidad": 0, "total": 0.0}
-        por_metodo[m]["cantidad"] += 1
-        por_metodo[m]["total"] += v.total
-    desglose_metodos = sorted(
-        [{"metodo": k, "cantidad": v["cantidad"], "total": round(v["total"], 2)} for k, v in por_metodo.items()],
-        key=lambda x: x["total"], reverse=True
-    )
-
     gastos_q = db.query(Gasto)
     if d:
         gastos_q = gastos_q.filter(Gasto.fecha >= d)
@@ -2318,15 +2351,7 @@ def reporte_completo(
     if restriccion is not None:
         gastos_q = gastos_q.filter(Gasto.sucursal == restriccion)
     gastos_lista = gastos_q.all()
-    gastos_total = round(sum(g.monto for g in gastos_lista), 2)
 
-    ganancia_neta = round(total_vendido - gastos_total, 2)
-
-    # ─── Cuadre de caja ──────────────────────────────────────────────────────
-    # Lo que debería haber físicamente en el cajón al cerrar no es lo mismo que
-    # "ventas en efectivo": hay que sumar los abonos que se cobraron en efectivo
-    # y restar los gastos que se pagaron sacando dinero de ahí. Sin esas dos
-    # piezas el reporte y el conteo del cajón nunca cuadran.
     pagos_q = db.query(PagoCredito)
     if d:
         pagos_q = pagos_q.filter(PagoCredito.creado_en >= d)
@@ -2336,20 +2361,26 @@ def reporte_completo(
         pagos_q = pagos_q.filter(PagoCredito.sucursal == restriccion)
     abonos_lista = pagos_q.all()
 
-    ventas_efectivo = round(sum(v.total for v in ventas if (v.metodo_pago or "efectivo") == "efectivo"), 2)
-    abonos_efectivo = round(sum(p.monto for p in abonos_lista if (p.metodo_pago or "efectivo") == "efectivo"), 2)
-    gastos_efectivo = round(sum(g.monto for g in gastos_lista if (g.metodo_pago or "efectivo") == "efectivo"), 2)
+    consolidado = _bloque_reporte(ventas, gastos_lista, abonos_lista)
 
-    cuadre_caja = {
-        "ventas_efectivo": ventas_efectivo,
-        "abonos_efectivo": abonos_efectivo,
-        "gastos_efectivo": gastos_efectivo,
-        "esperado_en_caja": round(ventas_efectivo + abonos_efectivo - gastos_efectivo, 2),
-    }
-
-    _devs = [x for x in ventas if x.total < 0]
-    devoluciones_total = round(sum(abs(x.total) for x in _devs), 2)
-    devoluciones_num = len(_devs)
+    # Desglose por sucursal, solo para quien ve el negocio completo (Only
+    # Enterprises): una sesión de sucursal ya recibe únicamente lo suyo, así que
+    # repetírselo sucursal por sucursal no aportaría nada.
+    # Va por sucursal y no por tienda porque cada venta guarda la sucursal donde
+    # se hizo; la tienda no se puede deducir (Imprenta vende dos a la vez).
+    por_sucursal = []
+    if restriccion is None:
+        tiendas_de = {s.nombre: texto_a_tiendas(s.tiendas) for s in db.query(Sucursal).all()}
+        nombres = {v.sucursal for v in ventas} | {g.sucursal for g in gastos_lista} | {p.sucursal for p in abonos_lista}
+        for nombre in sorted(n for n in nombres if n):
+            bloque = _bloque_reporte(
+                [v for v in ventas if v.sucursal == nombre],
+                [g for g in gastos_lista if g.sucursal == nombre],
+                [p for p in abonos_lista if p.sucursal == nombre],
+            )
+            bloque["sucursal"] = nombre
+            bloque["tiendas"] = tiendas_de.get(nombre, [])
+            por_sucursal.append(bloque)
 
     clientes = db.query(Cliente).all()
     detalle_clientes = []
@@ -2377,17 +2408,8 @@ def reporte_completo(
     return {
         "desde": desde,
         "hasta": hasta,
-        "total_vendido": total_vendido,
-        "num_ventas": len(ventas),
-        "gastos": gastos_total,
-        "num_gastos": len(gastos_lista),
-        "devoluciones_total": devoluciones_total,
-        "devoluciones_num": devoluciones_num,
-        "ganancia_neta": ganancia_neta,
-        "abonos_total": round(sum(p.monto for p in abonos_lista), 2),
-        "num_abonos": len(abonos_lista),
-        "cuadre_caja": cuadre_caja,
-        "desglose_metodos_pago": desglose_metodos,
+        **consolidado,
+        "por_sucursal": por_sucursal,
         "clientes_detalle": detalle_clientes,
         "total_por_cobrar": round(sum(c["saldo_actual"] for c in detalle_clientes if c["saldo_actual"] > 0), 2),
     }

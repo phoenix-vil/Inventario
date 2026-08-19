@@ -695,50 +695,83 @@ async function generarReportePDF(desdeISO, hastaISO, etiquetaPeriodo){
   y += 18;
   linea();
 
-  titulo('Resumen');
-  fila('Ventas totales (' + d.num_ventas + ' ventas)', money(d.total_vendido));
-  fila('Gastos (' + (d.num_gastos || 0) + ')', '-' + money(d.gastos));
-  if(d.devoluciones_num){
-    fila('Devoluciones (' + d.devoluciones_num + ')', '-' + money(d.devoluciones_total));
+  // Salto de página cuando ya no cabe lo que sigue
+  function espacio(alto){
+    if(y + alto > 780){ doc.addPage(); y = 50; }
   }
-  fila('Ganancia después de gastos', money(d.ganancia_neta), true, 12);
-  fila('Cuentas por cobrar', money(d.total_por_cobrar));
-  y += 6;
-  linea();
 
-  titulo('Métodos de pago');
-  // Debajo del efectivo se muestra, en negativo, lo que salió del cajón para
-  // pagar gastos: así el renglón del efectivo no se lee como dinero disponible.
-  const gastosEf = (d.cuadre_caja && d.cuadre_caja.gastos_efectivo) || 0;
-  let pintadoEfectivo = false;
-  if(!d.desglose_metodos_pago.length){
-    doc.setFont('courier','bold'); doc.setFontSize(10);
-    doc.text('Sin ventas en el período', M, y); y += 16;
-  }else{
-    d.desglose_metodos_pago.forEach(function(m){
-      fila((nombresMetodo[m.metodo] || m.metodo) + ' (' + m.cantidad + ')', money(m.total));
-      if(m.metodo === 'efectivo'){
-        pintadoEfectivo = true;
-        if(gastosEf > 0) fila('  Gastos pagados en efectivo', '-' + money(gastosEf));
-      }
-    });
-  }
-  // Puede haber gastos en efectivo en un periodo sin ninguna venta en efectivo
-  if(gastosEf > 0 && !pintadoEfectivo) fila('  Gastos pagados en efectivo', '-' + money(gastosEf));
-  y += 6;
-  linea();
+  // Un bloque completo de cifras: sirve para cada sucursal y para el
+  // consolidado, así los dos se imprimen exactamente igual.
+  function bloque(b, encabezado, esConsolidado){
+    espacio(190);
+    if(encabezado){
+      doc.setFont('courier','bold'); doc.setFontSize(13); doc.setTextColor(0);
+      doc.text(encabezado, M, y); y += 8;
+      doc.setLineDashPattern([], 0);
+      doc.line(M, y, RIGHT, y);
+      y += 18;
+    }
 
-  // Lo que debe haber en el cajón no son solo las ventas en efectivo: los
-  // abonos cobrados en efectivo entran, y los gastos pagados en efectivo salen.
-  if(d.cuadre_caja){
-    const cc = d.cuadre_caja;
-    titulo('Cuadre de caja (efectivo)');
-    fila('Ventas en efectivo', '+' + money(cc.ventas_efectivo));
-    fila('Abonos cobrados en efectivo', '+' + money(cc.abonos_efectivo));
-    fila('Gastos pagados en efectivo', '-' + money(cc.gastos_efectivo));
-    fila('Efectivo neto del periodo', money(cc.esperado_en_caja), true, 12);
+    titulo('Resumen');
+    fila('Ventas totales (' + b.num_ventas + ' ventas)', money(b.total_vendido));
+    fila('Gastos (' + (b.num_gastos || 0) + ')', '-' + money(b.gastos));
+    if(b.devoluciones_num){
+      fila('Devoluciones (' + b.devoluciones_num + ')', '-' + money(b.devoluciones_total));
+    }
+    fila('Ganancia después de gastos', money(b.ganancia_neta), true, 12);
+    // Las cuentas por cobrar son de toda la empresa, no de una sucursal
+    if(esConsolidado) fila('Cuentas por cobrar', money(d.total_por_cobrar));
     y += 6;
     linea();
+
+    titulo('Métodos de pago');
+    // Debajo del efectivo se muestra, en negativo, lo que salió del cajón para
+    // pagar gastos: así el renglón del efectivo no se lee como dinero disponible.
+    const gastosEf = (b.cuadre_caja && b.cuadre_caja.gastos_efectivo) || 0;
+    let pintadoEfectivo = false;
+    if(!b.desglose_metodos_pago.length){
+      doc.setFont('courier','bold'); doc.setFontSize(10);
+      doc.text('Sin ventas en el período', M, y); y += 16;
+    }else{
+      b.desglose_metodos_pago.forEach(function(m){
+        fila((nombresMetodo[m.metodo] || m.metodo) + ' (' + m.cantidad + ')', money(m.total));
+        if(m.metodo === 'efectivo'){
+          pintadoEfectivo = true;
+          if(gastosEf > 0) fila('  Gastos pagados en efectivo', '-' + money(gastosEf));
+        }
+      });
+    }
+    // Puede haber gastos en efectivo en un periodo sin ninguna venta en efectivo
+    if(gastosEf > 0 && !pintadoEfectivo) fila('  Gastos pagados en efectivo', '-' + money(gastosEf));
+    y += 6;
+    linea();
+
+    // Lo que debe haber en el cajón no son solo las ventas en efectivo: los
+    // abonos cobrados en efectivo entran, y los gastos pagados en efectivo salen.
+    if(b.cuadre_caja){
+      const cc = b.cuadre_caja;
+      titulo('Cuadre de caja (efectivo)');
+      fila('Ventas en efectivo', '+' + money(cc.ventas_efectivo));
+      fila('Abonos cobrados en efectivo', '+' + money(cc.abonos_efectivo));
+      fila('Gastos pagados en efectivo', '-' + money(cc.gastos_efectivo));
+      fila('Efectivo neto del periodo', money(cc.esperado_en_caja), true, 12);
+      y += 6;
+      linea();
+    }
+  }
+
+  // Con una sesión sin restricción (Only Enterprises) el reporte va sucursal
+  // por sucursal y cierra con el consolidado; una sesión de sucursal ve un
+  // único bloque, porque todo lo que recibe ya es suyo.
+  const sucursales = d.por_sucursal || [];
+  if(sucursales.length){
+    sucursales.forEach(function(b){
+      const etiqueta = 'Suc. ' + b.sucursal + (b.tiendas && b.tiendas.length ? '  ·  ' + b.tiendas.join(' + ') : '');
+      bloque(b, etiqueta, false);
+    });
+    bloque(d, 'CONSOLIDADO  ·  todas las sucursales', true);
+  }else{
+    bloque(d, null, true);
   }
 
   titulo('Clientes a crédito');
