@@ -718,6 +718,19 @@ async function generarReportePDF(desdeISO, hastaISO, etiquetaPeriodo){
   y += 6;
   linea();
 
+  // Lo que debe haber en el cajón no son solo las ventas en efectivo: los
+  // abonos cobrados en efectivo entran, y los gastos pagados en efectivo salen.
+  if(d.cuadre_caja){
+    const cc = d.cuadre_caja;
+    titulo('Cuadre de caja (efectivo)');
+    fila('Ventas en efectivo', '+' + money(cc.ventas_efectivo));
+    fila('Abonos cobrados en efectivo', '+' + money(cc.abonos_efectivo));
+    fila('Gastos pagados en efectivo', '-' + money(cc.gastos_efectivo));
+    fila('Efectivo neto del periodo', money(cc.esperado_en_caja), true, 12);
+    y += 6;
+    linea();
+  }
+
   titulo('Clientes a crédito');
   if(!d.clientes_detalle.length){
     doc.setFont('courier','bold'); doc.setFontSize(10);

@@ -466,6 +466,19 @@ async function generarReportePDF(desdeISO, hastaISO, etiquetaPeriodo){
   y += 6;
   linea();
 
+  // Mismo bloque que en el reporte del historial: los dos salen del mismo
+  // endpoint y deben decir lo mismo.
+  if(d.cuadre_caja){
+    const cc = d.cuadre_caja;
+    titulo('Cuadre de caja (efectivo)');
+    fila('Ventas en efectivo', '+' + money(cc.ventas_efectivo));
+    fila('Abonos cobrados en efectivo', '+' + money(cc.abonos_efectivo));
+    fila('Gastos pagados en efectivo', '-' + money(cc.gastos_efectivo));
+    fila('Efectivo neto del periodo', money(cc.esperado_en_caja), true, 12);
+    y += 6;
+    linea();
+  }
+
   titulo('Clientes a crédito');
   if(!d.clientes_detalle.length){
     doc.setFont('courier','bold'); doc.setFontSize(10);

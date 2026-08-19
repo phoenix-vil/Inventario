@@ -2322,6 +2322,31 @@ def reporte_completo(
 
     ganancia_neta = round(total_vendido - gastos_total, 2)
 
+    # ─── Cuadre de caja ──────────────────────────────────────────────────────
+    # Lo que debería haber físicamente en el cajón al cerrar no es lo mismo que
+    # "ventas en efectivo": hay que sumar los abonos que se cobraron en efectivo
+    # y restar los gastos que se pagaron sacando dinero de ahí. Sin esas dos
+    # piezas el reporte y el conteo del cajón nunca cuadran.
+    pagos_q = db.query(PagoCredito)
+    if d:
+        pagos_q = pagos_q.filter(PagoCredito.creado_en >= d)
+    if h:
+        pagos_q = pagos_q.filter(PagoCredito.creado_en <= h)
+    if restriccion is not None:
+        pagos_q = pagos_q.filter(PagoCredito.sucursal == restriccion)
+    abonos_lista = pagos_q.all()
+
+    ventas_efectivo = round(sum(v.total for v in ventas if (v.metodo_pago or "efectivo") == "efectivo"), 2)
+    abonos_efectivo = round(sum(p.monto for p in abonos_lista if (p.metodo_pago or "efectivo") == "efectivo"), 2)
+    gastos_efectivo = round(sum(g.monto for g in gastos_lista if (g.metodo_pago or "efectivo") == "efectivo"), 2)
+
+    cuadre_caja = {
+        "ventas_efectivo": ventas_efectivo,
+        "abonos_efectivo": abonos_efectivo,
+        "gastos_efectivo": gastos_efectivo,
+        "esperado_en_caja": round(ventas_efectivo + abonos_efectivo - gastos_efectivo, 2),
+    }
+
     _devs = [x for x in ventas if x.total < 0]
     devoluciones_total = round(sum(abs(x.total) for x in _devs), 2)
     devoluciones_num = len(_devs)
@@ -2359,6 +2384,9 @@ def reporte_completo(
         "devoluciones_total": devoluciones_total,
         "devoluciones_num": devoluciones_num,
         "ganancia_neta": ganancia_neta,
+        "abonos_total": round(sum(p.monto for p in abonos_lista), 2),
+        "num_abonos": len(abonos_lista),
+        "cuadre_caja": cuadre_caja,
         "desglose_metodos_pago": desglose_metodos,
         "clientes_detalle": detalle_clientes,
         "total_por_cobrar": round(sum(c["saldo_actual"] for c in detalle_clientes if c["saldo_actual"] > 0), 2),
