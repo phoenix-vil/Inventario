@@ -42,6 +42,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .rol-badge{display:inline-block;font-size:11px;font-weight:600;padding:1px 8px;border-radius:20px}
 .rol-gerente{background:var(--blue-bg);color:var(--blue)}
 .rol-cajero{background:var(--green-bg);color:var(--green)}
+.rol-oe{background:var(--amber-bg,#faeeda);color:var(--amber,#854f0b)}
 .u-actions{display:flex;gap:6px}
 .u-actions button{height:32px;padding:0 10px;border:0.5px solid var(--border);border-radius:7px;background:transparent;color:var(--text);font-size:12px;cursor:pointer}
 .u-actions button.danger{color:var(--red);border-color:transparent;background:var(--red-bg)}
@@ -122,18 +123,43 @@ async function cargar(){
     document.getElementById('lista-usuarios').innerHTML = us.map(u=>{
       const esYo = u.usuario===sesion.usuario;
       const badge = u.rol==='gerente'?'rol-gerente':'rol-cajero';
+      // El permiso de Only Enterprises solo se ve y se cambia desde una sesión
+      // que ya lo tiene: si no, un gerente de sucursal se lo daría a sí mismo.
+      const insigniaOE = u.acceso_enterprise
+        ? '<span class="rol-badge rol-oe" title="Puede entrar por Only Enterprises">🏢 Only Enterprises</span>'
+        : '';
+      const botonOE = sesionVeTodo()
+        ? `<button onclick="cambiarAccesoOE('${esc(u.usuario)}', ${u.acceso_enterprise ? 'false' : 'true'})" title="Acceso a Only Enterprises">${u.acceso_enterprise ? '🏢 Quitar' : '🏢 Dar'}</button>`
+        : '';
       return `<div class="user-row">
         <div class="u-info">
           <div class="u-name">${esc(u.usuario)} ${esYo?'<span style="font-size:11px;color:var(--text2)">(tú)</span>':''}</div>
-          <div class="u-rol"><span class="rol-badge ${badge}">${esc(u.rol)}</span></div>
+          <div class="u-rol"><span class="rol-badge ${badge}">${esc(u.rol)}</span> ${insigniaOE}</div>
         </div>
         <div class="u-actions">
+          ${botonOE}
           <button onclick="abrirPwd('${esc(u.usuario)}')">🔑 Clave</button>
           ${esYo?'':`<button class="danger" onclick="borrarUsuario('${esc(u.usuario)}')">🗑</button>`}
         </div>
       </div>`;
     }).join('');
   }catch(e){}
+}
+
+async function cambiarAccesoOE(usuario, permitir){
+  const texto = permitir
+    ? `${usuario} podrá entrar por Only Enterprises y ver el negocio completo: todas las sucursales, sus ventas y la administración.`
+    : `${usuario} dejará de poder entrar por Only Enterprises. Sus sesiones abiertas seguirán activas hasta que cierre sesión o caduquen.`;
+  if(!await confirmarPersonalizado(texto, permitir ? '¿Dar acceso completo?' : '¿Quitar el acceso?')) return;
+  try{
+    const r = await authFetch('/api/usuarios/acceso-enterprise', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({usuario: usuario, permitir: permitir})
+    });
+    const data = await r.json();
+    if(!r.ok){ await confirmarPersonalizado(typeof data.detail==='string'?data.detail:'No se pudo cambiar', 'Error'); return; }
+    cargar();
+  }catch(e){ await confirmarPersonalizado('Error de conexión', 'Error'); }
 }
 
 async function crearUsuario(){

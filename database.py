@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, UniqueConstraint
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
@@ -56,6 +56,10 @@ class Usuario(Base):
     password_hash = Column(String, nullable=False)
     salt = Column(String, nullable=False)
     rol = Column(String, default="gerente")  # gerente | cajero
+    # Permiso para entrar por una sucursal sin tienda asignada (Only
+    # Enterprises), que es la que ve el negocio completo y administra sucursales,
+    # tiendas e inventario comparado. Se concede a mano, uno por uno.
+    acceso_enterprise = Column(Boolean, default=False)
     creado_en = Column(DateTime, default=datetime.utcnow)
 
 

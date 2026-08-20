@@ -28,6 +28,7 @@ from schemas import CrearGasto
 from schemas import CrearVentaPendiente
 from schemas import RegistrarCotizacion
 from schemas import RegistrarCorteCaja
+from schemas import AccesoEnterprise
 
 app = FastAPI(title="Inventario", version="1.0.0")
 
@@ -103,6 +104,15 @@ def login(data: Login, db: Session = Depends(get_db)):
     if data.sucursal:
         suc = db.query(Sucursal).filter(Sucursal.nombre == data.sucursal).first()
         tienda_texto = suc.tiendas if suc else None
+
+    # Una sucursal sin tienda asignada (Only Enterprises) no está restringida:
+    # ve el negocio completo y administra sucursales, tiendas e inventario
+    # comparado. Entrar por ahí exige permiso explícito, no basta ser gerente.
+    if data.sucursal and not tienda_texto and not u.acceso_enterprise:
+        raise HTTPException(
+            status_code=403,
+            detail=f"{u.usuario} no tiene acceso a {data.sucursal}. Entra por tu sucursal.",
+        )
 
     token = generar_token()
     db.add(Sesion(token=token, usuario=u.usuario, rol=u.rol, sucursal=data.sucursal, tienda=tienda_texto))
@@ -1570,7 +1580,8 @@ def pos_buscar(q: str = Query(...), sesion: Optional[Sesion] = Depends(sesion_op
 @app.get("/api/usuarios")
 def listar_usuarios(sesion: Sesion = Depends(requerir_gerente), db: Session = Depends(get_db)):
     return [
-        {"id": u.id, "usuario": u.usuario, "rol": u.rol}
+        {"id": u.id, "usuario": u.usuario, "rol": u.rol,
+         "acceso_enterprise": bool(u.acceso_enterprise)}
         for u in db.query(Usuario).order_by(Usuario.usuario).all()
     ]
 
@@ -1598,6 +1609,25 @@ def cambiar_password(data: CambiarPassword, sesion: Sesion = Depends(requerir_ge
     u.salt = s
     db.commit()
     return {"ok": True, "usuario": u.usuario}
+
+
+@app.post("/api/usuarios/acceso-enterprise")
+def cambiar_acceso_enterprise(
+    data: AccesoEnterprise,
+    sesion: Sesion = Depends(requerir_enterprise),
+    db: Session = Depends(get_db),
+):
+    """Concede o quita el acceso a las sucursales sin tienda. Solo puede hacerlo
+    quien ya entró por una de ellas: si no, un gerente de sucursal podría
+    dárselo a sí mismo."""
+    u = db.query(Usuario).filter(Usuario.usuario == data.usuario).first()
+    if not u:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    if u.usuario == sesion.usuario and not data.permitir:
+        raise HTTPException(status_code=400, detail="No puedes quitarte a ti mismo el acceso")
+    u.acceso_enterprise = bool(data.permitir)
+    db.commit()
+    return {"usuario": u.usuario, "acceso_enterprise": bool(u.acceso_enterprise)}
 
 
 @app.delete("/api/usuarios/{usuario}", status_code=204)

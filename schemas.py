@@ -118,6 +118,11 @@ class CrearUsuario(BaseModel):
     rol: str = Field(default="cajero")
 
 
+class AccesoEnterprise(BaseModel):
+    usuario: str = Field(..., min_length=1, max_length=50)
+    permitir: bool
+
+
 class CambiarPassword(BaseModel):
     usuario: str
     password_nuevo: str = Field(..., min_length=4, max_length=100)
