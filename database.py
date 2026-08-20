@@ -23,6 +23,11 @@ class Producto(Base):
     codigo_barras = Column(String, nullable=True, unique=True, index=True)
     precio_venta = Column(Float, nullable=False)
     precio_costo = Column(Float, default=0.0)
+    # Precios por nivel para clientes de mayoreo (El Zar). Nulo = no capturado,
+    # se cobra precio_venta como en el resto de las tiendas.
+    precio_1 = Column(Float, nullable=True)
+    precio_2 = Column(Float, nullable=True)
+    precio_3 = Column(Float, nullable=True)
     stock = Column(Float, default=0)
     stock_minimo = Column(Float, default=5)
     unidad = Column(String, default="pieza")
@@ -118,6 +123,9 @@ class Sucursal(Base):
     # Orden en el que se listan (login, filtros). Mismo número = alfabético.
     # Sirve para bajar al final las sucursales que no son del día a día.
     orden = Column(Integer, default=0)
+    # Si esta sucursal vende con niveles de precio (mayoreo): muestra el campo
+    # en los clientes y aplica su precio en el punto de venta.
+    usa_niveles_precio = Column(Boolean, default=False)
     creado_en = Column(DateTime, default=datetime.utcnow)
 
 
@@ -195,6 +203,11 @@ class Cliente(Base):
     telefono = Column(String, nullable=True)
     nota = Column(String, nullable=True)
     limite_credito = Column(Float, nullable=True)
+    # Sucursal donde se dio de alta: cada una lleva su propia cartera. Nulo =
+    # visible desde cualquier sucursal (como eran todos antes de separarlos).
+    sucursal = Column(String, nullable=True, index=True)
+    # 1, 2 o 3 para los clientes de mayoreo; nulo = precio de mostrador
+    nivel_precio = Column(Integer, nullable=True)
     creado_en = Column(DateTime, default=datetime.utcnow)
 
 

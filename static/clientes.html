@@ -128,6 +128,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <h2 id="cliente-modal-titulo">+ Nuevo cliente</h2>
     <div class="field"><label>Nombre *</label><input type="text" id="cl-nombre" placeholder="Nombre completo"></div>
     <div class="field"><label>Teléfono</label><input type="tel" inputmode="numeric" autocomplete="tel" id="cl-telefono" placeholder="10 dígitos, ej. 5527671391" oninput="limitarTel(this)"></div>
+    <div class="field" id="campo-nivel" style="display:none">
+      <label>Tipo de precio</label>
+      <select id="cl-nivel">
+        <option value="">Mostrador (precio normal)</option>
+        <option value="1">Precio 1</option>
+        <option value="2">Precio 2</option>
+        <option value="3">Precio 3</option>
+      </select>
+    </div>
     <div class="field"><label>Límite de crédito (opcional)</label><input type="number" id="cl-limite" min="0" step="0.01" placeholder="Sin límite"></div>
     <div class="field"><label>Nota</label><textarea id="cl-nota" placeholder="Notas adicionales..."></textarea></div>
     <div class="msg" id="cliente-msg"></div>
@@ -169,7 +178,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="/static/auth.js?v=1786846610"></script>
 <script>
-requireAuth();
+const _sesion = requireAuth();
+// El tipo de precio solo tiene sentido donde se venden niveles de mayoreo
+const usaNiveles = !!(_sesion && _sesion.usa_niveles_precio);
+if(usaNiveles){
+  const campo = document.getElementById('campo-nivel');
+  if(campo) campo.style.display = '';
+}
 
 const _sesionActual = getSesion();
 if(_sesionActual && _sesionActual.rol === 'gerente'){
@@ -254,6 +269,7 @@ function renderClientes(lista){
       <div>
         <div class="cliente-nombre">${esc(c.nombre)}</div>
         ${c.telefono?`<div class="cliente-tel">${esc(formatearTel(c.telefono))}</div>`:''}
+        ${c.nivel_precio?`<div class="cliente-tel" style="color:var(--blue);font-weight:600">Precio ${c.nivel_precio}</div>`:''}
       </div>
       ${saldoHtml}
     </div>`;
@@ -266,6 +282,7 @@ function abrirNuevoCliente(){
   document.getElementById('cliente-modal-titulo').textContent = '+ Nuevo cliente';
   document.getElementById('cl-nombre').value='';
   document.getElementById('cl-telefono').value='';
+  document.getElementById('cl-nivel').value='';
   document.getElementById('cl-limite').value='';
   document.getElementById('cl-nota').value='';
   document.getElementById('cliente-msg').className='msg';
@@ -278,6 +295,7 @@ function abrirEditarCliente(){
   document.getElementById('cl-nombre').value = c ? c.nombre : '';
   document.getElementById('cl-telefono').value = c ? soloDigitosTel(c.telefono) : '';
   document.getElementById('cl-limite').value = c && c.limite_credito ? c.limite_credito : '';
+  document.getElementById('cl-nivel').value = c && c.nivel_precio ? String(c.nivel_precio) : '';
   document.getElementById('cl-nota').value = '';
   document.getElementById('cliente-msg').className='msg';
   cerrarDetalle();
@@ -293,6 +311,8 @@ async function guardarCliente(){
   const nombre = document.getElementById('cl-nombre').value.trim();
   const digitosTel = soloDigitosTel(document.getElementById('cl-telefono').value);
   const telefono = digitosTel || null;
+  const nivelRaw = document.getElementById('cl-nivel').value;
+  const nivel_precio = usaNiveles && nivelRaw ? parseInt(nivelRaw, 10) : null;
   const limiteRaw = document.getElementById('cl-limite').value;
   const limite_credito = limiteRaw ? parseFloat(limiteRaw) : null;
   const nota = document.getElementById('cl-nota').value.trim() || null;
@@ -307,7 +327,7 @@ async function guardarCliente(){
   try{
     const r = await authFetch(url, {
       method: metodo, headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({nombre, telefono, limite_credito, nota})
+      body: JSON.stringify({nombre, telefono, limite_credito, nota, nivel_precio})
     });
     const data = await r.json();
     if(!r.ok){ msg.className='msg error show'; msg.textContent=data.detail||'Error al guardar'; return; }

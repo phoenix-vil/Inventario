@@ -128,7 +128,9 @@ def login(data: Login, db: Session = Depends(get_db)):
     token = generar_token()
     db.add(Sesion(token=token, usuario=u.usuario, rol=u.rol, sucursal=data.sucursal, tienda=tienda_texto))
     db.commit()
-    return {"token": token, "usuario": u.usuario, "rol": u.rol, "sucursal": data.sucursal, "tienda": texto_a_tiendas(tienda_texto)}
+    return {"token": token, "usuario": u.usuario, "rol": u.rol, "sucursal": data.sucursal,
+            "tienda": texto_a_tiendas(tienda_texto),
+            "usa_niveles_precio": bool(suc.usa_niveles_precio) if suc else False}
 
 
 @app.post("/api/logout")
@@ -145,7 +147,9 @@ def info_sesion(authorization: Optional[str] = Header(None), db: Session = Depen
     s = get_sesion(authorization, db)
     if not s:
         raise HTTPException(status_code=401, detail="Sin sesión")
-    return {"usuario": s.usuario, "rol": s.rol, "sucursal": s.sucursal, "tienda": texto_a_tiendas(s.tienda)}
+    suc = db.query(Sucursal).filter(Sucursal.nombre == s.sucursal).first() if s.sucursal else None
+    return {"usuario": s.usuario, "rol": s.rol, "sucursal": s.sucursal, "tienda": texto_a_tiendas(s.tienda),
+            "usa_niveles_precio": bool(suc.usa_niveles_precio) if suc else False}
 
 
 # ─── Sucursales ─────────────────────────────────────────────────────────────
@@ -1564,20 +1568,42 @@ def cotizaciones_page():
     return FileResponse("static/cotizaciones.html")
 
 
+def _cliente_de(db: Session, cliente_id: Optional[int]) -> Optional[Cliente]:
+    return db.query(Cliente).filter(Cliente.id == cliente_id).first() if cliente_id else None
+
+
+def calcular_precio_final(p: Producto, cliente: Optional[Cliente] = None) -> float:
+    """Precio que se le cobra a este cliente por este producto.
+
+    Un precio de mayoreo pactado manda sobre la promoción del momento: si el
+    cliente tiene nivel y el producto lo trae capturado, ese es el precio."""
+    de_mayoreo = precio_para_cliente(p, cliente)
+    if de_mayoreo is not None:
+        return de_mayoreo
+    if p.descuento_pct and p.descuento_pct > 0:
+        ahora = datetime.utcnow()
+        desde_ok = (p.descuento_desde is None) or (p.descuento_desde <= ahora)
+        hasta_ok = (p.descuento_hasta is None) or (p.descuento_hasta >= ahora)
+        if desde_ok and hasta_ok:
+            return round(p.precio_venta * (1 - p.descuento_pct / 100), 2)
+    return p.precio_venta
+
+
 @app.get("/api/pos/producto/{producto_id}")
-def pos_producto(producto_id: int, sesion: Sesion = Depends(requerir_sesion), db: Session = Depends(get_db)):
+def pos_producto(
+    producto_id: int,
+    cliente_id: Optional[int] = Query(None),
+    sesion: Sesion = Depends(requerir_sesion),
+    db: Session = Depends(get_db),
+):
     query = aplicar_filtro_tienda(db.query(Producto).filter(Producto.id == producto_id), sesion)
     p = query.first()
     if not p:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
-    ahora = datetime.utcnow()
-    precio_final = p.precio_venta
-    if p.descuento_pct and p.descuento_pct > 0:
-        desde_ok = (p.descuento_desde is None) or (p.descuento_desde <= ahora)
-        hasta_ok = (p.descuento_hasta is None) or (p.descuento_hasta >= ahora)
-        if desde_ok and hasta_ok:
-            precio_final = round(p.precio_venta * (1 - p.descuento_pct / 100), 2)
+    cliente = _cliente_de(db, cliente_id)
+    precio_final = calcular_precio_final(p, cliente)
     return {
+        "nivel_precio": cliente.nivel_precio if cliente else None,
         "id": p.id,
         "nombre": p.nombre,
         "categoria": p.categoria,
@@ -1591,7 +1617,12 @@ def pos_producto(producto_id: int, sesion: Sesion = Depends(requerir_sesion), db
 
 
 @app.get("/api/pos/buscar")
-def pos_buscar(q: str = Query(...), sesion: Optional[Sesion] = Depends(sesion_opcional), db: Session = Depends(get_db)):
+def pos_buscar(
+    q: str = Query(...),
+    cliente_id: Optional[int] = Query(None),
+    sesion: Optional[Sesion] = Depends(sesion_opcional),
+    db: Session = Depends(get_db),
+):
     query = db.query(Producto).filter(
         or_(
             Producto.nombre.ilike(f"%{q}%"),
@@ -1599,15 +1630,10 @@ def pos_buscar(q: str = Query(...), sesion: Optional[Sesion] = Depends(sesion_op
         )
     )
     rows = aplicar_filtro_tienda(query, sesion).order_by(Producto.nombre).limit(20).all()
-    ahora = datetime.utcnow()
+    cliente = _cliente_de(db, cliente_id)
     resultado = []
     for p in rows:
-        precio_final = p.precio_venta
-        if p.descuento_pct and p.descuento_pct > 0:
-            desde_ok = (p.descuento_desde is None) or (p.descuento_desde <= ahora)
-            hasta_ok = (p.descuento_hasta is None) or (p.descuento_hasta >= ahora)
-            if desde_ok and hasta_ok:
-                precio_final = round(p.precio_venta * (1 - p.descuento_pct / 100), 2)
+        precio_final = calcular_precio_final(p, cliente)
         resultado.append({
             "id": p.id,
             "nombre": p.nombre,
@@ -1620,6 +1646,22 @@ def pos_buscar(q: str = Query(...), sesion: Optional[Sesion] = Depends(sesion_op
             "codigo_barras": p.codigo_barras,
         })
     return resultado
+
+
+@app.post("/api/pos/precios-cliente")
+def precios_para_cliente(data: dict = Body(...), sesion: Sesion = Depends(requerir_sesion), db: Session = Depends(get_db)):
+    """Precios que le tocan a un cliente para los productos que ya están en el
+    carrito. Se usa al elegir o quitar el cliente a media venta, para no tener
+    que volver a capturar todo."""
+    cliente = _cliente_de(db, data.get("cliente_id"))
+    ids = [i for i in (data.get("producto_ids") or []) if isinstance(i, int)]
+    if not ids:
+        return {"nivel_precio": cliente.nivel_precio if cliente else None, "precios": {}}
+    productos = db.query(Producto).filter(Producto.id.in_(ids)).all()
+    return {
+        "nivel_precio": cliente.nivel_precio if cliente else None,
+        "precios": {str(p.id): calcular_precio_final(p, cliente) for p in productos},
+    }
 
 
 # ─── Gestión de usuarios (solo gerentes) ────────────────────────────────────
@@ -2269,6 +2311,19 @@ def gastos_page():
 
 
 # ─── Clientes y ventas a credito ────────────────────────────────────────────
+def precio_para_cliente(p: Producto, cliente: Optional[Cliente]) -> Optional[float]:
+    """Precio de mayoreo que le toca a un cliente, o None si no aplica.
+
+    Solo cuenta si el cliente trae nivel y el producto tiene capturado ese
+    nivel; en cualquier otro caso se cobra el precio de siempre. Así las tiendas
+    que no usan niveles no cambian de comportamiento."""
+    if cliente is None or not cliente.nivel_precio:
+        return None
+    precio = {1: p.precio_1, 2: p.precio_2, 3: p.precio_3}.get(cliente.nivel_precio)
+    return precio if precio and precio > 0 else None
+
+
+
 def normalizar_telefono(valor: Optional[str]) -> Optional[str]:
     """Deja el teléfono en 10 dígitos pelados, o lanza 400 si no es válido.
 
@@ -2315,16 +2370,22 @@ def _saldo_cliente(db, cliente_id):
 
 @app.post("/api/clientes", status_code=201)
 def crear_cliente(data: CrearCliente, sesion: Sesion = Depends(requerir_sesion), db: Session = Depends(get_db)):
+    if data.nivel_precio is not None and data.nivel_precio not in (1, 2, 3):
+        raise HTTPException(status_code=400, detail="El nivel de precio debe ser 1, 2 o 3")
     c = Cliente(
         nombre=data.nombre.strip(),
         telefono=normalizar_telefono(data.telefono),
         nota=data.nota,
         limite_credito=data.limite_credito,
+        # Cada sucursal lleva su propia cartera; queda con la de quien lo da de alta
+        sucursal=sesion.sucursal,
+        nivel_precio=data.nivel_precio,
     )
     db.add(c)
     db.commit()
     db.refresh(c)
-    return {"id": c.id, "nombre": c.nombre, "telefono": c.telefono, "limite_credito": c.limite_credito, "saldo": 0.0}
+    return {"id": c.id, "nombre": c.nombre, "telefono": c.telefono, "limite_credito": c.limite_credito,
+            "sucursal": c.sucursal, "nivel_precio": c.nivel_precio, "saldo": 0.0}
 
 
 @app.get("/api/clientes")
@@ -2332,12 +2393,19 @@ def listar_clientes(q: Optional[str] = Query(None), sesion: Sesion = Depends(req
     query = db.query(Cliente)
     if q:
         query = query.filter(Cliente.nombre.ilike(f"%{q}%"))
+    # Cada sucursal ve su cartera, más los clientes viejos que no tienen
+    # sucursal asignada. Sin restricción (Only Enterprises) se ven todos.
+    restriccion = sucursal_restriccion(sesion)
+    if restriccion is not None:
+        query = query.filter(or_(Cliente.sucursal == restriccion, Cliente.sucursal.is_(None)))
     clientes = query.order_by(Cliente.nombre).all()
     return [{
         "id": c.id,
         "nombre": c.nombre,
         "telefono": c.telefono,
         "limite_credito": c.limite_credito,
+        "sucursal": c.sucursal,
+        "nivel_precio": c.nivel_precio,
         "saldo": _saldo_cliente(db, c.id),
     } for c in clientes]
 
@@ -2419,6 +2487,8 @@ def detalle_cliente(cliente_id: int, sesion: Sesion = Depends(requerir_sesion), 
         "telefono": c.telefono,
         "nota": c.nota,
         "limite_credito": c.limite_credito,
+        "sucursal": c.sucursal,
+        "nivel_precio": c.nivel_precio,
         "saldo": _saldo_cliente(db, cliente_id),
         "ventas": [{
             "id": v.id, "total": v.total, "fecha": v.creado_en.isoformat() + "Z",
@@ -2437,10 +2507,13 @@ def editar_cliente(cliente_id: int, data: CrearCliente, sesion: Sesion = Depends
     c = db.query(Cliente).filter(Cliente.id == cliente_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    if data.nivel_precio is not None and data.nivel_precio not in (1, 2, 3):
+        raise HTTPException(status_code=400, detail="El nivel de precio debe ser 1, 2 o 3")
     c.nombre = data.nombre.strip()
     c.telefono = normalizar_telefono(data.telefono)
     c.nota = data.nota
     c.limite_credito = data.limite_credito
+    c.nivel_precio = data.nivel_precio
     db.commit()
     return {"ok": True}
 

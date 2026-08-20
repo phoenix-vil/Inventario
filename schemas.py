@@ -10,6 +10,9 @@ class ProductoBase(BaseModel):
     codigo_barras: Optional[str] = Field(None, max_length=64)
     precio_venta: float = Field(..., gt=0)
     precio_costo: float = Field(default=0.0, ge=0)
+    precio_1: Optional[float] = Field(None, ge=0)  # niveles de mayoreo; nulo = no aplica
+    precio_2: Optional[float] = Field(None, ge=0)
+    precio_3: Optional[float] = Field(None, ge=0)
     stock: float = Field(default=0)
     stock_minimo: float = Field(default=5, ge=0)
     unidad: str = Field(default="pieza", max_length=50)
@@ -187,6 +190,7 @@ class CrearCliente(BaseModel):
     telefono: Optional[str] = Field(None, max_length=30)
     nota: Optional[str] = Field(None, max_length=500)
     limite_credito: Optional[float] = Field(None, ge=0)
+    nivel_precio: Optional[int] = Field(None, ge=1, le=3)  # mayoreo: 1, 2 o 3
 
 
 class CrearPagoCredito(BaseModel):

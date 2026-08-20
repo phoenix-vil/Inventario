@@ -202,6 +202,14 @@ button.danger:hover{background:var(--red-bg)}
       <div class="field"><label id="lbl-precio">Precio venta ($) *</label><input id="f-precio" type="number" min="0" step="0.01" placeholder="0.00"></div>
       <div class="field"><label>Costo ($)</label><input id="f-costo" type="number" min="0" step="0.01" placeholder="0.00"></div>
     </div>
+    <!-- Precios de mayoreo: se cobran al cliente que tenga ese nivel asignado.
+         En blanco = ese nivel paga el precio de venta normal. -->
+    <div class="field-row">
+      <div class="field"><label>Precio 1 ($)</label><input id="f-precio1" type="number" min="0" step="0.01" placeholder="—"></div>
+      <div class="field"><label>Precio 2 ($)</label><input id="f-precio2" type="number" min="0" step="0.01" placeholder="—"></div>
+      <div class="field"><label>Precio 3 ($)</label><input id="f-precio3" type="number" min="0" step="0.01" placeholder="—"></div>
+    </div>
+    <div class="field" style="margin-top:-6px"><div style="font-size:12px;color:var(--text2)">Precios para clientes de mayoreo. En blanco, ese nivel paga el precio de venta.</div></div>
     <div class="field-row">
       <div class="field"><label id="lbl-stock">Stock actual</label><input id="f-stock" type="number" min="0" step="0.001" placeholder="0"></div>
       <div class="field"><label>Stock mínimo (alerta)</label><input id="f-minimo" type="number" min="0" step="0.001" placeholder="5"></div>
@@ -463,6 +471,9 @@ function abrirModal(id = null) {
     document.getElementById('f-marca').value = p.marca || '';
     document.getElementById('f-codigo').value = p.codigo_barras || '';
     document.getElementById('f-precio').value = p.precio_venta;
+    document.getElementById('f-precio1').value = p.precio_1 == null ? '' : p.precio_1;
+    document.getElementById('f-precio2').value = p.precio_2 == null ? '' : p.precio_2;
+    document.getElementById('f-precio3').value = p.precio_3 == null ? '' : p.precio_3;
     document.getElementById('f-costo').value = p.precio_costo || '';
     document.getElementById('f-stock').value = p.stock;
     document.getElementById('f-minimo').value = p.stock_minimo;
@@ -530,6 +541,8 @@ async function guardar() {
   const stock_minimo = parseFloat(document.getElementById('f-minimo').value) || 5;
   const unidad = document.getElementById('f-unidad').value;
   const vendido_por_peso = document.getElementById('f-por-peso').checked;
+  const _n = id => { const v = document.getElementById(id).value; return v === '' ? null : parseFloat(v); };
+  const precio_1 = _n('f-precio1'), precio_2 = _n('f-precio2'), precio_3 = _n('f-precio3');
   const descuento_pct = parseFloat(document.getElementById('f-descuento').value) || 0;
   const descuentoHastaVal = document.getElementById('f-descuento-hasta').value;
   const descuento_hasta = descuentoHastaVal ? descuentoHastaVal + 'T23:59:59' : null;
@@ -538,7 +551,7 @@ async function guardar() {
   if (!nombre || !categoria || isNaN(precio_venta)) {
     toast('Completa los campos obligatorios (*)', true); return;
   }
-  const body = JSON.stringify({ nombre, categoria, marca, codigo_barras, precio_venta, precio_costo, stock, stock_minimo, unidad, vendido_por_peso, descuento_pct, descuento_hasta, imagen_url });
+  const body = JSON.stringify({ nombre, categoria, marca, codigo_barras, precio_venta, precio_costo, precio_1, precio_2, precio_3, stock, stock_minimo, unidad, vendido_por_peso, descuento_pct, descuento_hasta, imagen_url });
   try {
     if (editandoId) {
       await fetchJSON(`/api/productos/${editandoId}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body });

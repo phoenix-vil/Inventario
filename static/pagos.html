@@ -271,6 +271,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <label>Cliente *</label>
         <input type="text" id="c-cliente-buscar" placeholder="Buscar cliente por nombre..." autocomplete="off" oninput="buscarClienteCredito()">
         <div id="c-cliente-resultados" style="margin-top:6px"></div>
+        <div id="c-aviso-nivel" style="display:none;font-size:12px;font-weight:600;color:var(--blue);margin-top:6px"></div>
         <div id="c-cliente-seleccionado" style="display:none;margin-top:8px;padding:.625rem .875rem;background:var(--blue-bg);border-radius:8px;font-size:13px;color:var(--blue);font-weight:600"></div>
       </div>
       <button type="button" onclick="mostrarNuevoCliente()" style="background:none;border:none;color:var(--blue);font-size:13px;cursor:pointer;padding:4px 0;text-decoration:underline">+ Crear cliente nuevo</button>
@@ -836,6 +837,36 @@ function seleccionarCliente(id, nombre, saldo){
   sel.style.display='block';
   const saldoTxt = saldo>0 ? ` (debe actualmente ${money(saldo)})` : '';
   sel.textContent = '👤 ' + nombre + saldoTxt;
+  aplicarPreciosCliente(id);
+}
+
+// Al elegir (o quitar) un cliente con precio de mayoreo hay que recalcular lo
+// que ya está en el carrito: si no, la venta se cobraría a precio de
+// mostrador solo por el orden en que se capturó.
+async function aplicarPreciosCliente(clienteId){
+  if(!sesionPOS || !sesionPOS.usa_niveles_precio) return;
+  const ids = carrito.filter(l => !l.personalizado && l.id > 0).map(l => l.id);
+  try{
+    const r = await authFetch('/api/pos/precios-cliente', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({cliente_id: clienteId || null, producto_ids: ids})
+    });
+    if(!r.ok) return;
+    const d = await r.json();
+    let cambiadas = 0;
+    carrito.forEach(function(l){
+      const nuevo = d.precios[String(l.id)];
+      if(nuevo != null && Math.abs(nuevo - l.precio) > 0.005){ l.precio = nuevo; cambiadas++; }
+    });
+    const aviso = document.getElementById('c-aviso-nivel');
+    if(aviso){
+      aviso.textContent = d.nivel_precio
+        ? 'Precio ' + d.nivel_precio + ' aplicado' + (cambiadas ? ' a ' + cambiadas + ' artículo(s)' : '')
+        : (cambiadas ? 'Precios de mostrador restaurados' : '');
+      aviso.style.display = aviso.textContent ? 'block' : 'none';
+    }
+    if(cambiadas){ renderCarrito(); actualizarTotales(); if(document.getElementById('cobro-modal').classList.contains('open')) renderResumenCobro(); }
+  }catch(e){}
 }
 
 function mostrarNuevoCliente(){
@@ -868,8 +899,7 @@ async function crearClienteRapido(){
   }catch(e){ alert('Error de conexión'); }
 }
 
-function abrirCobro(){
-  if(!carrito.length)return;
+function renderResumenCobro(){
   const subtotal=calcSubtotal();
   const total=subtotal*(1-descuentoExtra/100);
   let html='<div class="ticket">';
@@ -883,6 +913,11 @@ function abrirCobro(){
   }
   html+=`<div class="tk-line tk-total"><span>TOTAL</span><span>${money(total)}</span></div></div>`;
   document.getElementById('cobro-resumen').innerHTML=html;
+}
+
+function abrirCobro(){
+  if(!carrito.length)return;
+  renderResumenCobro();
   document.getElementById('c-pago').value='';
   document.getElementById('c-cambio').textContent=money(0);
   document.getElementById('c-tpv-ref').value='';
