@@ -115,6 +115,9 @@ class Sucursal(Base):
     # Usuarios que pueden iniciar sesión aquí, separados por coma. Vacío = sin
     # restricción, cualquiera puede entrar (que es como funcionan las demás).
     usuarios_permitidos = Column(String, nullable=True)
+    # Orden en el que se listan (login, filtros). Mismo número = alfabético.
+    # Sirve para bajar al final las sucursales que no son del día a día.
+    orden = Column(Integer, default=0)
     creado_en = Column(DateTime, default=datetime.utcnow)
 
 

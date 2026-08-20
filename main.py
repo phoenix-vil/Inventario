@@ -220,7 +220,7 @@ def sucursales_visibles(db: Session, sesion: Optional[Sesion]) -> Optional[List[
         return None
     mias = set(texto_a_tiendas(sesion.tienda))
     nombres = [
-        s.nombre for s in db.query(Sucursal).order_by(Sucursal.nombre).all()
+        s.nombre for s in db.query(Sucursal).order_by(Sucursal.orden, Sucursal.nombre).all()
         if mias & set(texto_a_tiendas(s.tiendas))
     ]
     if sesion.sucursal and sesion.sucursal not in nombres:
@@ -251,7 +251,7 @@ def listar_sucursales(sesion: Optional[Sesion] = Depends(sesion_opcional), db: S
     Enterprises, que es quien administra eso; para el resto sería decirle a
     cualquiera qué usuarios existen y dónde entran."""
     administra = sesion is not None and sesion.rol == "gerente" and not sesion.tienda
-    rows = db.query(Sucursal).order_by(Sucursal.nombre).all()
+    rows = db.query(Sucursal).order_by(Sucursal.orden, Sucursal.nombre).all()
     salida = []
     for s in rows:
         item = {"id": s.id, "nombre": s.nombre, "tiendas": texto_a_tiendas(s.tiendas)}
@@ -1047,7 +1047,7 @@ def inventario_por_sucursal(sesion: Sesion = Depends(requerir_enterprise), db: S
     productos = db.query(Producto).order_by(Producto.categoria, Producto.nombre).all()
     ventas = db.query(Venta).all()
     asignaciones = db.query(StockSucursal).all()
-    sucursales_reg = [s.nombre for s in db.query(Sucursal).order_by(Sucursal.nombre).all()]
+    sucursales_reg = [s.nombre for s in db.query(Sucursal).order_by(Sucursal.orden, Sucursal.nombre).all()]
 
     # Limpiar asignaciones huérfanas de sucursales ya eliminadas
     for a in asignaciones:
@@ -1128,7 +1128,7 @@ def buscar_en_sucursales(
 
     visibles = sucursales_visibles(db, sesion)
     if visibles is None:
-        visibles = [s.nombre for s in db.query(Sucursal).order_by(Sucursal.nombre).all()]
+        visibles = [s.nombre for s in db.query(Sucursal).order_by(Sucursal.orden, Sucursal.nombre).all()]
 
     productos = db.query(Producto).filter(
         or_(
