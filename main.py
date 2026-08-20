@@ -2393,11 +2393,18 @@ def listar_clientes(q: Optional[str] = Query(None), sesion: Sesion = Depends(req
     query = db.query(Cliente)
     if q:
         query = query.filter(Cliente.nombre.ilike(f"%{q}%"))
-    # Cada sucursal ve su cartera, más los clientes viejos que no tienen
-    # sucursal asignada. Sin restricción (Only Enterprises) se ven todos.
+    # La cartera general (cliente.sucursal es NULL) es común a casi todas las
+    # sucursales. La excepción son las que venden con niveles de precio (El
+    # Zar): esas llevan su propia cartera aparte, sin mezclarse con la general
+    # —son clientes de mayoreo con condiciones distintas—, así que solo ven los
+    # suyos. Sin restricción (Only Enterprises) se ven todos.
     restriccion = sucursal_restriccion(sesion)
     if restriccion is not None:
-        query = query.filter(or_(Cliente.sucursal == restriccion, Cliente.sucursal.is_(None)))
+        suc_actual = db.query(Sucursal).filter(Sucursal.nombre == restriccion).first()
+        if suc_actual and suc_actual.usa_niveles_precio:
+            query = query.filter(Cliente.sucursal == restriccion)
+        else:
+            query = query.filter(or_(Cliente.sucursal == restriccion, Cliente.sucursal.is_(None)))
     clientes = query.order_by(Cliente.nombre).all()
     return [{
         "id": c.id,
@@ -2678,12 +2685,17 @@ def reporte_completo(
         monto_pagos_periodo = round(sum(p.monto for p in pagos_q.all()), 2)
 
         if saldo > 0 or monto_ventas_credito > 0 or monto_pagos_periodo > 0:
+            # Un cliente puede comprar en más de una sucursal (todas comparten
+            # cartera salvo El Zar): en el consolidado de Only Enterprises
+            # interesa saber en cuáles, no solo el total.
+            sucursales_compra = sorted({v.sucursal for v in ventas_credito_periodo if v.sucursal})
             detalle_clientes.append({
                 "cliente_id": c.id,
                 "nombre": c.nombre,
                 "saldo_actual": round(saldo, 2),
                 "ventas_credito_periodo": monto_ventas_credito,
                 "pagos_periodo": monto_pagos_periodo,
+                "sucursales": sucursales_compra,
             })
     detalle_clientes = sorted(detalle_clientes, key=lambda x: x["saldo_actual"], reverse=True)
 

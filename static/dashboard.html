@@ -583,6 +583,14 @@ async function generarReportePDF(desdeISO, hastaISO, etiquetaPeriodo){
       doc.setFont('courier','bold');
       doc.text(money(c.saldo_actual), c4, y, {align:'right'});
       y += 14;
+      // Un cliente puede haber comprado en más de una sucursal en el periodo:
+      // solo tiene sentido en el consolidado, donde se juntan todas.
+      if(c.sucursales && c.sucursales.length){
+        doc.setFont('courier','normal'); doc.setFontSize(8); doc.setTextColor(110,110,105);
+        doc.text('Suc. ' + c.sucursales.join(', '), c1, y);
+        doc.setTextColor(0);
+        y += 12;
+      }
     });
   }
 
