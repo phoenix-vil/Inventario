@@ -448,10 +448,43 @@ async function generarReportePDF(desdeISO, hastaISO, etiquetaPeriodo){
     if(y + alto > 780){ doc.addPage(); y = 50; }
   }
 
+  // Los logos de cada bloque se cargan por adelantado: dibujarlos exige tenerlos
+  // ya en memoria, y jsPDF no espera promesas.
+  const logosListos = {};
+  async function precargar(urls){
+    for(const src of urls){
+      if(logosListos[src]) continue;
+      try{
+        const datos = await cargarImagenBase64(src, 360);
+        const dim = await medirImagen(datos);
+        logosListos[src] = { datos: datos, prop: dim.w / dim.h };
+      }catch(e){ /* si falla uno, el bloque se imprime sin él */ }
+    }
+  }
+
+  // Dibuja centrados el logo o los logos de una sucursal (Imprenta trae dos).
+  function pintarLogos(tiendas, alto){
+    const urls = logosActivos(tiendas).filter(function(u){ return logosListos[u]; });
+    if(!urls.length) return;
+    const anchos = urls.map(function(u){ return alto * logosListos[u].prop; });
+    const espacioEntre = 14;
+    const total = anchos.reduce(function(a, b){ return a + b; }, 0) + espacioEntre * (urls.length - 1);
+    let x = (W - total) / 2;
+    urls.forEach(function(u, i){
+      doc.addImage(logosListos[u].datos, 'PNG', x, y, anchos[i], alto);
+      x += anchos[i] + espacioEntre;
+    });
+    y += alto + 12;
+  }
+
   // Un bloque completo de cifras: sirve para cada sucursal y para el
   // consolidado, así los dos se imprimen exactamente igual.
-  function bloque(b, encabezado, esConsolidado){
-    espacio(190);
+  function bloque(b, encabezado, esConsolidado, opciones){
+    const o = opciones || {};
+    if(o.hojaNueva){ doc.addPage(); y = 50; } else { espacio(190); }
+    // El logo solo se repite cuando hay varios bloques; en el reporte de una
+    // sola sucursal ya está el del encabezado de la primera hoja.
+    if(o.conLogo) pintarLogos(esConsolidado ? [] : b.tiendas, 64);
     if(encabezado){
       doc.setFont('courier','bold'); doc.setFontSize(13); doc.setTextColor(0);
       doc.text(encabezado, M, y); y += 8;
@@ -513,13 +546,18 @@ async function generarReportePDF(desdeISO, hastaISO, etiquetaPeriodo){
   // único bloque, porque todo lo que recibe ya es suyo.
   const sucursales = d.por_sucursal || [];
   if(sucursales.length){
-    sucursales.forEach(function(b){
+    // Cada sucursal en su propia hoja, para poder repartirlas por separado
+    await precargar(sucursales.reduce(function(acc, b){
+      return acc.concat(logosActivos(b.tiendas));
+    }, ['/static/logo.png']));
+    sucursales.forEach(function(b, i){
       const etiqueta = 'Suc. ' + b.sucursal + (b.tiendas && b.tiendas.length ? '  ·  ' + b.tiendas.join(' + ') : '');
-      bloque(b, etiqueta, false);
+      // La primera sucursal continúa bajo el encabezado; el resto, hoja nueva
+      bloque(b, etiqueta, false, { hojaNueva: i > 0, conLogo: true });
     });
-    bloque(d, 'CONSOLIDADO  ·  todas las sucursales', true);
+    bloque(d, 'CONSOLIDADO  ·  todas las sucursales', true, { hojaNueva: true, conLogo: true });
   }else{
-    bloque(d, null, true);
+    bloque(d, null, true, {});
   }
 
   titulo('Clientes a crédito');
