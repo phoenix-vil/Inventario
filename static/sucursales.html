@@ -86,6 +86,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="tiendas-check" id="ns-tiendas"></div>
       <div class="field-hint">Marca una o más (ej. Imprenta = Only Reef + Only Garden). Sin marcar ninguna, la sucursal queda sin tienda asignada por ahora.</div>
     </div>
+    <div class="field">
+      <label>¿Quién puede entrar aquí?</label>
+      <div class="tiendas-check" id="ns-usuarios"></div>
+      <div class="field-hint">Sin marcar a nadie, cualquier usuario puede iniciar sesión en esta sucursal. Marcando a alguien, solo esas personas podrán.</div>
+    </div>
     <button class="btn" onclick="crearSucursal()">Agregar sucursal</button>
     <div class="msg" id="sucursal-msg"></div>
   </div>
@@ -99,7 +104,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="field">
       <label>¿A qué tienda(s) pertenece?</label>
       <div class="tiendas-check" id="ed-tiendas"></div>
-      <div class="field-hint">Sin marcar ninguna, la sucursal queda sin tienda asignada (así debe quedar la sucursal de Dirección General, para ver las 5 tiendas sin restricción).</div>
+      <div class="field-hint">Sin marcar ninguna, la sucursal queda sin tienda asignada (así debe quedar Only Enterprises, para ver todas las tiendas sin restricción).</div>
+    </div>
+    <div class="field">
+      <label>¿Quién puede entrar aquí?</label>
+      <div class="tiendas-check" id="ed-usuarios"></div>
+      <div class="field-hint">Sin marcar a nadie, cualquier usuario puede iniciar sesión en esta sucursal.</div>
     </div>
     <div class="msg" id="editar-msg"></div>
     <div class="modal-footer">
@@ -128,6 +138,24 @@ function leerCheckboxes(contId){
   return [...document.querySelectorAll(`#${contId} input:checked`)].map(i=>i.value);
 }
 
+let usuariosDisponibles = [];
+
+function pintarUsuarios(contId, seleccionados){
+  const cont = document.getElementById(contId);
+  if(!cont) return;
+  cont.innerHTML = usuariosDisponibles.map(u =>
+    `<label><input type="checkbox" value="${esc(u.usuario)}" ${seleccionados.includes(u.usuario)?'checked':''}> ${esc(u.usuario)} <span style="color:var(--text2);font-size:11px">${esc(u.rol)}</span></label>`
+  ).join('') || '<span class="field-hint">No hay usuarios registrados</span>';
+}
+
+async function cargarUsuarios(){
+  try{
+    const r = await authFetch('/api/usuarios');
+    if(r.ok) usuariosDisponibles = await r.json();
+    pintarUsuarios('ns-usuarios', []);
+  }catch(e){}
+}
+
 async function cargarTiendas(){
   try{
     const r = await fetch('/api/tiendas');
@@ -138,7 +166,7 @@ async function cargarTiendas(){
 
 async function cargarSucursales(){
   try{
-    const r = await fetch('/api/sucursales');
+    const r = await authFetch('/api/sucursales');
     const sucursales = await r.json();
     const cont = document.getElementById('lista-sucursales');
     if(!sucursales.length){cont.innerHTML='<div class="user-row"><div class="u-info">Sin sucursales registradas</div></div>';return;}
@@ -146,8 +174,11 @@ async function cargarSucursales(){
       const tiendasHtml = s.tiendas && s.tiendas.length
         ? s.tiendas.map(t=>`<span class="tienda-badge">${esc(t)}</span>`).join('')
         : `<span class="tienda-badge sin">Sin tienda asignada</span>`;
+      const accesoHtml = s.usuarios_permitidos && s.usuarios_permitidos.length
+        ? `<span class="tienda-badge sin" title="Solo estos usuarios pueden entrar">🔒 ${s.usuarios_permitidos.map(esc).join(', ')}</span>`
+        : '';
       return `<div class="user-row">
-      <div class="u-info"><div class="u-name">${esc(s.nombre)}</div><div class="u-tiendas">${tiendasHtml}</div></div>
+      <div class="u-info"><div class="u-name">${esc(s.nombre)}</div><div class="u-tiendas">${tiendasHtml}${accesoHtml}</div></div>
       <div class="u-actions">
         <button onclick='abrirEditar(${JSON.stringify(s).replace(/'/g,"&#39;")})'>✏️</button>
         <button class="danger" onclick="borrarSucursal(${s.id},'${esc(s.nombre)}')">🗑</button>
@@ -161,14 +192,16 @@ async function crearSucursal(){
   const msg = document.getElementById('sucursal-msg');
   const nombre = document.getElementById('ns-nombre').value.trim();
   const tiendas = leerCheckboxes('ns-tiendas');
+  const usuarios_permitidos = leerCheckboxes('ns-usuarios');
   if(!nombre){msg.className='msg error show';msg.textContent='Escribe un nombre para la sucursal';return;}
   try{
-    const r = await authFetch('/api/sucursales',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre,tiendas})});
+    const r = await authFetch('/api/sucursales',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre,tiendas,usuarios_permitidos})});
     const data = await r.json();
     if(!r.ok){msg.className='msg error show';msg.textContent=data.detail||'Error';return;}
     msg.className='msg ok show';msg.textContent=`Sucursal "${data.nombre}" agregada.`;
     document.getElementById('ns-nombre').value='';
     pintarCheckboxes('ns-tiendas', []);
+    pintarUsuarios('ns-usuarios', []);
     cargarSucursales();
   }catch(e){msg.className='msg error show';msg.textContent='Error de conexión';}
 }
@@ -188,6 +221,7 @@ function abrirEditar(s){
   document.getElementById('editar-titulo').textContent = `Editar ${s.nombre}`;
   document.getElementById('ed-nombre').value = s.nombre;
   pintarCheckboxes('ed-tiendas', s.tiendas || []);
+  pintarUsuarios('ed-usuarios', s.usuarios_permitidos || []);
   document.getElementById('editar-msg').className='msg';
   document.getElementById('editar-modal').classList.add('open');
 }
@@ -197,10 +231,11 @@ async function guardarEditar(){
   const msg = document.getElementById('editar-msg');
   const nombre = document.getElementById('ed-nombre').value.trim();
   const tiendas = leerCheckboxes('ed-tiendas');
+  const usuarios_permitidos = leerCheckboxes('ed-usuarios');
   if(!nombre){msg.className='msg error show';msg.textContent='El nombre no puede estar vacío';return;}
   try{
     const r = await authFetch(`/api/sucursales/${sucursalEditando}`,{
-      method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre,tiendas})
+      method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre,tiendas,usuarios_permitidos})
     });
     const data = await r.json();
     if(!r.ok){msg.className='msg error show';msg.textContent=data.detail||'Error';return;}
@@ -211,7 +246,7 @@ async function guardarEditar(){
 
 document.addEventListener('keydown',e=>{if(e.key==='Escape')cerrarEditar();});
 
-cargarTiendas().then(cargarSucursales);
+Promise.all([cargarTiendas(), cargarUsuarios()]).then(cargarSucursales);
 </script>
 </body>
 </html>

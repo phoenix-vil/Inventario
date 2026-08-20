@@ -101,6 +101,7 @@ def login(data: Login, db: Session = Depends(get_db)):
     # La(s) tienda(s) activa(s) de la sesión son las de la sucursal elegida, todas a la
     # vez (ej. Imprenta = Only Reef + Only Garden simultáneo, no hay que elegir una).
     tienda_texto = None
+    suc = None
     if data.sucursal:
         suc = db.query(Sucursal).filter(Sucursal.nombre == data.sucursal).first()
         tienda_texto = suc.tiendas if suc else None
@@ -113,6 +114,16 @@ def login(data: Login, db: Session = Depends(get_db)):
             status_code=403,
             detail=f"{u.usuario} no tiene acceso a {data.sucursal}. Entra por tu sucursal.",
         )
+
+    # Algunas sucursales limitan quién puede entrar. Sin lista, entra cualquiera:
+    # así las que ya existían siguen funcionando igual que siempre.
+    if data.sucursal and suc is not None:
+        permitidos = texto_a_usuarios(suc.usuarios_permitidos)
+        if permitidos and u.usuario not in permitidos:
+            raise HTTPException(
+                status_code=403,
+                detail=f"{u.usuario} no tiene acceso a {data.sucursal}.",
+            )
 
     token = generar_token()
     db.add(Sesion(token=token, usuario=u.usuario, rol=u.rol, sucursal=data.sucursal, tienda=tienda_texto))
@@ -148,6 +159,20 @@ def tiendas_a_texto(lista: Optional[List[str]]) -> Optional[str]:
 
 def texto_a_tiendas(texto: Optional[str]) -> List[str]:
     return [t for t in (texto or "").split(",") if t]
+
+
+def texto_a_usuarios(texto: Optional[str]) -> List[str]:
+    """Misma convención que las tiendas: nombres separados por coma."""
+    return [u.strip() for u in (texto or "").split(",") if u.strip()]
+
+
+def validar_usuarios(lista: Optional[List[str]], db: Session):
+    if not lista:
+        return
+    existentes = {u.usuario for u in db.query(Usuario).all()}
+    desconocidos = [u for u in lista if u.strip() and u.strip() not in existentes]
+    if desconocidos:
+        raise HTTPException(status_code=400, detail="Usuarios desconocidos: " + ", ".join(desconocidos))
 
 
 def validar_tiendas(lista: Optional[List[str]], db: Session):
@@ -219,10 +244,21 @@ def verificar_venta_visible(db: Session, sesion: Optional[Sesion], v: Venta):
 
 
 @app.get("/api/sucursales")
-def listar_sucursales(db: Session = Depends(get_db)):
-    """Público (sin sesión) para que el login pueda mostrar la lista."""
+def listar_sucursales(sesion: Optional[Sesion] = Depends(sesion_opcional), db: Session = Depends(get_db)):
+    """Público (sin sesión) para que el login pueda mostrar la lista.
+
+    Quién puede entrar en cada sucursal solo se revela a una sesión de Only
+    Enterprises, que es quien administra eso; para el resto sería decirle a
+    cualquiera qué usuarios existen y dónde entran."""
+    administra = sesion is not None and sesion.rol == "gerente" and not sesion.tienda
     rows = db.query(Sucursal).order_by(Sucursal.nombre).all()
-    return [{"id": s.id, "nombre": s.nombre, "tiendas": texto_a_tiendas(s.tiendas)} for s in rows]
+    salida = []
+    for s in rows:
+        item = {"id": s.id, "nombre": s.nombre, "tiendas": texto_a_tiendas(s.tiendas)}
+        if administra:
+            item["usuarios_permitidos"] = texto_a_usuarios(s.usuarios_permitidos)
+        salida.append(item)
+    return salida
 
 
 @app.post("/api/sucursales", status_code=201)
@@ -233,11 +269,17 @@ def crear_sucursal(data: CrearSucursal, sesion: Sesion = Depends(requerir_enterp
     if db.query(Sucursal).filter(Sucursal.nombre == nombre).first():
         raise HTTPException(status_code=409, detail="Esa sucursal ya existe")
     validar_tiendas(data.tiendas, db)
-    s = Sucursal(nombre=nombre, tiendas=tiendas_a_texto(data.tiendas))
+    validar_usuarios(data.usuarios_permitidos, db)
+    s = Sucursal(
+        nombre=nombre,
+        tiendas=tiendas_a_texto(data.tiendas),
+        usuarios_permitidos=tiendas_a_texto(data.usuarios_permitidos),
+    )
     db.add(s)
     db.commit()
     db.refresh(s)
-    return {"id": s.id, "nombre": s.nombre, "tiendas": texto_a_tiendas(s.tiendas)}
+    return {"id": s.id, "nombre": s.nombre, "tiendas": texto_a_tiendas(s.tiendas),
+            "usuarios_permitidos": texto_a_usuarios(s.usuarios_permitidos)}
 
 
 @app.patch("/api/sucursales/{sucursal_id}")
@@ -257,9 +299,13 @@ def editar_sucursal(sucursal_id: int, data: EditarSucursal, sesion: Sesion = Dep
     if "tiendas" in cambios:
         validar_tiendas(cambios["tiendas"], db)
         s.tiendas = tiendas_a_texto(cambios["tiendas"])
+    if "usuarios_permitidos" in cambios:
+        validar_usuarios(cambios["usuarios_permitidos"], db)
+        s.usuarios_permitidos = tiendas_a_texto(cambios["usuarios_permitidos"])
     db.commit()
     db.refresh(s)
-    return {"id": s.id, "nombre": s.nombre, "tiendas": texto_a_tiendas(s.tiendas)}
+    return {"id": s.id, "nombre": s.nombre, "tiendas": texto_a_tiendas(s.tiendas),
+            "usuarios_permitidos": texto_a_usuarios(s.usuarios_permitidos)}
 
 
 @app.delete("/api/sucursales/{sucursal_id}", status_code=204)

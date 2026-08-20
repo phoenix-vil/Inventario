@@ -112,6 +112,9 @@ class Sucursal(Base):
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String, nullable=False, unique=True)
     tiendas = Column(String, nullable=True)  # nombres de tienda separados por coma que se venden en esta sucursal
+    # Usuarios que pueden iniciar sesión aquí, separados por coma. Vacío = sin
+    # restricción, cualquiera puede entrar (que es como funcionan las demás).
+    usuarios_permitidos = Column(String, nullable=True)
     creado_en = Column(DateTime, default=datetime.utcnow)
 
 
