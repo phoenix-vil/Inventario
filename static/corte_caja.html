@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#1a1a18">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="icon" type="image/png" href="/static/icon-nav-v2.png" media="(prefers-color-scheme: light)">
+<link rel="icon" type="image/png" href="/static/icon-nav-blanco.png" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="/static/touch-icon-v3-180.png">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Corte de caja · Only Enterprises</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f5f4f0;--bg2:#fff;--border:#e2e0d8;--text:#1a1a18;--text2:#6b6b66;
+  --blue:#185fa5;--blue-bg:#e6f1fb;--green:#3b6d11;--green-bg:#eaf3de;
+  --amber:#854f0b;--amber-bg:#faeeda;--red:#a32d2d;--red-bg:#fcebeb;--radius:12px
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1c1c1a;--bg2:#252522;--border:#3a3a36;--text:#e8e6dc;--text2:#9c9a92;
+  --blue:#85b7eb;--blue-bg:#042c53;--green:#97c459;--green-bg:#173404;
+  --amber:#ef9f27;--amber-bg:#412402;--red:#f09595;--red-bg:#501313
+}}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}
+.topbar{background:color-mix(in srgb, var(--bg2) 70%, transparent);backdrop-filter:blur(16px) saturate(160%);-webkit-backdrop-filter:blur(16px) saturate(160%);border-bottom:0.5px solid var(--border);padding:0 1rem;height:54px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:10}
+.topbar-title{font-size:17px;font-weight:600;flex:1;text-align:center}
+.btn-inicio{display:inline-flex;align-items:center;gap:5px;height:36px;padding:0 12px;border:0.5px solid var(--border);border-radius:8px;background:transparent;color:var(--text);text-decoration:none}
+.btn-inicio:hover{background:var(--bg)}
+.container{max-width:640px;margin:0 auto;padding:1.25rem 1.25rem 4rem}
+.card{background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1.25rem;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.card h2{font-size:15px;font-weight:600;margin-bottom:1rem;display:flex;align-items:center;gap:8px}
+.linea{display:flex;justify-content:space-between;align-items:baseline;padding:.5rem 0;font-size:14px}
+.linea + .linea{border-top:0.5px solid var(--border)}
+.linea .et{color:var(--text2)}
+.linea .val{font-weight:600;font-variant-numeric:tabular-nums}
+.linea.suma .val{color:var(--green)}
+.linea.resta .val{color:var(--red)}
+.linea.total{border-top:1.5px solid var(--border);margin-top:.25rem;padding-top:.75rem}
+.linea.total .et{color:var(--text);font-weight:600;font-size:15px}
+.linea.total .val{font-size:20px;font-weight:800}
+.field{margin-bottom:1rem}
+.field label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px}
+.field input,.field textarea{width:100%;height:48px;padding:0 14px;border:0.5px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);font-size:17px;font-family:inherit;-moz-appearance:textfield}
+.field textarea{height:auto;padding:12px 14px;font-size:15px;resize:vertical}
+.field input::-webkit-outer-spin-button,.field input::-webkit-inner-spin-button{-webkit-appearance:none}
+.field input:focus,.field textarea:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px color-mix(in srgb,var(--blue) 18%,transparent)}
+.hint{font-size:12px;color:var(--text2);margin-top:4px}
+.dif{border-radius:10px;padding:.875rem 1rem;font-size:15px;font-weight:600;text-align:center;margin-bottom:1rem;display:none}
+.dif.ok{background:var(--green-bg);color:var(--green);display:block}
+.dif.mal{background:var(--red-bg);color:var(--red);display:block}
+.btn{width:100%;height:52px;border:none;border-radius:12px;background:var(--text);color:var(--bg2);font-size:16px;font-weight:600;cursor:pointer;font-family:inherit}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.hist{font-size:13px}
+.hist-row{padding:.75rem 0;border-bottom:0.5px solid var(--border)}
+.hist-row:last-child{border-bottom:none}
+.hist-top{display:flex;justify-content:space-between;gap:10px}
+.hist-fecha{font-weight:600}
+.hist-meta{font-size:12px;color:var(--text2);margin-top:2px}
+.pill{font-size:12px;font-weight:700;padding:2px 9px;border-radius:20px;white-space:nowrap}
+.pill.ok{background:var(--green-bg);color:var(--green)}
+.pill.mal{background:var(--red-bg);color:var(--red)}
+.empty{text-align:center;padding:2rem 1rem;color:var(--text2);font-size:14px}
+@media(max-width:560px){.topbar{padding:0 .625rem}.container{padding:.875rem .875rem 4rem}}
+</style>
+<link rel="stylesheet" href="/static/modern.css?v=1786846610">
+</head>
+<body>
+
+<div class="topbar">
+  <a href="/" class="btn-inicio" title="Inicio"><img src="/static/icon-nav-v2.png" alt="Inicio" class="nav-icon" style="height:32px;width:32px"></a>
+  <h1 class="topbar-title">🧮 Corte de caja</h1>
+  <div style="min-width:44px"></div>
+</div>
+
+<div class="container">
+
+  <div class="card">
+    <h2>Efectivo esperado <span id="et-sucursal" style="font-weight:400;color:var(--text2)"></span></h2>
+    <div id="calculo">
+      <div class="empty">Calculando…</div>
+    </div>
+    <div class="hint" id="et-desde" style="margin-top:.75rem"></div>
+  </div>
+
+  <div class="card">
+    <h2>Conteo</h2>
+    <div class="field">
+      <label for="contado">¿Cuánto contaste en el cajón?</label>
+      <input type="number" id="contado" inputmode="decimal" step="0.01" min="0" placeholder="0.00" oninput="recalcular()">
+    </div>
+    <div class="dif" id="dif"></div>
+    <div class="field">
+      <label for="retirado">¿Cuánto retiras? (opcional)</label>
+      <input type="number" id="retirado" inputmode="decimal" step="0.01" min="0" placeholder="0.00" oninput="recalcular()">
+      <div class="hint" id="hint-queda">Lo que no retires se queda como fondo para el siguiente corte.</div>
+    </div>
+    <div class="field">
+      <label for="nota">Nota (opcional)</label>
+      <textarea id="nota" rows="2" placeholder="Ej. faltante por vuelto mal dado"></textarea>
+    </div>
+    <button class="btn" id="btn-cerrar" onclick="cerrarCaja()">Registrar corte</button>
+  </div>
+
+  <div class="card">
+    <h2>Cortes anteriores</h2>
+    <div class="hist" id="historial"><div class="empty">Cargando…</div></div>
+  </div>
+
+</div>
+
+<script src="/static/auth.js?v=1786846610"></script>
+<script>
+const sesion = requireGerente();
+let calc = null;
+
+const money = n => '$' + (n || 0).toLocaleString('es-MX', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+function fila(etiqueta, valor, clase){
+  return '<div class="linea ' + (clase || '') + '"><span class="et">' + etiqueta + '</span>'
+       + '<span class="val">' + valor + '</span></div>';
+}
+
+async function cargarCalculo(){
+  try{
+    const r = await authFetch('/api/corte-caja/preview');
+    if(!r.ok){
+      const e = await r.json();
+      document.getElementById('calculo').innerHTML =
+        '<div class="empty">' + esc(typeof e.detail === 'string' ? e.detail : 'No se pudo calcular') + '</div>';
+      document.getElementById('btn-cerrar').disabled = true;
+      return;
+    }
+    calc = await r.json();
+    document.getElementById('et-sucursal').textContent = '· Suc. ' + calc.sucursal;
+    document.getElementById('calculo').innerHTML =
+        fila('Quedó del corte anterior', money(calc.saldo_inicial))
+      + fila('Ventas en efectivo', '+' + money(calc.ventas_efectivo), 'suma')
+      + fila('Abonos cobrados en efectivo', '+' + money(calc.abonos_efectivo), 'suma')
+      + fila('Gastos pagados en efectivo', '-' + money(calc.gastos_efectivo), 'resta')
+      + fila('Debe haber en el cajón', money(calc.esperado), 'total');
+    document.getElementById('et-desde').textContent = calc.desde
+      ? 'Cuenta los movimientos desde el último corte: ' + new Date(calc.desde).toLocaleString('es-MX').replace(',', '')
+      : 'Es el primer corte de esta sucursal: cuenta todos los movimientos registrados.';
+    recalcular();
+  }catch(e){
+    document.getElementById('calculo').innerHTML = '<div class="empty">Error de conexión</div>';
+  }
+}
+
+// La diferencia se muestra mientras se teclea, para que quien cuenta vea al
+// momento si le sobra o le falta y pueda volver a contar antes de registrar.
+function recalcular(){
+  const dif = document.getElementById('dif');
+  const contadoRaw = document.getElementById('contado').value;
+  if(!calc || contadoRaw === ''){ dif.className = 'dif'; dif.textContent = ''; actualizarQueda(); return; }
+  const d = Math.round((parseFloat(contadoRaw) - calc.esperado) * 100) / 100;
+  if(Math.abs(d) < 0.005){
+    dif.className = 'dif ok';
+    dif.textContent = '✓ Cuadra exacto';
+  }else{
+    dif.className = 'dif mal';
+    dif.textContent = (d > 0 ? 'Sobran ' : 'Faltan ') + money(Math.abs(d));
+  }
+  actualizarQueda();
+}
+
+function actualizarQueda(){
+  const contado = parseFloat(document.getElementById('contado').value) || 0;
+  const retirado = parseFloat(document.getElementById('retirado').value) || 0;
+  const queda = Math.round((contado - retirado) * 100) / 100;
+  document.getElementById('hint-queda').textContent = retirado > 0
+    ? 'Quedan ' + money(queda) + ' como fondo para el siguiente corte.'
+    : 'Lo que no retires se queda como fondo para el siguiente corte.';
+}
+
+async function cerrarCaja(){
+  const contadoRaw = document.getElementById('contado').value;
+  if(contadoRaw === ''){ await confirmarPersonalizado('Escribe cuánto contaste en el cajón.', 'Falta el conteo'); return; }
+  const contado = parseFloat(contadoRaw);
+  const retirado = parseFloat(document.getElementById('retirado').value) || 0;
+  if(isNaN(contado) || contado < 0){ await confirmarPersonalizado('El conteo no es un número válido.', 'Revisa el conteo'); return; }
+  if(retirado > contado){ await confirmarPersonalizado('No puedes retirar más de lo que contaste.', 'Revisa el retiro'); return; }
+
+  const d = Math.round((contado - calc.esperado) * 100) / 100;
+  const resumen = 'Contaste ' + money(contado) + ' y deberían ser ' + money(calc.esperado) + '.\n\n'
+    + (Math.abs(d) < 0.005 ? 'Cuadra exacto.' : (d > 0 ? 'Sobran ' : 'Faltan ') + money(Math.abs(d)) + '.')
+    + (retirado > 0 ? '\n\nRetiras ' + money(retirado) + ' y quedan ' + money(contado - retirado) + ' de fondo.' : '');
+  if(!await confirmarPersonalizado(resumen, '¿Registrar el corte?')) return;
+
+  const btn = document.getElementById('btn-cerrar');
+  btn.disabled = true; btn.textContent = 'Registrando…';
+  try{
+    const r = await authFetch('/api/corte-caja', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({contado: contado, retirado: retirado, nota: document.getElementById('nota').value.trim() || null})
+    });
+    const data = await r.json();
+    if(!r.ok){
+      await confirmarPersonalizado(typeof data.detail === 'string' ? data.detail : 'No se pudo registrar', 'Error');
+      return;
+    }
+    document.getElementById('contado').value = '';
+    document.getElementById('retirado').value = '';
+    document.getElementById('nota').value = '';
+    await cargarCalculo();
+    await cargarHistorial();
+  }catch(e){
+    await confirmarPersonalizado('Error de conexión', 'Error');
+  }finally{
+    btn.disabled = false; btn.textContent = 'Registrar corte';
+  }
+}
+
+async function cargarHistorial(){
+  const cont = document.getElementById('historial');
+  try{
+    const r = await authFetch('/api/cortes-caja');
+    const lista = await r.json();
+    if(!lista.length){ cont.innerHTML = '<div class="empty">Todavía no hay cortes registrados</div>'; return; }
+    cont.innerHTML = lista.map(function(c){
+      const cuadra = Math.abs(c.diferencia) < 0.005;
+      const etiqueta = cuadra ? '✓ Cuadró' : (c.diferencia > 0 ? 'Sobró ' + money(c.diferencia) : 'Faltó ' + money(Math.abs(c.diferencia)));
+      return '<div class="hist-row">'
+        + '<div class="hist-top"><span class="hist-fecha">' + new Date(c.fecha).toLocaleString('es-MX').replace(',', '') + '</span>'
+        + '<span class="pill ' + (cuadra ? 'ok' : 'mal') + '">' + etiqueta + '</span></div>'
+        + '<div class="hist-meta">Suc. ' + esc(c.sucursal) + ' · ' + esc(c.operador || '') + ' · '
+        + 'esperado ' + money(c.esperado) + ', contado ' + money(c.contado)
+        + (c.retirado > 0 ? ' · retiró ' + money(c.retirado) : '')
+        + ' · quedó ' + money(c.queda_en_caja) + '</div>'
+        + (c.nota ? '<div class="hist-meta">📝 ' + esc(c.nota) + '</div>' : '')
+        + '</div>';
+    }).join('');
+  }catch(e){
+    cont.innerHTML = '<div class="empty">Error al cargar</div>';
+  }
+}
+
+function esc(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+
+cargarCalculo();
+cargarHistorial();
+</script>
+</body>
+</html>

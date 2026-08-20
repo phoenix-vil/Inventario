@@ -186,3 +186,9 @@ class CrearPagoCredito(BaseModel):
     monto: float = Field(..., gt=0)
     metodo_pago: str = Field(default="efectivo")
     nota: Optional[str] = Field(None, max_length=500)
+
+
+class RegistrarCorteCaja(BaseModel):
+    contado: float = Field(..., ge=0)          # efectivo contado en el cajón
+    retirado: float = Field(default=0.0, ge=0)  # lo que se saca al cerrar
+    nota: Optional[str] = Field(None, max_length=500)

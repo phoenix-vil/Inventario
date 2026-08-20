@@ -201,6 +201,35 @@ class PagoCredito(Base):
     creado_en = Column(DateTime, default=datetime.utcnow)
 
 
+class CorteCaja(Base):
+    """Cierre de caja de una sucursal. Cada corte cubre desde el corte anterior
+    hasta el momento en que se hace, así que ningún movimiento se cuenta dos
+    veces ni se pierde aunque un día no se cierre.
+
+    El cajón arranca con lo que quedó del corte previo (saldo_inicial), menos lo
+    que se haya retirado entonces."""
+
+    __tablename__ = "cortes_caja"
+
+    id = Column(Integer, primary_key=True, index=True)
+    sucursal = Column(String, nullable=False, index=True)
+    operador = Column(String, nullable=True)
+
+    # Periodo que abarca: desde el corte anterior de esta sucursal hasta creado_en
+    desde = Column(DateTime, nullable=True)
+    creado_en = Column(DateTime, default=datetime.utcnow, index=True)
+
+    saldo_inicial = Column(Float, default=0.0)      # lo que quedó del corte anterior
+    ventas_efectivo = Column(Float, default=0.0)
+    abonos_efectivo = Column(Float, default=0.0)
+    gastos_efectivo = Column(Float, default=0.0)
+    esperado = Column(Float, default=0.0)           # inicial + ventas + abonos - gastos
+    contado = Column(Float, default=0.0)            # lo que se contó físicamente
+    diferencia = Column(Float, default=0.0)         # contado - esperado
+    retirado = Column(Float, default=0.0)           # lo que se saca del cajón al cerrar
+    nota = Column(String, nullable=True)
+
+
 def get_db():
     db = SessionLocal()
     try:

@@ -17,6 +17,7 @@ from database import Gasto
 from database import VentaPendiente
 from database import Cotizacion
 from database import Tienda
+from database import CorteCaja
 from schemas import (
     ProductoCreate, ProductoUpdate, ProductoOut, AjusteStock,
     AutorizarDescuento, RegistrarVenta, CrearUsuario, CambiarPassword,
@@ -26,6 +27,7 @@ from schemas import CrearCliente, CrearPagoCredito
 from schemas import CrearGasto
 from schemas import CrearVentaPendiente
 from schemas import RegistrarCotizacion
+from schemas import RegistrarCorteCaja
 
 app = FastAPI(title="Inventario", version="1.0.0")
 
@@ -2052,6 +2054,137 @@ def borrar_gasto(gasto_id: int, sesion: Sesion = Depends(requerir_gerente), db: 
         raise HTTPException(status_code=404, detail="Gasto no encontrado")
     db.delete(g)
     db.commit()
+
+
+# ─── Corte de caja ──────────────────────────────────────────────────────────
+def _sucursal_de_corte(sesion: Sesion) -> str:
+    """La caja que se cierra es la de la sesión. Only Enterprises no tiene caja
+    propia: no vende, así que no hay nada que cortar desde ahí."""
+    if not sesion.sucursal:
+        raise HTTPException(status_code=400, detail="Esta sesión no tiene una sucursal con caja")
+    return sesion.sucursal
+
+
+def _calcular_corte(db: Session, sucursal: str):
+    """Movimientos de efectivo desde el último corte de esa sucursal hasta ahora.
+    Tomar como inicio el corte anterior —y no el día natural— evita que se
+    pierdan o se dupliquen movimientos si un día no se cierra la caja."""
+    anterior = (
+        db.query(CorteCaja)
+        .filter(CorteCaja.sucursal == sucursal)
+        .order_by(CorteCaja.creado_en.desc())
+        .first()
+    )
+    desde = anterior.creado_en if anterior else None
+    # Lo que quedó en el cajón: lo contado menos lo que se retiró al cerrar
+    saldo_inicial = round((anterior.contado or 0) - (anterior.retirado or 0), 2) if anterior else 0.0
+
+    ventas_q = db.query(Venta).filter(Venta.sucursal == sucursal, Venta.metodo_pago == "efectivo")
+    gastos_q = db.query(Gasto).filter(Gasto.sucursal == sucursal, Gasto.metodo_pago == "efectivo")
+    abonos_q = db.query(PagoCredito).filter(PagoCredito.sucursal == sucursal, PagoCredito.metodo_pago == "efectivo")
+    if desde:
+        ventas_q = ventas_q.filter(Venta.creado_en > desde)
+        gastos_q = gastos_q.filter(Gasto.fecha > desde)
+        abonos_q = abonos_q.filter(PagoCredito.creado_en > desde)
+
+    ventas_efectivo = round(sum(v.total for v in ventas_q.all()), 2)
+    gastos_efectivo = round(sum(g.monto for g in gastos_q.all()), 2)
+    abonos_efectivo = round(sum(p.monto for p in abonos_q.all()), 2)
+    esperado = round(saldo_inicial + ventas_efectivo + abonos_efectivo - gastos_efectivo, 2)
+
+    return {
+        "sucursal": sucursal,
+        "desde": desde.isoformat() + "Z" if desde else None,
+        "corte_anterior_id": anterior.id if anterior else None,
+        "saldo_inicial": saldo_inicial,
+        "ventas_efectivo": ventas_efectivo,
+        "abonos_efectivo": abonos_efectivo,
+        "gastos_efectivo": gastos_efectivo,
+        "esperado": esperado,
+    }
+
+
+@app.get("/api/corte-caja/preview")
+def preview_corte(sesion: Sesion = Depends(requerir_gerente), db: Session = Depends(get_db)):
+    """Qué se cerraría si se hiciera el corte ahora mismo."""
+    return _calcular_corte(db, _sucursal_de_corte(sesion))
+
+
+@app.post("/api/corte-caja", status_code=201)
+def registrar_corte(data: RegistrarCorteCaja, sesion: Sesion = Depends(requerir_gerente), db: Session = Depends(get_db)):
+    sucursal = _sucursal_de_corte(sesion)
+    calc = _calcular_corte(db, sucursal)
+
+    if data.retirado > data.contado:
+        raise HTTPException(status_code=400, detail="No puedes retirar más de lo que contaste")
+
+    corte = CorteCaja(
+        sucursal=sucursal,
+        operador=sesion.usuario,
+        desde=datetime.fromisoformat(calc["desde"][:-1]) if calc["desde"] else None,
+        saldo_inicial=calc["saldo_inicial"],
+        ventas_efectivo=calc["ventas_efectivo"],
+        abonos_efectivo=calc["abonos_efectivo"],
+        gastos_efectivo=calc["gastos_efectivo"],
+        esperado=calc["esperado"],
+        contado=round(data.contado, 2),
+        diferencia=round(data.contado - calc["esperado"], 2),
+        retirado=round(data.retirado, 2),
+        nota=(data.nota or "").strip() or None,
+    )
+    db.add(corte)
+    db.commit()
+    db.refresh(corte)
+    return {
+        "id": corte.id,
+        "sucursal": corte.sucursal,
+        "operador": corte.operador,
+        "fecha": corte.creado_en.isoformat() + "Z",
+        "saldo_inicial": corte.saldo_inicial,
+        "ventas_efectivo": corte.ventas_efectivo,
+        "abonos_efectivo": corte.abonos_efectivo,
+        "gastos_efectivo": corte.gastos_efectivo,
+        "esperado": corte.esperado,
+        "contado": corte.contado,
+        "diferencia": corte.diferencia,
+        "retirado": corte.retirado,
+        "queda_en_caja": round(corte.contado - corte.retirado, 2),
+        "nota": corte.nota,
+    }
+
+
+@app.get("/api/cortes-caja")
+def listar_cortes(
+    limit: int = Query(60, le=365),
+    sesion: Sesion = Depends(requerir_gerente),
+    db: Session = Depends(get_db),
+):
+    q = db.query(CorteCaja)
+    restriccion = sucursal_restriccion(sesion)
+    if restriccion is not None:
+        q = q.filter(CorteCaja.sucursal == restriccion)
+    cortes = q.order_by(CorteCaja.creado_en.desc()).limit(limit).all()
+    return [{
+        "id": c.id,
+        "sucursal": c.sucursal,
+        "operador": c.operador,
+        "fecha": c.creado_en.isoformat() + "Z",
+        "saldo_inicial": c.saldo_inicial,
+        "ventas_efectivo": c.ventas_efectivo,
+        "abonos_efectivo": c.abonos_efectivo,
+        "gastos_efectivo": c.gastos_efectivo,
+        "esperado": c.esperado,
+        "contado": c.contado,
+        "diferencia": c.diferencia,
+        "retirado": c.retirado,
+        "queda_en_caja": round((c.contado or 0) - (c.retirado or 0), 2),
+        "nota": c.nota,
+    } for c in cortes]
+
+
+@app.get("/corte-caja", response_class=FileResponse)
+def corte_caja_page():
+    return FileResponse("static/corte_caja.html")
 
 
 @app.get("/gastos", response_class=FileResponse)
