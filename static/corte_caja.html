@@ -63,7 +63,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .empty{text-align:center;padding:2rem 1rem;color:var(--text2);font-size:14px}
 @media(max-width:560px){.topbar{padding:0 .625rem}.container{padding:.875rem .875rem 4rem}}
 </style>
-<link rel="stylesheet" href="/static/modern.css?v=1786846610">
+<link rel="stylesheet" href="/static/modern.css?v=1787328487">
 </head>
 <body>
 
@@ -95,11 +95,34 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <input type="number" id="retirado" inputmode="decimal" step="0.01" min="0" placeholder="0.00" oninput="recalcular()">
       <div class="hint" id="hint-queda">Lo que no retires se queda como fondo para el siguiente corte.</div>
     </div>
+
+    <div class="linea total" id="linea-queda">
+      <span class="et">Se queda en la caja</span>
+      <span class="val" id="val-queda">$0.00</span>
+    </div>
     <div class="field">
       <label for="nota">Nota (opcional)</label>
       <textarea id="nota" rows="2" placeholder="Ej. faltante por vuelto mal dado"></textarea>
     </div>
     <button class="btn" id="btn-cerrar" onclick="cerrarCaja()">Registrar corte</button>
+  </div>
+
+  <div class="card">
+    <h2>📄 Reporte del día</h2>
+    <div class="hint" style="margin:-.5rem 0 1rem">
+      Ventas, gastos, abonos, los cortes y cuánto se quedó en la caja. Mismo
+      formato que el reporte del historial de ventas.
+    </div>
+    <div class="field">
+      <label for="fecha-reporte">Día</label>
+      <input type="date" id="fecha-reporte">
+    </div>
+    <button class="btn" id="btn-reporte" onclick="descargarReporte()">Descargar reporte PDF</button>
+    <div class="hint" style="text-align:center;margin-top:.6rem">
+      <a href="#" onclick="descargarReporte('csv');return false" style="color:var(--text2)">
+        o descargar en CSV para Excel</a>
+    </div>
+    <div class="hint" id="hint-reporte" style="text-align:center"></div>
   </div>
 
   <div class="card">
@@ -109,7 +132,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 </div>
 
-<script src="/static/auth.js?v=1786846610"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="/static/auth.js?v=1787328487"></script>
 <script>
 const sesion = requireGerente();
 let calc = null;
@@ -172,6 +196,265 @@ function actualizarQueda(){
   document.getElementById('hint-queda').textContent = retirado > 0
     ? 'Quedan ' + money(queda) + ' como fondo para el siguiente corte.'
     : 'Lo que no retires se queda como fondo para el siguiente corte.';
+  document.getElementById('val-queda').textContent = money(queda);
+}
+
+// ─── Reporte del día en PDF ─────────────────────────────────────────────
+// Mismo formato que el reporte del historial de ventas: A4, Courier, líneas
+// punteadas y el logo centrado arriba. Los datos vienen del servidor ya
+// calculados; aquí solo se dibujan.
+const NOMBRES_METODO = {efectivo:'Efectivo', tarjeta:'Tarjeta', credito:'Crédito', transferencia:'Transferencia'};
+
+async function armarPDF(d){
+  const jsPDFCtor = window.jspdf.jsPDF;
+  const W = 595, M = 40, RIGHT = W - M;
+  const doc = new jsPDFCtor({unit:'pt', format:'a4', orientation:'portrait'});
+  let y = 40;
+
+  function linea(){
+    doc.setDrawColor(0);
+    doc.setLineDashPattern([3, 2], 0);
+    doc.line(M, y, RIGHT, y);
+    doc.setLineDashPattern([], 0);
+    y += 18;
+  }
+  function fila(etiqueta, valor, size){
+    doc.setFont('courier','bold');
+    doc.setFontSize(size || 10);
+    doc.setTextColor(0);
+    doc.text(String(etiqueta), M, y);
+    doc.text(String(valor), RIGHT, y, {align:'right'});
+    y += (size || 10) + 6;
+  }
+  function titulo(txt){
+    doc.setFont('courier','bold'); doc.setFontSize(12); doc.setTextColor(0);
+    doc.text(txt, M, y);
+    y += 20;
+  }
+  function espacio(alto){
+    if(y + alto > 780){ doc.addPage(); y = 50; }
+  }
+  // Alto aproximado de una sección: título + encabezado + hasta 3 filas. Con un
+  // valor fijo, una sección vacía ("Sin abonos este día") se llevaba una hoja
+  // entera para sí sola.
+  function altoDe(n){
+    return 20 + (n ? 14 * (1 + Math.min(n, 3)) : 16);
+  }
+  function vacio(txt){
+    doc.setFont('courier','bold'); doc.setFontSize(10); doc.setTextColor(0);
+    doc.text(txt, M, y); y += 16;
+  }
+  // Tabla con la última columna alineada a la derecha, como la de clientes
+  // a crédito del historial.
+  function tabla(cols, filas){
+    const anchoUtil = RIGHT - M;
+    doc.setFont('courier','bold'); doc.setFontSize(9); doc.setTextColor(0);
+    cols.forEach(function(c){
+      const x = M + anchoUtil * c.x;
+      doc.text(c.t, x, y, c.der ? {align:'right'} : undefined);
+    });
+    y += 14;
+    filas.forEach(function(f){
+      if(y > 780){ doc.addPage(); y = 50; }
+      doc.setFont('courier','bold'); doc.setFontSize(9); doc.setTextColor(0);
+      cols.forEach(function(c, i){
+        const x = M + anchoUtil * c.x;
+        let txt = String(f[i] == null ? '' : f[i]);
+        if(c.max) txt = doc.splitTextToSize(txt, anchoUtil * c.max)[0] || '';
+        doc.text(txt, x, y, c.der ? {align:'right'} : undefined);
+      });
+      y += 14;
+    });
+    y += 6;
+  }
+
+  // Encabezado: logo genérico, igual que el reporte consolidado del historial
+  try{
+    const logoData = await cargarImagenBase64('/static/logo.png');
+    const lw = 110, lh = 59;
+    doc.addImage(logoData, 'PNG', (W - lw)/2, y, lw, lh);
+    y += lh + 14;
+  }catch(e){
+    doc.setFont('courier','bold'); doc.setFontSize(15); doc.setTextColor(0);
+    doc.text('ONLY ENTERPRISES', W/2, y + 12, {align:'center'});
+    y += 32;
+  }
+
+  doc.setFont('courier','bold'); doc.setFontSize(15); doc.setTextColor(0);
+  doc.text('Reporte del día', W/2, y, {align:'center'}); y += 18;
+  doc.setFont('courier','bold'); doc.setFontSize(10);
+  doc.text(d.fecha + '  ·  ' + d.sucursal, W/2, y, {align:'center'}); y += 14;
+  doc.setFontSize(9);
+  doc.text('Generado: ' + d.generado_el + ' por ' + d.generado_por, W/2, y, {align:'center'});
+  y += 18;
+  linea();
+
+  const b = d.resumen, cc = b.cuadre_caja;
+
+  titulo('Resumen');
+  fila('Ventas totales (' + b.num_ventas + ')', money(b.total_vendido));
+  fila('Gastos (' + b.num_gastos + ')', '-' + money(b.gastos));
+  if(b.devoluciones_num) fila('Devoluciones (' + b.devoluciones_num + ')', '-' + money(b.devoluciones_total));
+  if(b.num_abonos) fila('Abonos de clientes (' + b.num_abonos + ')', money(b.abonos_total));
+  fila('Ganancia después de gastos', money(b.ganancia_neta), 12);
+  y += 6; linea();
+
+  espacio(altoDe(b.desglose_metodos_pago.length));
+  titulo('Métodos de pago');
+  if(!b.desglose_metodos_pago.length){
+    vacio('Sin ventas este día');
+  }else{
+    b.desglose_metodos_pago.forEach(function(m){
+      fila((NOMBRES_METODO[m.metodo] || m.metodo) + ' (' + m.cantidad + ')', money(m.total));
+    });
+  }
+  y += 6; linea();
+
+  espacio(140);
+  titulo('Cuadre de caja (efectivo)');
+  fila('Ventas en efectivo', '+' + money(cc.ventas_efectivo));
+  fila('Abonos cobrados en efectivo', '+' + money(cc.abonos_efectivo));
+  fila('Gastos pagados en efectivo', '-' + money(cc.gastos_efectivo));
+  fila('Efectivo neto del día', money(cc.esperado_en_caja), 12);
+  y += 6; linea();
+
+  espacio(160);
+  titulo('Cortes de caja');
+  if(!d.cortes.length){
+    vacio('Sin cortes registrados este día');
+    if(d.caja_ahora){
+      if(d.caja_ahora.hubo_corte_antes){
+        fila('Debería haber ahora en el cajón', money(d.caja_ahora.monto));
+      }else{
+        fila('Efectivo acumulado sin cortar nunca', money(d.caja_ahora.monto));
+        doc.setFont('courier','normal'); doc.setFontSize(8); doc.setTextColor(110,110,105);
+        doc.splitTextToSize('Esta sucursal no tiene ningún corte registrado: la cifra abarca '
+          + 'todo el histórico, no solo este día.', RIGHT - M).forEach(function(t){
+          doc.text(t, M, y); y += 10;
+        });
+        doc.setTextColor(0);
+      }
+    }
+  }else{
+    // Las cifras de un corte van desde el corte anterior, no desde la
+    // medianoche: sin esta nota se leen como un descuadre contra el resumen.
+    doc.setFont('courier','normal'); doc.setFontSize(8); doc.setTextColor(110,110,105);
+    doc.splitTextToSize('Cada corte abarca desde el corte anterior, que puede no coincidir '
+      + 'con este día.', RIGHT - M).forEach(function(t){ doc.text(t, M, y); y += 10; });
+    doc.setTextColor(0); y += 6;
+
+    tabla([
+      {t:'Hora', x:0}, {t:'Sucursal', x:.13, max:.2}, {t:'Debía haber', x:.55, der:true},
+      {t:'Contado', x:.72, der:true}, {t:'Retiró', x:.86, der:true}, {t:'Quedó', x:1, der:true}
+    ], d.cortes.map(function(c){
+      return [c.hora, c.sucursal, money(c.esperado), money(c.contado),
+              money(c.retirado), money(c.queda_en_caja)];
+    }));
+
+    const sucs = Object.keys(d.queda_por_sucursal);
+    if(sucs.length > 1){
+      sucs.sort().forEach(function(s){
+        fila('Se quedó en la caja de ' + s, money(d.queda_por_sucursal[s]));
+      });
+    }
+    fila('Efectivo retirado en el día', money(d.retirado_total));
+    fila('Efectivo que se quedó en la caja', money(d.queda_en_caja), 12);
+  }
+  y += 6; linea();
+
+  espacio(altoDe(d.ventas.length));
+  titulo('Detalle de ventas');
+  if(!d.ventas.length){ vacio('Sin ventas este día'); }
+  else{
+    tabla([
+      {t:'Hora', x:0}, {t:'Folio', x:.12}, {t:'Operador', x:.24, max:.18},
+      {t:'Método', x:.46, max:.14}, {t:'Cliente', x:.62, max:.2}, {t:'Total', x:1, der:true}
+    ], d.ventas.map(function(v){
+      return [v.hora, '#' + v.folio, v.operador || '', NOMBRES_METODO[v.metodo] || v.metodo,
+              v.cliente || '', money(v.total)];
+    }));
+  }
+
+  espacio(altoDe(d.gastos.length));
+  titulo('Detalle de gastos');
+  if(!d.gastos.length){ vacio('Sin gastos este día'); }
+  else{
+    tabla([
+      {t:'Hora', x:0}, {t:'Concepto', x:.12, max:.35}, {t:'Categoría', x:.52, max:.2},
+      {t:'Método', x:.76, max:.14}, {t:'Monto', x:1, der:true}
+    ], d.gastos.map(function(g){
+      return [g.hora, g.concepto || '', g.categoria || '',
+              NOMBRES_METODO[g.metodo] || g.metodo, money(g.monto)];
+    }));
+  }
+
+  espacio(altoDe(d.abonos.length));
+  titulo('Abonos de clientes');
+  if(!d.abonos.length){ vacio('Sin abonos este día'); }
+  else{
+    tabla([
+      {t:'Hora', x:0}, {t:'Cliente', x:.12, max:.4}, {t:'Método', x:.6, max:.16},
+      {t:'Monto', x:1, der:true}
+    ], d.abonos.map(function(a){
+      return [a.hora, a.cliente || '', NOMBRES_METODO[a.metodo] || a.metodo, money(a.monto)];
+    }));
+  }
+
+  return doc.output('blob');
+}
+
+// El navegador no manda el token en una descarga normal, así que el archivo se
+// pide con authFetch y se entrega desde memoria. En el iPhone se abre la hoja
+// de compartir (guardar en Archivos, mandarlo por correo); en escritorio baja
+// directo.
+async function descargarReporte(formato){
+  const esCSV = formato === 'csv';
+  const btn = document.getElementById('btn-reporte');
+  const hint = document.getElementById('hint-reporte');
+  const fecha = document.getElementById('fecha-reporte').value;
+  const etiqueta = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Preparando…'; hint.textContent = '';
+  try{
+    const params = new URLSearchParams({tz_offset_min: new Date().getTimezoneOffset()});
+    if(fecha) params.set('fecha', fecha);
+    if(esCSV) params.set('formato', 'csv');
+    const r = await authFetch('/api/corte-caja/reporte?' + params.toString());
+    if(!r.ok){
+      const e = await r.json().catch(() => ({}));
+      await confirmarPersonalizado(typeof e.detail === 'string' ? e.detail : 'No se pudo generar el reporte', 'Error');
+      return;
+    }
+
+    let blob, nombre;
+    if(esCSV){
+      blob = await r.blob();
+      const m = (r.headers.get('Content-Disposition') || '').match(/filename="?([^"]+)"?/);
+      nombre = m ? m[1] : 'reporte.csv';
+    }else{
+      const datos = await r.json();
+      blob = await armarPDF(datos);
+      nombre = 'reporte_' + datos.fecha + '_' + datos.sucursal.replace(/\s+/g, '_') + '.pdf';
+    }
+    const archivo = new File([blob], nombre, {type: esCSV ? 'text/csv' : 'application/pdf'});
+
+    if(navigator.canShare && navigator.canShare({files: [archivo]})){
+      await navigator.share({files: [archivo], title: 'Reporte del día'});
+      hint.textContent = 'Listo.';
+    }else{
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = nombre;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+      hint.textContent = 'Descargado: ' + nombre;
+    }
+  }catch(e){
+    // Cancelar la hoja de compartir lanza AbortError: no es un error que avisar
+    if(e && e.name === 'AbortError') hint.textContent = '';
+    else await confirmarPersonalizado('No se pudo generar el reporte.', 'Error');
+  }finally{
+    btn.disabled = false; btn.textContent = etiqueta;
+  }
 }
 
 async function cerrarCaja(){
@@ -241,6 +524,12 @@ function esc(s){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
   });
 }
+
+// El reporte arranca en el día de hoy, en hora local (no la del servidor)
+(function(){
+  const hoy = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
+  document.getElementById('fecha-reporte').value = hoy.toISOString().slice(0, 10);
+})();
 
 cargarCalculo();
 cargarHistorial();

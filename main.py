@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, Query, Header, Body
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
 from sqlalchemy.exc import IntegrityError
@@ -2300,6 +2300,236 @@ def listar_cortes(
     } for c in cortes]
 
 
+def _rango_dia_local(fecha: Optional[str], tz_min: int):
+    """Rango [desde, hasta) en UTC naive para un día en hora local.
+    tz_min es el getTimezoneOffset() del navegador (360 para México)."""
+    if fecha:
+        try:
+            dia = datetime.strptime(fecha[:10], "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Fecha inválida, se espera AAAA-MM-DD")
+    else:
+        dia = (datetime.utcnow() - timedelta(minutes=tz_min)).replace(
+            hour=0, minute=0, second=0, microsecond=0)
+    inicio = dia.replace(hour=0, minute=0, second=0, microsecond=0)
+    return (inicio + timedelta(minutes=tz_min),
+            inicio + timedelta(days=1) + timedelta(minutes=tz_min),
+            inicio.date().isoformat())
+
+
+def _csv_linea(campos) -> str:
+    """Una fila de CSV. Entrecomilla solo lo que lo necesita y duplica las
+    comillas internas, que es como lo esperan Excel y Numbers."""
+    salida = []
+    for c in campos:
+        t = "" if c is None else str(c)
+        if any(ch in t for ch in (',', '"', '\n', '\r')):
+            t = '"' + t.replace('"', '""') + '"'
+        salida.append(t)
+    return ",".join(salida)
+
+
+@app.get("/api/corte-caja/reporte")
+def reporte_del_dia(
+    fecha: Optional[str] = Query(None, description="Día a reportar, AAAA-MM-DD en hora local"),
+    tz_offset_min: int = Query(360, description="getTimezoneOffset() del navegador"),
+    formato: str = Query("json", description="json para armar el PDF, csv para hoja de cálculo"),
+    sesion: Sesion = Depends(requerir_gerente),
+    db: Session = Depends(get_db),
+):
+    """Todo lo del día: ventas, gastos, abonos, los cortes de caja y cuánto
+    quedó en el cajón. En JSON alimenta el PDF que arma la pantalla de corte de
+    caja; en CSV se abre en Excel o Numbers. Los dos salen de los mismos datos."""
+    desde, hasta, dia_iso = _rango_dia_local(fecha, tz_offset_min)
+    restriccion = sucursal_restriccion(sesion)
+    ambito = restriccion or "Todas las sucursales"
+
+    def acotar(q, campo):
+        q = q.filter(campo >= desde, campo < hasta)
+        return q
+
+    ventas_q = acotar(db.query(Venta), Venta.creado_en)
+    gastos_q = acotar(db.query(Gasto), Gasto.fecha)
+    abonos_q = acotar(db.query(PagoCredito), PagoCredito.creado_en)
+    cortes_q = acotar(db.query(CorteCaja), CorteCaja.creado_en)
+    if restriccion is not None:
+        ventas_q = ventas_q.filter(Venta.sucursal == restriccion)
+        gastos_q = gastos_q.filter(Gasto.sucursal == restriccion)
+        abonos_q = abonos_q.filter(PagoCredito.sucursal == restriccion)
+        cortes_q = cortes_q.filter(CorteCaja.sucursal == restriccion)
+
+    ventas = ventas_q.order_by(Venta.creado_en).all()
+    gastos = gastos_q.order_by(Gasto.fecha).all()
+    abonos = abonos_q.order_by(PagoCredito.creado_en).all()
+    cortes = cortes_q.order_by(CorteCaja.creado_en).all()
+
+    # Mismas cifras que el reporte general: un solo criterio para todo
+    bloque = _bloque_reporte(ventas, gastos, abonos)
+
+    nombres_cliente = {}
+    ids = {v.cliente_id for v in ventas if v.cliente_id} | {p.cliente_id for p in abonos if p.cliente_id}
+    if ids:
+        nombres_cliente = {c.id: c.nombre for c in db.query(Cliente).filter(Cliente.id.in_(ids)).all()}
+
+    def hora(dt):
+        return (dt - timedelta(minutes=tz_offset_min)).strftime("%H:%M") if dt else ""
+
+    # Lo que queda en el cajón es el último corte de CADA sucursal, no el último
+    # de la lista: en el consolidado de Only Enterprises hay varias cajas y
+    # quedarse con una sola deja fuera el fondo de las demás.
+    ultimo_de = {}
+    for c in cortes:                       # ya vienen ordenados por fecha
+        ultimo_de[c.sucursal] = c
+    queda_por_sucursal = {s: round((c.contado or 0) - (c.retirado or 0), 2)
+                          for s, c in ultimo_de.items()}
+
+    # Sin cortes hoy, lo que se puede decir del cajón depende de si alguna vez
+    # se cortó: sin un corte previo, _calcular_corte suma todo el histórico y
+    # presentarlo como "fondo del día" sería engañoso.
+    caja_ahora = None
+    if not cortes and restriccion is not None:
+        calc = _calcular_corte(db, restriccion)
+        caja_ahora = {"monto": calc["esperado"], "hubo_corte_antes": bool(calc["desde"]),
+                      "desde": calc["desde"]}
+
+    datos = {
+        "fecha": dia_iso,
+        "sucursal": ambito,
+        "generado_por": sesion.usuario,
+        "generado_el": (datetime.utcnow() - timedelta(minutes=tz_offset_min)).strftime("%Y-%m-%d %H:%M"),
+        "resumen": bloque,
+        "cortes": [{
+            "hora": hora(c.creado_en), "sucursal": c.sucursal, "operador": c.operador,
+            "saldo_inicial": c.saldo_inicial, "ventas_efectivo": c.ventas_efectivo,
+            "abonos_efectivo": c.abonos_efectivo, "gastos_efectivo": c.gastos_efectivo,
+            "esperado": c.esperado, "contado": c.contado, "diferencia": c.diferencia,
+            "retirado": c.retirado,
+            "queda_en_caja": round((c.contado or 0) - (c.retirado or 0), 2),
+            "nota": c.nota or "",
+        } for c in cortes],
+        "queda_por_sucursal": queda_por_sucursal,
+        "queda_en_caja": round(sum(queda_por_sucursal.values()), 2),
+        "retirado_total": round(sum(c.retirado or 0 for c in cortes), 2),
+        "caja_ahora": caja_ahora,
+        "ventas": [{
+            "hora": hora(v.creado_en), "folio": v.id, "sucursal": v.sucursal,
+            "operador": v.operador, "metodo": v.metodo_pago or "efectivo",
+            "cliente": nombres_cliente.get(v.cliente_id, ""), "estado": v.estado or "activa",
+            "devuelto": v.total_devuelto or 0, "total": v.total,
+        } for v in ventas],
+        "gastos": [{
+            "hora": hora(g.fecha), "sucursal": g.sucursal, "concepto": g.concepto,
+            "categoria": g.categoria, "metodo": g.metodo_pago or "efectivo",
+            "operador": g.operador, "monto": g.monto,
+        } for g in gastos],
+        "abonos": [{
+            "hora": hora(p.creado_en), "sucursal": p.sucursal,
+            "cliente": nombres_cliente.get(p.cliente_id, ""), "metodo": p.metodo_pago or "efectivo",
+            "operador": p.operador, "monto": p.monto,
+        } for p in abonos],
+    }
+
+    if formato != "csv":
+        return datos
+
+    # ─── Mismos datos, en CSV para hoja de cálculo ───
+    cc = bloque["cuadre_caja"]
+    L = [
+        _csv_linea(["Reporte del día"]),
+        _csv_linea(["Fecha", datos["fecha"]]),
+        _csv_linea(["Sucursal", datos["sucursal"]]),
+        _csv_linea(["Generado por", datos["generado_por"]]),
+        _csv_linea(["Generado el", datos["generado_el"]]),
+        "",
+        _csv_linea(["RESUMEN"]),
+        _csv_linea(["Concepto", "Cantidad", "Monto"]),
+        _csv_linea(["Ventas", bloque["num_ventas"], bloque["total_vendido"]]),
+        _csv_linea(["Devoluciones", bloque["devoluciones_num"], bloque["devoluciones_total"]]),
+        _csv_linea(["Gastos", bloque["num_gastos"], bloque["gastos"]]),
+        _csv_linea(["Abonos de clientes", bloque["num_abonos"], bloque["abonos_total"]]),
+        _csv_linea(["Ganancia neta (ventas - gastos)", "", bloque["ganancia_neta"]]),
+        "",
+        _csv_linea(["VENTAS POR MÉTODO DE PAGO"]),
+        _csv_linea(["Método", "Tickets", "Monto"]),
+    ]
+    for m in bloque["desglose_metodos_pago"]:
+        L.append(_csv_linea([m["metodo"], m["cantidad"], m["total"]]))
+    L += [
+        "",
+        _csv_linea(["EFECTIVO DEL DÍA"]),
+        _csv_linea(["Ventas en efectivo", cc["ventas_efectivo"]]),
+        _csv_linea(["Abonos cobrados en efectivo", cc["abonos_efectivo"]]),
+        _csv_linea(["Gastos pagados en efectivo",
+                    -cc["gastos_efectivo"] if cc["gastos_efectivo"] else 0]),
+        _csv_linea(["Movimiento neto de efectivo", cc["esperado_en_caja"]]),
+        "",
+        _csv_linea(["CORTES DE CAJA DEL DÍA"]),
+    ]
+    if datos["cortes"]:
+        # Un corte cuenta desde el corte anterior, no desde la medianoche: si el
+        # día anterior no se cerró la caja, sus cifras no coinciden con las de
+        # arriba. Se avisa aquí para que nadie lo lea como un descuadre.
+        L.append(_csv_linea(["Nota", "Las cifras de cada corte abarcan desde el corte anterior, "
+                             "que puede no coincidir con este día"]))
+        L.append(_csv_linea(["Hora", "Sucursal", "Operador", "Fondo inicial", "Ventas efectivo",
+                             "Abonos efectivo", "Gastos efectivo", "Debía haber", "Contado",
+                             "Diferencia", "Retirado", "Se quedó en caja", "Nota"]))
+        for c in datos["cortes"]:
+            L.append(_csv_linea([c["hora"], c["sucursal"], c["operador"], c["saldo_inicial"],
+                                 c["ventas_efectivo"], c["abonos_efectivo"], c["gastos_efectivo"],
+                                 c["esperado"], c["contado"], c["diferencia"], c["retirado"],
+                                 c["queda_en_caja"], c["nota"]]))
+        L.append("")
+        if len(queda_por_sucursal) > 1:
+            for s in sorted(queda_por_sucursal):
+                L.append(_csv_linea([f"Se quedó en la caja de {s}", queda_por_sucursal[s]]))
+        L.append(_csv_linea(["Efectivo que se quedó en la caja", datos["queda_en_caja"]]))
+        L.append(_csv_linea(["Efectivo retirado en el día", datos["retirado_total"]]))
+    else:
+        L.append(_csv_linea(["Sin cortes registrados este día"]))
+        if caja_ahora and caja_ahora["hubo_corte_antes"]:
+            L.append(_csv_linea(["Debería haber ahora en el cajón (sin cerrar)", caja_ahora["monto"]]))
+        elif caja_ahora:
+            L.append(_csv_linea(["Efectivo acumulado sin cortar nunca", caja_ahora["monto"]]))
+            L.append(_csv_linea(["Aviso", "Esta sucursal no tiene ningún corte registrado: "
+                                 "la cifra anterior abarca todo el histórico, no solo este día"]))
+    L += ["", _csv_linea(["DETALLE DE VENTAS"])]
+    if datos["ventas"]:
+        L.append(_csv_linea(["Hora", "Folio", "Sucursal", "Operador", "Método", "Cliente",
+                             "Estado", "Devuelto", "Total"]))
+        for v in datos["ventas"]:
+            L.append(_csv_linea([v["hora"], v["folio"], v["sucursal"], v["operador"], v["metodo"],
+                                 v["cliente"], v["estado"], v["devuelto"], v["total"]]))
+    else:
+        L.append(_csv_linea(["Sin ventas este día"]))
+    L += ["", _csv_linea(["DETALLE DE GASTOS"])]
+    if datos["gastos"]:
+        L.append(_csv_linea(["Hora", "Sucursal", "Concepto", "Categoría", "Método", "Operador", "Monto"]))
+        for g in datos["gastos"]:
+            L.append(_csv_linea([g["hora"], g["sucursal"], g["concepto"], g["categoria"],
+                                 g["metodo"], g["operador"], g["monto"]]))
+    else:
+        L.append(_csv_linea(["Sin gastos este día"]))
+    L += ["", _csv_linea(["ABONOS DE CLIENTES"])]
+    if datos["abonos"]:
+        L.append(_csv_linea(["Hora", "Sucursal", "Cliente", "Método", "Operador", "Monto"]))
+        for a in datos["abonos"]:
+            L.append(_csv_linea([a["hora"], a["sucursal"], a["cliente"], a["metodo"],
+                                 a["operador"], a["monto"]]))
+    else:
+        L.append(_csv_linea(["Sin abonos este día"]))
+
+    # BOM al inicio: sin él, Excel abre los acentos como basura
+    cuerpo = "\ufeff" + "\r\n".join(L) + "\r\n"
+    nombre = f"reporte-{dia_iso}-{(restriccion or 'todas').replace(' ', '_')}.csv"
+    return Response(
+        content=cuerpo.encode("utf-8"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{nombre}"'},
+    )
+
+
+
 @app.get("/corte-caja", response_class=FileResponse)
 def corte_caja_page():
     return FileResponse("static/corte_caja.html")
@@ -2736,3 +2966,515 @@ def clientes_page():
 @app.get("/sucursales", response_class=FileResponse)
 def sucursales_page():
     return FileResponse("static/sucursales.html")
+
+
+# ─── Chatbot: asistente con IA (modelo local vía Ollama) ────────────────────
+# El modelo NUNCA calcula ni inventa cifras: solo decide a qué consulta llamar
+# y redacta. Todos los números salen de la base, y cada consulta se filtra con
+# los mismos helpers de permisos que el resto de la API (aplicar_filtro_tienda,
+# sucursal_restriccion, clientes_visibles_query), para que el asistente no
+# pueda ver lo que su sesión no puede ver.
+import re
+import urllib.error
+import urllib.request
+
+CHAT_OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/chat")
+CHAT_MODELO = os.getenv("OLLAMA_MODELO", "llama3.2:3b")
+CHAT_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "60"))
+
+# Con esto en 1 el modelo redacta la respuesta final; en 0 se responde con el
+# texto que arma el código. Apagado por omisión a propósito: en las pruebas el
+# modelo redactando llegó a decir "10 unidades a $1,620.00 cada una" cuando esa
+# cifra era el importe *total* de la línea. No inventó el número —lo sacó de los
+# datos— pero le cambió el significado, y aquí eso es dinero. Encendido, la
+# redacción todavía tiene que pasar _chat_redaccion_confiable().
+CHAT_REDACTAR = os.getenv("OLLAMA_REDACTAR", "0") == "1"
+
+# Ollama descarga el modelo de la GPU tras 5 minutos sin uso, y volver a
+# cargarlo cuesta ~20 s: la primera pregunta de la mañana se sentiría rota.
+# Con esto se queda residente (2.8 GB de VRAM, que de todos modos nadie usa).
+CHAT_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "2h")
+
+CHAT_SISTEMA = (
+    "Eres el asistente del sistema de inventario y punto de venta de una tienda "
+    "de acuarismo y reptiles. Respondes en español de México, en una o dos "
+    "frases, sin rodeos.\n\n"
+    "Nunca calcules ni inventes cifras: para cualquier dato de precios, "
+    "existencias, ventas, gastos o deudas usa la herramienta correspondiente y "
+    "repite tal cual los números que te devuelva. El dinero se escribe así: "
+    "$1,250.00"
+)
+
+# El 3B se equivoca con la charla suelta: llama a una herramienta al azar o
+# escribe un JSON falso como texto. Se ataja antes de llegar al modelo.
+CHAT_CORTESIA = re.compile(
+    r"^\W*(hola|holi|buenas|buenos d|buen d|hey|qu[eé] onda|qu[eé] tal|saludos|"
+    r"gracias|graci|ok|okey|va|listo|adi[oó]s|hasta luego|nos vemos|"
+    r"qu[eé] puedes|qu[eé] sabes|ay[uú]dame|ayuda|qui[eé]n eres)\b",
+    re.I,
+)
+
+# Ruido típico de un modelo chico: razonamiento en inglés o un JSON crudo.
+CHAT_RUIDO = re.compile(
+    r"^\s*[\{\[]|\b(the user|is asking|let me |okay,|i should|i need to|"
+    r"according to the|based on the tool)\b",
+    re.I,
+)
+
+# El modelo a veces contesta "no tengo acceso a esa información" aunque la
+# consulta sí devolvió datos. Confunde al usuario y se descarta.
+CHAT_EXCUSA = re.compile(
+    r"no (tengo|dispongo de|cuento con) (acceso|informaci[oó]n|datos)|"
+    r"verificar si tienes acceso|proporcionarme m[aá]s contexto|"
+    r"no puedo (acceder|consultar)",
+    re.I,
+)
+
+CHAT_NUMERO = re.compile(r"\d[\d,]*(?:\.\d+)?")
+
+# A un operador no se le declaran las consultas de gerente, así que el modelo
+# intenta responder con la única que tiene a la mano y acaba diciendo "no
+# encontré ningún producto que coincida con «ventas»". Se detecta el tema antes
+# y se le dice lo que realmente pasa. Esto es cortesía, no el candado: el
+# candado está en _chat_esquema y en la verificación de rol del endpoint.
+CHAT_TEMA_GERENTE = re.compile(
+    r"\b(vent[ao]s?|vendi(?:do|mos|ó)|ganancia|margen|utilidad|ingreso|"
+    r"deud[ao]s?|debe[nm]?|cobrar|cr[eé]dito|adeudo|saldo|"
+    r"gast[oó]s?|gastado|corte de caja|ticket)\b",
+    re.I,
+)
+
+
+def _chat_cifras_de(obj) -> set:
+    """Todas las cifras que contiene el resultado de una consulta, incluidas
+    las que van dentro de un texto (p. ej. 'Waste away 240ml')."""
+    if obj is None or isinstance(obj, bool):
+        return set()
+    if isinstance(obj, (int, float)):
+        return {round(float(obj), 2)}
+    if isinstance(obj, str):
+        return {round(float(n.replace(",", "")), 2) for n in CHAT_NUMERO.findall(obj)}
+    if isinstance(obj, dict):
+        return set().union(*(_chat_cifras_de(v) for v in obj.values())) if obj else set()
+    if isinstance(obj, list):
+        return set().union(*(_chat_cifras_de(v) for v in obj)) if obj else set()
+    return set()
+
+
+def _chat_redaccion_confiable(texto: str, datos) -> bool:
+    """¿Se puede mostrar lo que redactó el modelo? Solo si no es ruido, no se
+    excusa, y toda cifra de negocio que escribió sale de los datos."""
+    if not texto or CHAT_RUIDO.search(texto) or CHAT_EXCUSA.search(texto):
+        return False
+    del_dato = _chat_cifras_de(datos)
+    for n in CHAT_NUMERO.findall(texto):
+        v = round(float(n.replace(",", "")), 2)
+        if v >= 100 and not any(abs(v - d) < 0.01 for d in del_dato):
+            return False
+    return True
+
+
+def _chat_rango(periodo: Optional[str], tz_min: int):
+    """Rango [desde, hasta) en UTC naive para un periodo en hora local.
+    tz_min es el getTimezoneOffset() del navegador (360 para México)."""
+    ahora_local = datetime.utcnow() - timedelta(minutes=tz_min)
+    inicio_hoy = ahora_local.replace(hour=0, minute=0, second=0, microsecond=0)
+    manana = inicio_hoy + timedelta(days=1)
+
+    if periodo == "ayer":
+        desde, hasta = inicio_hoy - timedelta(days=1), inicio_hoy
+    elif periodo == "semana":
+        desde, hasta = inicio_hoy - timedelta(days=6), manana
+    elif periodo == "mes":
+        desde, hasta = inicio_hoy.replace(day=1), manana
+    else:  # hoy
+        desde, hasta = inicio_hoy, manana
+
+    a_utc = lambda d: d + timedelta(minutes=tz_min)
+    return a_utc(desde), a_utc(hasta)
+
+
+def _chat_pesos(n) -> str:
+    return f"${n:,.2f}"
+
+
+def _chat_periodo_texto(periodo: Optional[str]) -> str:
+    return {"hoy": "hoy", "ayer": "ayer", "semana": "los últimos 7 días",
+            "mes": "este mes"}.get(periodo or "hoy", "hoy")
+
+
+# ─── Consultas que el asistente puede ejecutar (todas de solo lectura) ──────
+# Cada una devuelve {"datos": ..., "resumen": "..."}. El `resumen` es la
+# respuesta ya redactada por código: si el modelo contesta cualquier cosa rara,
+# se muestra ese texto. Así las cifras nunca dependen del modelo.
+
+def _chat_buscar_producto(db, sesion, args, tz_min):
+    nombre = (args.get("nombre") or "").strip()
+    if not nombre:
+        return {"datos": [], "resumen": "¿De qué producto quieres saber el precio?"}
+
+    query = db.query(Producto).filter(or_(
+        Producto.nombre.ilike(f"%{nombre}%"),
+        Producto.marca.ilike(f"%{nombre}%"),
+        Producto.categoria.ilike(f"%{nombre}%"),
+    ))
+    rows = aplicar_filtro_tienda(query, sesion).order_by(Producto.nombre).limit(5).all()
+    if not rows:
+        return {"datos": [], "resumen": f"No encontré ningún producto que coincida con «{nombre}»."}
+
+    datos = [{
+        "nombre": p.nombre,
+        "marca": p.marca,
+        "precio": calcular_precio_final(p),
+        "precio_lista": p.precio_venta,
+        "stock": p.stock,
+        "unidad": p.unidad,
+    } for p in rows]
+
+    p = datos[0]
+    existencia = f"quedan {p['stock']:g} {p['unidad'] or 'pz'}" if p["stock"] else "no hay existencia"
+    resumen = f"{p['nombre']}: {_chat_pesos(p['precio'])} ({existencia})."
+    if len(datos) > 1:
+        resumen += " También encontré: " + ", ".join(
+            f"{d['nombre']} {_chat_pesos(d['precio'])}" for d in datos[1:4]) + "."
+    return {"datos": datos, "resumen": resumen}
+
+
+def _chat_stock_sucursal(db, sesion, args, tz_min):
+    nombre = (args.get("producto") or "").strip()
+    pedida = (args.get("sucursal") or "").strip()
+    if not nombre:
+        return {"datos": [], "resumen": "¿De qué producto quieres ver las existencias?"}
+
+    query = db.query(Producto).filter(or_(
+        Producto.nombre.ilike(f"%{nombre}%"),
+        Producto.marca.ilike(f"%{nombre}%"),
+        Producto.categoria.ilike(f"%{nombre}%"),
+    ))
+    productos = aplicar_filtro_tienda(query, sesion).order_by(Producto.nombre).limit(3).all()
+    if not productos:
+        return {"datos": [], "resumen": f"No encontré ningún producto que coincida con «{nombre}»."}
+
+    visibles = sucursales_visibles(db, sesion)
+    ids = [p.id for p in productos]
+    filas = db.query(StockSucursal).filter(StockSucursal.producto_id.in_(ids)).all()
+    nombres = {p.id: p.nombre for p in productos}
+
+    datos = []
+    for f in filas:
+        if visibles is not None and f.sucursal not in visibles:
+            continue
+        if pedida and pedida.lower() not in f.sucursal.lower():
+            continue
+        if f.cantidad:
+            datos.append({"producto": nombres[f.producto_id],
+                          "sucursal": f.sucursal, "cantidad": f.cantidad})
+    datos.sort(key=lambda d: -d["cantidad"])
+
+    # La búsqueda puede caer en un solo producto o en varios de una marca
+    # («¿dónde hay Repashy?»); en ese caso se suman las piezas por sucursal.
+    etiqueta = nombres[productos[0].id] if len(productos) == 1 else \
+        f"{nombre} ({len(productos)} productos)"
+    if not datos:
+        donde = f" en {pedida}" if pedida else " en ninguna sucursal"
+        return {"datos": [], "resumen": f"No hay existencia de {etiqueta}{donde}."}
+
+    por_suc = {}
+    for d in datos:
+        por_suc[d["sucursal"]] = por_suc.get(d["sucursal"], 0) + d["cantidad"]
+    lista = "; ".join(f"{s}: {c:g}" for s, c in
+                      sorted(por_suc.items(), key=lambda x: -x[1])[:6])
+    return {"datos": datos, "resumen": f"{etiqueta} — {lista}."}
+
+
+def _chat_stock_bajo(db, sesion, args, tz_min):
+    categoria = (args.get("categoria") or "").strip()
+    query = db.query(Producto).filter(
+        Producto.stock <= Producto.stock_minimo, Producto.stock_minimo > 0)
+    if categoria:
+        query = query.filter(or_(Producto.categoria.ilike(f"%{categoria}%"),
+                                 Producto.marca.ilike(f"%{categoria}%")))
+    query = aplicar_filtro_tienda(query, sesion)
+    total = query.count()
+    rows = query.order_by(Producto.stock, Producto.nombre).limit(10).all()
+
+    if not rows:
+        return {"datos": [], "resumen": "No hay productos por debajo del stock mínimo."}
+    datos = [{"nombre": p.nombre, "stock": p.stock, "minimo": p.stock_minimo} for p in rows]
+    lista = ", ".join(f"{d['nombre']} ({d['stock']:g})" for d in datos[:5])
+    de = f" de {categoria}" if categoria else ""
+    resumen = f"Hay {total} productos{de} en o por debajo del mínimo. Los más bajos: {lista}."
+    return {"datos": datos, "total": total, "resumen": resumen}
+
+
+def _chat_resumen_ventas(db, sesion, args, tz_min):
+    periodo = args.get("periodo") or "hoy"
+    desde, hasta = _chat_rango(periodo, tz_min)
+    r = _calcular_periodo_dash(db, desde, hasta, sucursal_restriccion(sesion))
+    txt = _chat_periodo_texto(periodo)
+    if not r["num_ventas"]:
+        return {"datos": r, "resumen": f"No hay ventas registradas {txt}."}
+    resumen = (f"Ventas de {txt}: {_chat_pesos(r['total_vendido'])} en {r['num_ventas']} "
+               f"tickets (promedio {_chat_pesos(r['ticket_promedio'])}). "
+               f"Ganancia {_chat_pesos(r['ganancia'])}, margen {r['margen_pct']}%.")
+    return {"datos": r, "resumen": resumen}
+
+
+def _chat_resumen_gastos(db, sesion, args, tz_min):
+    periodo = args.get("periodo") or "mes"
+    desde, hasta = _chat_rango(periodo, tz_min)
+    q = db.query(Gasto).filter(Gasto.fecha >= desde, Gasto.fecha < hasta)
+    restriccion = sucursal_restriccion(sesion)
+    if restriccion is not None:
+        q = q.filter(Gasto.sucursal == restriccion)
+    gastos = q.all()
+    txt = _chat_periodo_texto(periodo)
+    if not gastos:
+        return {"datos": {}, "resumen": f"No hay gastos registrados {txt}."}
+
+    por_cat = {}
+    for g in gastos:
+        por_cat[g.categoria] = por_cat.get(g.categoria, 0.0) + g.monto
+    desglose = sorted(({"categoria": k, "total": round(v, 2)} for k, v in por_cat.items()),
+                      key=lambda x: -x["total"])
+    total = round(sum(g.monto for g in gastos), 2)
+    lista = ", ".join(f"{d['categoria']} {_chat_pesos(d['total'])}" for d in desglose[:4])
+    return {"datos": {"total": total, "num_gastos": len(gastos), "por_categoria": desglose},
+            "resumen": f"Gastos de {txt}: {_chat_pesos(total)} en {len(gastos)} movimientos. {lista}."}
+
+
+def _chat_deuda_clientes(db, sesion, args, tz_min):
+    nombre = (args.get("cliente") or "").strip()
+    query = clientes_visibles_query(db, sesion)
+    if nombre:
+        query = query.filter(Cliente.nombre.ilike(f"%{nombre}%"))
+
+    deudores = []
+    for c in query.all():
+        saldo = _saldo_cliente(db, c.id)
+        if saldo > 0:
+            deudores.append({"cliente": c.nombre, "deuda": saldo,
+                             "limite_credito": c.limite_credito})
+    deudores.sort(key=lambda d: -d["deuda"])
+
+    if not deudores:
+        if nombre:
+            return {"datos": [], "resumen": f"{nombre} no tiene saldo pendiente."}
+        return {"datos": [], "resumen": "Ningún cliente tiene saldo pendiente."}
+    total = round(sum(d["deuda"] for d in deudores), 2)
+    lista = "; ".join(f"{d['cliente']} {_chat_pesos(d['deuda'])}" for d in deudores[:6])
+    if nombre and len(deudores) == 1:
+        return {"datos": deudores, "resumen": f"{deudores[0]['cliente']} debe {_chat_pesos(total)}."}
+    return {"datos": deudores, "total_por_cobrar": total,
+            "resumen": f"Por cobrar {_chat_pesos(total)} de {len(deudores)} clientes: {lista}."}
+
+
+def _chat_top_productos(db, sesion, args, tz_min):
+    periodo = args.get("periodo") or "mes"
+    desde, hasta = _chat_rango(periodo, tz_min)
+    q = db.query(Venta).filter(Venta.creado_en >= desde, Venta.creado_en < hasta)
+    restriccion = sucursal_restriccion(sesion)
+    if restriccion is not None:
+        q = q.filter(Venta.sucursal == restriccion)
+
+    acum = {}
+    for v in q.all():
+        try:
+            detalle = json.loads(v.detalle_json)
+        except (TypeError, ValueError):
+            continue
+        for it in detalle:
+            nom = it.get("nombre") or "(sin nombre)"
+            a = acum.setdefault(nom, {"nombre": nom, "unidades": 0.0, "importe": 0.0})
+            a["unidades"] += it.get("cantidad", 0) or 0
+            a["importe"] += it.get("importe", 0) or 0
+
+    top = sorted(acum.values(), key=lambda d: -d["importe"])[:10]
+    for d in top:
+        d["importe"] = round(d["importe"], 2)
+    txt = _chat_periodo_texto(periodo)
+    if not top:
+        return {"datos": [], "resumen": f"No hay ventas registradas {txt}."}
+    lista = ", ".join(f"{d['nombre']} ({d['unidades']:g} pz, {_chat_pesos(d['importe'])})"
+                      for d in top[:5])
+    return {"datos": top, "resumen": f"Lo más vendido {txt}: {lista}."}
+
+
+# nombre -> (función, descripción, parámetros, solo_gerente)
+CHAT_HERRAMIENTAS = {
+    "buscar_producto": (
+        _chat_buscar_producto,
+        "Precio y existencia total de un producto del catálogo. Úsala cuando "
+        "pregunten cuánto cuesta algo, a cuánto se vende, o si hay existencia.",
+        {"type": "object",
+         "properties": {"nombre": {"type": "string",
+                                   "description": "Nombre, marca o parte del nombre del producto"}},
+         "required": ["nombre"]},
+        False,
+    ),
+    "stock_por_sucursal": (
+        _chat_stock_sucursal,
+        "Existencias de un producto desglosadas por sucursal. Úsala cuando la "
+        "pregunta mencione una sucursal o pregunte en dónde hay.",
+        {"type": "object",
+         "properties": {"producto": {"type": "string", "description": "Nombre del producto"},
+                        "sucursal": {"type": "string",
+                                     "description": "Sucursal concreta. Omitir para ver todas."}},
+         "required": ["producto"]},
+        False,
+    ),
+    "productos_stock_bajo": (
+        _chat_stock_bajo,
+        "Productos en o por debajo de su stock mínimo. Úsala para qué se está "
+        "acabando o qué hay que resurtir.",
+        {"type": "object",
+         "properties": {"categoria": {"type": "string",
+                                      "description": "Filtrar por categoría o marca. Opcional."}}},
+        False,
+    ),
+    "resumen_ventas": (
+        _chat_resumen_ventas,
+        "Total vendido, número de tickets, ganancia y margen de un periodo.",
+        {"type": "object",
+         "properties": {"periodo": {"type": "string", "enum": ["hoy", "ayer", "semana", "mes"]}},
+         "required": ["periodo"]},
+        True,
+    ),
+    "resumen_gastos": (
+        _chat_resumen_gastos,
+        "Gastos ya registrados, agrupados por categoría. No sirve para dar de "
+        "alta un gasto nuevo.",
+        {"type": "object",
+         "properties": {"periodo": {"type": "string", "enum": ["hoy", "semana", "mes"]}},
+         "required": ["periodo"]},
+        True,
+    ),
+    "deuda_clientes": (
+        _chat_deuda_clientes,
+        "Saldo pendiente de los clientes a crédito. Úsala para deudas y cobranza.",
+        {"type": "object",
+         "properties": {"cliente": {"type": "string",
+                                    "description": "Nombre del cliente. Omitir para ver a todos."}}},
+        True,
+    ),
+    "top_productos": (
+        _chat_top_productos,
+        "Productos más vendidos de un periodo, por dinero e unidades.",
+        {"type": "object",
+         "properties": {"periodo": {"type": "string", "enum": ["hoy", "semana", "mes"]}},
+         "required": ["periodo"]},
+        True,
+    ),
+}
+
+
+def _chat_esquema(sesion: Sesion):
+    """Herramientas que le tocan a esta sesión. Un operador no ve ventas,
+    gastos ni deudas: el mismo criterio que requerir_gerente en el resto de la
+    API, aplicado antes de que el modelo sepa siquiera que existen."""
+    return [
+        {"type": "function",
+         "function": {"name": nombre, "description": desc, "parameters": params}}
+        for nombre, (_fn, desc, params, solo_gerente) in CHAT_HERRAMIENTAS.items()
+        if not solo_gerente or sesion.rol == "gerente"
+    ]
+
+
+def _chat_ollama(mensajes, herramientas=None):
+    cuerpo = {"model": CHAT_MODELO, "messages": mensajes, "stream": False,
+              "keep_alive": CHAT_KEEP_ALIVE, "options": {"temperature": 0}}
+    if herramientas:
+        cuerpo["tools"] = herramientas
+    req = urllib.request.Request(
+        CHAT_OLLAMA_URL,
+        data=json.dumps(cuerpo, ensure_ascii=False).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=CHAT_TIMEOUT) as r:
+            return json.loads(r.read())
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        raise HTTPException(status_code=503, detail=f"El asistente no está disponible ({e})")
+
+
+def _chat_ayuda(sesion: Sesion) -> str:
+    puedo = ["consultar precios y existencias", "ver el stock por sucursal",
+             "decirte qué se está acabando"]
+    if sesion.rol == "gerente":
+        puedo += ["darte el resumen de ventas y gastos", "revisar quién debe"]
+    return "Puedo " + ", ".join(puedo[:-1]) + " y " + puedo[-1] + ". ¿Qué necesitas?"
+
+
+@app.post("/api/chat")
+def chat(data: dict = Body(...), sesion: Sesion = Depends(requerir_sesion),
+         db: Session = Depends(get_db)):
+    mensaje = (data.get("mensaje") or "").strip()
+    tz_min = data.get("tz_offset_min")
+    tz_min = tz_min if isinstance(tz_min, int) else 360
+    if not mensaje:
+        raise HTTPException(status_code=400, detail="Falta el mensaje")
+    if len(mensaje) > 500:
+        mensaje = mensaje[:500]
+
+    # Charla suelta: se responde sin modelo (ver CHAT_CORTESIA)
+    if CHAT_CORTESIA.match(mensaje) and len(mensaje.split()) <= 6:
+        return {"respuesta": _chat_ayuda(sesion), "herramienta": None, "datos": None}
+
+    if sesion.rol != "gerente" and CHAT_TEMA_GERENTE.search(mensaje):
+        return {"respuesta": "Las ventas, los gastos y las deudas de clientes solo "
+                             "las puede consultar un gerente. " + _chat_ayuda(sesion),
+                "herramienta": None, "datos": None}
+
+    herramientas = _chat_esquema(sesion)
+    mensajes = [{"role": "system", "content": CHAT_SISTEMA},
+                {"role": "user", "content": mensaje}]
+    primera = _chat_ollama(mensajes, herramientas)
+    llamadas = (primera.get("message") or {}).get("tool_calls") or []
+
+    if not llamadas:
+        texto = (primera.get("message") or {}).get("content") or ""
+        limpio = texto.strip()
+        if not limpio or CHAT_RUIDO.search(limpio):
+            limpio = ("No estoy seguro de qué necesitas. " + _chat_ayuda(sesion))
+        return {"respuesta": limpio, "herramienta": None, "datos": None}
+
+    fn = llamadas[0]["function"]
+    nombre = fn.get("name")
+    args = fn.get("arguments") or {}
+    if isinstance(args, str):
+        try:
+            args = json.loads(args)
+        except ValueError:
+            args = {}
+
+    entrada = CHAT_HERRAMIENTAS.get(nombre)
+    if not entrada or (entrada[3] and sesion.rol != "gerente"):
+        # El modelo pidió algo que no existe o que no le toca a esta sesión
+        return {"respuesta": _chat_ayuda(sesion), "herramienta": None, "datos": None}
+
+    resultado = entrada[0](db, sesion, args, tz_min)
+    respuesta = resultado["resumen"]
+
+    # Segunda pasada opcional: que el modelo lo diga de forma más natural. Solo
+    # se usa si pasa la verificación; si no, queda el texto calculado (ver
+    # CHAT_REDACTAR). El modelo elige la consulta; las cifras las pone el código.
+    if CHAT_REDACTAR:
+        mensajes.append({"role": "assistant", "content": "",
+                         "tool_calls": [{"function": {"name": nombre, "arguments": args}}]})
+        mensajes.append({"role": "tool", "tool_name": nombre,
+                         "content": json.dumps(resultado["datos"], ensure_ascii=False, default=str)})
+        try:
+            segunda = _chat_ollama(mensajes, herramientas)
+            texto = ((segunda.get("message") or {}).get("content") or "").strip()
+        except HTTPException:
+            texto = ""
+        if _chat_redaccion_confiable(texto, resultado["datos"]):
+            respuesta = texto
+
+    return {"respuesta": respuesta, "resumen_verificado": resultado["resumen"],
+            "herramienta": nombre, "argumentos": args, "datos": resultado["datos"]}
+
+
+@app.get("/chat", response_class=FileResponse)
+def chat_page():
+    return FileResponse("static/chat.html")

@@ -443,3 +443,15 @@ function _aceptarPromptGenerico(){
   const valor = document.getElementById('prompt-generico-input').value;
   if(_resolverPromptFn) _resolverPromptFn(valor);
 }
+
+// ─── Asistente flotante ────────────────────────────────────────────────────
+// El robot de la esquina vive en su propio archivo y se carga desde aquí,
+// que es lo único que incluyen todas las pantallas. Se monta solo si hay
+// sesión, así que en /login no aparece.
+(function(){
+  if (!getSesion()) return;
+  const s = document.createElement('script');
+  s.src = '/static/chat-widget.js?v=1787328487';
+  s.defer = true;
+  document.head.appendChild(s);
+})();
