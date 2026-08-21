@@ -2360,6 +2360,25 @@ def normalizar_telefono(valor: Optional[str]) -> Optional[str]:
     return digitos
 
 
+def clientes_visibles_query(db: Session, sesion: Sesion):
+    """Query de Cliente ya filtrado por lo que puede ver esta sesión.
+
+    La cartera general (cliente.sucursal es NULL) se comparte entre casi todas
+    las sucursales. La excepción son las que venden con niveles de precio (El
+    Zar): esas llevan su propia cartera aparte —son clientes de mayoreo con
+    condiciones distintas— y no ven la general. Sin restricción (Only
+    Enterprises) se ven todos. Un solo sitio para esta regla: repetirla en cada
+    endpoint es como se coló el bug de que El Zar veía la cartera de las demás."""
+    query = db.query(Cliente)
+    restriccion = sucursal_restriccion(sesion)
+    if restriccion is None:
+        return query
+    suc_actual = db.query(Sucursal).filter(Sucursal.nombre == restriccion).first()
+    if suc_actual and suc_actual.usa_niveles_precio:
+        return query.filter(Cliente.sucursal == restriccion)
+    return query.filter(or_(Cliente.sucursal == restriccion, Cliente.sucursal.is_(None)))
+
+
 def _saldo_cliente(db, cliente_id):
     ventas = db.query(Venta).filter(Venta.cliente_id == cliente_id, Venta.metodo_pago == "credito").all()
     suma_ventas = sum(v.total for v in ventas)
@@ -2390,21 +2409,9 @@ def crear_cliente(data: CrearCliente, sesion: Sesion = Depends(requerir_sesion),
 
 @app.get("/api/clientes")
 def listar_clientes(q: Optional[str] = Query(None), sesion: Sesion = Depends(requerir_sesion), db: Session = Depends(get_db)):
-    query = db.query(Cliente)
+    query = clientes_visibles_query(db, sesion)
     if q:
         query = query.filter(Cliente.nombre.ilike(f"%{q}%"))
-    # La cartera general (cliente.sucursal es NULL) es común a casi todas las
-    # sucursales. La excepción son las que venden con niveles de precio (El
-    # Zar): esas llevan su propia cartera aparte, sin mezclarse con la general
-    # —son clientes de mayoreo con condiciones distintas—, así que solo ven los
-    # suyos. Sin restricción (Only Enterprises) se ven todos.
-    restriccion = sucursal_restriccion(sesion)
-    if restriccion is not None:
-        suc_actual = db.query(Sucursal).filter(Sucursal.nombre == restriccion).first()
-        if suc_actual and suc_actual.usa_niveles_precio:
-            query = query.filter(Cliente.sucursal == restriccion)
-        else:
-            query = query.filter(or_(Cliente.sucursal == restriccion, Cliente.sucursal.is_(None)))
     clientes = query.order_by(Cliente.nombre).all()
     return [{
         "id": c.id,
@@ -2671,7 +2678,7 @@ def reporte_completo(
             bloque["tiendas"] = tiendas_de.get(nombre, [])
             por_sucursal.append(bloque)
 
-    clientes = db.query(Cliente).all()
+    clientes = clientes_visibles_query(db, sesion).all()
     detalle_clientes = []
     for c in clientes:
         saldo = _saldo_cliente(db, c.id)
@@ -2711,7 +2718,7 @@ def reporte_completo(
 
 @app.get("/api/clientes-resumen")
 def resumen_clientes(sesion: Sesion = Depends(requerir_gerente), db: Session = Depends(get_db)):
-    clientes = db.query(Cliente).all()
+    clientes = clientes_visibles_query(db, sesion).all()
     total_por_cobrar = 0.0
     num_con_saldo = 0
     for c in clientes:
