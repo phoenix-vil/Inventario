@@ -942,6 +942,24 @@ function calcCambio(){
   document.getElementById('c-cambio').textContent=money(cambio>0?cambio:0);
 }
 
+// ─── Cajón de dinero ────────────────────────────────────────────────────────
+// El ticket se imprime con window.print() (diálogo normal del sistema), que
+// nunca manda el comando de abrir cajón —eso exige hablarle a la impresora
+// por fuera de ese diálogo—. Por eso hace falta un agente aparte: un programa
+// chico que corre en la PC donde está conectada la impresora por USB, escucha
+// en 127.0.0.1 y traduce esta petición al byte ESC/POS que dispara el pulso.
+// Ver ~/inventario/cajon-agente/ para el instalador.
+//
+// Es "best effort" a propósito: en cualquier otro dispositivo (los iPhone de
+// las demás sucursales, una tablet) no hay nada escuchando en localhost y el
+// fetch simplemente falla — no debe interrumpir ni avisar del cobro.
+const CAJON_AGENTE_URL = 'http://127.0.0.1:8788/abrir-cajon';
+function abrirCajonDinero(){
+  const controlador = new AbortController();
+  setTimeout(() => controlador.abort(), 1500);
+  fetch(CAJON_AGENTE_URL, {method:'POST', signal: controlador.signal}).catch(()=>{});
+}
+
 async function confirmarCobro(){
   const msg=document.getElementById('cobro-msg');
   const subtotal=calcSubtotal();
@@ -992,6 +1010,7 @@ async function confirmarCobro(){
     carrito=[];descuentoExtra=0;autorizadoPor=null;
     renderCarrito();
     mostrarTicket(data);
+    if(data.metodo_pago==='efectivo') abrirCajonDinero();
     if(cotizacionOrigenId){
       try{
         await authFetch('/api/cotizaciones/'+cotizacionOrigenId+'/marcar-vendida', {
