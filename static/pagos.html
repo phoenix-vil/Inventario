@@ -136,6 +136,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <button class="icon-btn" onclick="abrirPendientes()" title="Ventas en espera" style="position:relative;margin-right:4px">
     ⏸<span id="badge-pendientes" style="display:none;position:absolute;top:-3px;right:-3px;background:var(--red);color:#fff;font-size:10px;font-weight:700;border-radius:10px;min-width:16px;height:16px;align-items:center;justify-content:center;padding:0 3px;pointer-events:none"></span>
   </button>
+  <button class="icon-btn" id="btn-agente-local" onclick="configurarAgenteLocal()" title="Impresora y cajón en esta computadora">🖨️</button>
   <a href="/historial" class="icon-btn" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none" title="Historial">📋</a>
   </div>
 </div>
@@ -942,23 +943,106 @@ function calcCambio(){
   document.getElementById('c-cambio').textContent=money(cambio>0?cambio:0);
 }
 
-// ─── Cajón de dinero ────────────────────────────────────────────────────────
+// ─── Agente local del punto de venta (impresora + cajón) ───────────────────
 // El ticket se imprime con window.print() (diálogo normal del sistema), que
-// nunca manda el comando de abrir cajón —eso exige hablarle a la impresora
-// por fuera de ese diálogo—. Por eso hace falta un agente aparte: un programa
-// chico que corre en la PC donde está conectada la impresora por USB, escucha
-// en 127.0.0.1 y traduce esta petición al byte ESC/POS que dispara el pulso.
-// Ver ~/inventario/cajon-agente/ para el instalador.
+// nunca manda los comandos ESC/POS de abrir el cajón ni permite saltarse ese
+// diálogo — hay que hablarle a la impresora por fuera de ahí. Por eso hace
+// falta un agente aparte: un programa chico que corre en la PC donde está
+// conectada la impresora por USB, escucha en 127.0.0.1 y traduce estas
+// peticiones a los comandos que la impresora entiende. Ver
+// ~/inventario/cajon-agente/ para el instalador.
 //
-// Es "best effort" a propósito: en cualquier otro dispositivo (los iPhone de
-// las demás sucursales, una tablet) no hay nada escuchando en localhost y el
-// fetch simplemente falla — no debe interrumpir ni avisar del cobro.
-const CAJON_AGENTE_URL = 'http://127.0.0.1:8788/abrir-cajon';
+// Solo tiene sentido intentarlo en LA PC donde de verdad está ese agente
+// instalado y corriendo —el mostrador con el cajón físico—; en cualquier
+// otro dispositivo (los iPhone de las demás sucursales, una tablet) nunca va
+// a haber nadie escuchando en localhost. Por eso es una bandera local, propia
+// de este navegador/dispositivo (localStorage, no la sesión del usuario): se
+// activa una sola vez, a mano, desde el botón 🖨️ de esta pantalla, y así el
+// resto de sucursales queda exactamente como estaba.
+const AGENTE_ACTIVO_KEY = 'agente_pos_local';
+const AGENTE_BASE_URL = 'http://127.0.0.1:8788';
+
+function agenteLocalActivo(){
+  return localStorage.getItem(AGENTE_ACTIVO_KEY) === '1';
+}
+
+function actualizarBotonAgenteLocal(){
+  const btn = document.getElementById('btn-agente-local');
+  if(!btn) return;
+  const activo = agenteLocalActivo();
+  btn.style.color = activo ? 'var(--blue)' : '';
+  btn.style.borderColor = activo ? 'var(--blue)' : '';
+  btn.title = activo
+    ? 'Impresora y cajón activos en esta computadora (toca para desactivar)'
+    : 'Impresora y cajón en esta computadora (toca para activar)';
+}
+
+async function configurarAgenteLocal(){
+  if(agenteLocalActivo()){
+    const ok = await confirmarPersonalizado(
+      'Esta computadora dejará de intentar abrir el cajón y de imprimir directo: volverá al diálogo de impresión de siempre.',
+      '¿Desactivar la impresora y el cajón aquí?'
+    );
+    if(ok){ localStorage.removeItem(AGENTE_ACTIVO_KEY); actualizarBotonAgenteLocal(); }
+    return;
+  }
+  const ok = await confirmarPersonalizado(
+    'Actívalo solo en la computadora donde ya instalaste el agente de ~/inventario/cajon-agente/ '
+    + '(el que habla con la impresora Xprinter y el cajón EC-CD-50M). '
+    + 'Desde ese momento, cada venta intentará abrir el cajón e imprimir el ticket sola, sin el diálogo de Windows.',
+    '¿Activar la impresora y el cajón aquí?'
+  );
+  if(ok){ localStorage.setItem(AGENTE_ACTIVO_KEY, '1'); actualizarBotonAgenteLocal(); }
+}
+
+// Es "best effort" a propósito: si el agente no responde a tiempo (se
+// reinició la PC y todavía no arranca, se cerró sin querer, etc.) no debe
+// interrumpir ni avisar del cobro.
 function abrirCajonDinero(){
+  if(!agenteLocalActivo()) return;
   const controlador = new AbortController();
   setTimeout(() => controlador.abort(), 1500);
-  fetch(CAJON_AGENTE_URL, {method:'POST', signal: controlador.signal}).catch(()=>{});
+  fetch(AGENTE_BASE_URL + '/abrir-cajon', {method:'POST', signal: controlador.signal}).catch(()=>{});
 }
+
+// Nombre a mostrar como encabezado del ticket impreso directo (es solo texto,
+// a diferencia del ticket en pantalla que sí lleva el logo de la tienda).
+// Mismo criterio que logosActivos(): la tienda de la sesión, o "Only
+// Enterprises" si no hay una sola.
+function nombreTiendaParaTicket(){
+  const s = getSesion();
+  const tiendas = (s && s.tienda) || [];
+  return tiendas.length ? tiendas.join(' + ') : 'Only Enterprises';
+}
+
+// Si esta PC tiene el agente activado, le pide que imprima el ticket directo
+// a la impresora. Si no responde a tiempo, cae solo al diálogo de impresión
+// de siempre —la "recaída automática"—, así nunca se pierde el ticket aunque
+// el agente se haya caído ese día. En cualquier dispositivo sin la bandera
+// activada (todas las demás sucursales) no se toca nada: se queda igual que
+// siempre, con el botón manual del modal.
+async function intentarImpresionDirecta(v){
+  if(!agenteLocalActivo()) return;
+  const payload = Object.assign({}, v, {encabezado: nombreTiendaParaTicket()});
+  const controlador = new AbortController();
+  const vencido = setTimeout(() => controlador.abort(), 2500);
+  try{
+    const r = await fetch(AGENTE_BASE_URL + '/imprimir-ticket', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload), signal: controlador.signal
+    });
+    if(!r.ok) throw new Error('el agente respondió con error');
+  }catch(e){
+    imprimirTicket();
+  }finally{
+    clearTimeout(vencido);
+  }
+}
+
+// Va aquí y no arriba junto a requireAuth(): usa AGENTE_ACTIVO_KEY, declarada
+// unas líneas arriba en este mismo bloque, y en JS un const/let no se puede
+// leer antes de que su propia línea se ejecute.
+actualizarBotonAgenteLocal();
 
 async function confirmarCobro(){
   const msg=document.getElementById('cobro-msg');
@@ -1029,6 +1113,7 @@ function mostrarTicket(venta){
   ticketActual=venta;
   document.getElementById('ticket-contenido').innerHTML=generarTicketHTML(venta);
   document.getElementById('ticket-modal').classList.add('open');
+  intentarImpresionDirecta(venta);
 }
 
 precargarLogosActivos();

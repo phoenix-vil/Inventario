@@ -1,14 +1,25 @@
-# Agente del cajón de dinero
+# Agente del punto de venta (cajón de dinero + impresión directa)
 
 Programa chico que se queda corriendo en la PC de Windows donde está conectada
 la impresora Xprinter XP-58IIH por USB (la que tiene el cajón EC-CD-50M colgado
-del cable RJ11 de atrás). Su único trabajo es escuchar cuando `pagos.html`
-confirma un cobro en efectivo y, en ese momento, mandarle a la impresora el
-byte que dispara el pulso de abrir el cajón — algo que el diálogo normal de
-imprimir de Windows nunca hace.
+del cable RJ11 de atrás). Hace dos cosas, cada vez que se confirma una venta
+desde `pagos.html` **en esa misma PC**:
 
-No toca el driver de la impresora ni cambia cómo se imprimen los tickets hoy:
-solo agrega la apertura del cajón al lado.
+- Si el pago fue en efectivo, le manda a la impresora el byte que dispara el
+  pulso de abrir el cajón.
+- Imprime el ticket directo a la impresora, sin abrir el diálogo de impresión
+  de Windows —el cajero no tiene que tocar nada, sale solo.
+
+Ninguna de las dos cosas las puede hacer el diálogo normal de imprimir
+(`window.print()` del navegador): ese diálogo solo sabe entregarle a la
+impresora una hoja ya dibujada, nunca esos comandos de control. Por eso hace
+falta hablarle a la impresora por otra vía, y el navegador no puede hacerlo
+directo sin cambiarle el driver (lo que rompería la impresión normal); este
+agente es el puente.
+
+No toca el driver de la impresora ni cambia cómo imprimía antes: usa la API de
+impresión de Windows en modo RAW, y si este agente no está corriendo,
+`pagos.html` cae sola de vuelta al diálogo de impresión de siempre.
 
 ## Antes de empezar
 
@@ -79,7 +90,7 @@ python agente_cajon.py
 Debe imprimir:
 
 ```
-Agente del cajón escuchando en http://127.0.0.1:8788
+Agente del punto de venta escuchando en http://127.0.0.1:8788
 Impresora configurada: 'XP-58IIH'
 ```
 
@@ -92,21 +103,20 @@ Para comprobar que responde, abre un navegador en esa misma PC y visita:
 http://127.0.0.1:8788/
 ```
 
-Debe mostrar `{"agente": "cajon de dinero", "estado": "activo"}`.
+Debe mostrar `{"agente": "punto de venta", "estado": "activo"}`.
 
-## Paso 6 — Probar que de verdad abre el cajón
+## Paso 6 — Probar que de verdad abre el cajón y que imprime
 
 Con el agente todavía corriendo (ventana del Paso 5 abierta), abre **otro**
-Símbolo del sistema y ejecuta:
+Símbolo del sistema.
+
+**Cajón:**
 
 ```
 curl -X POST http://127.0.0.1:8788/abrir-cajon
 ```
 
-El cajón debería abrirse en ese momento. Si no tienes `curl`, entra desde el
-navegador a `http://127.0.0.1:8788/abrir-cajon` — no es la forma correcta
-(esa ruta espera un POST, no un GET) pero muchos navegadores lo intentan igual
-y sirve para una prueba rápida; si no abre así, usa el `curl` de arriba.
+El cajón debería abrirse en ese momento.
 
 **Si no abre pero tampoco da error:** el pulso puede estar configurado al pin
 equivocado del RJ11. Abre `agente_cajon.py`, busca la línea:
@@ -117,10 +127,22 @@ PULSO_ABRIR_CAJON = b"\x1b\x70\x00\x19\xfa"
 
 y cambia el tercer byte de `\x00` a `\x01` (ese byte es el que elige el pin:
 `\x00` = pin 2, `\x01` = pin 5). Guarda, detén el agente (Ctrl+C en su
-ventana) y repite el Paso 5 y el Paso 6.
+ventana) y repite el Paso 5 y esta prueba.
 
-**Si da un error de impresora no encontrada:** el nombre del Paso 4 no
-coincide exactamente. Vuelve a copiarlo tal cual aparece en Windows.
+**Impresión del ticket**, con un ticket de ejemplo (cópialo tal cual, en una
+sola línea):
+
+```
+curl -X POST http://127.0.0.1:8788/imprimir-ticket -H "Content-Type: application/json" -d "{\"id\":1,\"encabezado\":\"Prueba\",\"sucursal\":\"Prueba\",\"operador\":\"Prueba\",\"fecha\":\"2026-01-01T12:00:00Z\",\"detalle\":[{\"nombre\":\"Producto de prueba\",\"cantidad\":1,\"precio_unitario\":100,\"precio_original\":null,\"importe\":100}],\"subtotal\":100,\"descuento_extra_pct\":0,\"ahorro_total\":0,\"total\":100,\"metodo_pago\":\"efectivo\",\"pago_con\":100,\"cambio\":0}"
+```
+
+Debe salir un ticket de prueba con el papel cortándose solo al final. Si los
+acentos o la "ñ" salen como símbolos raros, o las columnas no alinean bien,
+revisa la sección de más abajo.
+
+**Si da un error de impresora no encontrada** (en cualquiera de las dos
+pruebas): el nombre del Paso 4 no coincide exactamente. Vuelve a copiarlo tal
+cual aparece en Windows.
 
 ## Paso 7 — Dejarlo arrancando solo con Windows
 
@@ -134,21 +156,48 @@ Una vez que el Paso 6 funcionó:
    presiona Enter — se abre esa carpeta. Pega el acceso directo ahí.
 4. Reinicia la PC (o cierra sesión y vuelve a entrar) para probar que arranca
    solo. No debe abrirse ninguna ventana visible: el agente corre oculto.
-5. Repite la prueba del Paso 6 para confirmar que sigue respondiendo.
+5. Repite las pruebas del Paso 6 para confirmar que sigue respondiendo.
 
-Listo. De ahora en adelante, cada vez que se cobre en efectivo desde esta PC,
-`pagos.html` va a pedirle a este agente que abra el cajón automáticamente.
-Desde cualquier otro dispositivo (los iPhone de las demás sucursales, una
-tablet) esa petición simplemente no encuentra a nadie escuchando y no pasa
-nada — no da error ni interrumpe el cobro, es el comportamiento esperado.
+## Paso 8 — Activarlo en pagos.html (el paso que falta si nada de esto pasa solo)
+
+Todo lo de arriba deja el agente listo, pero `pagos.html` **no lo usa
+automáticamente**: hay que decírselo, una sola vez, desde el navegador de
+**esta PC** en concreto —es una configuración del dispositivo, no de tu
+usuario, así que si cambias de computadora hay que repetir este paso ahí—.
+
+1. Abre `/pagos` en el navegador de esta PC, con el usuario de siempre.
+2. En la barra de arriba hay un ícono 🖨️. Tócalo.
+3. Confirma "¿Activar la impresora y el cajón aquí?".
+4. El ícono se pone azul: es la señal de que esta PC ya va a intentar abrir el
+   cajón e imprimir directo en cada venta.
+
+Desde ese momento, cada venta en esta PC intenta abrir el cajón (si fue en
+efectivo) e imprimir el ticket sola. Si el agente deja de responder algún día
+—se cerró, la PC se reinició y todavía no arranca—, cae sola de vuelta al
+diálogo de impresión de siempre: nunca te quedas sin ticket.
+
+En cualquier otro dispositivo (los iPhone de las demás sucursales, una
+tablet) el ícono 🖨️ existe pero no lo actives: ahí no hay impresora ni cajón
+conectados, y sin activarlo la pantalla se comporta exactamente igual que
+siempre, con el botón manual de "Imprimir" del ticket.
 
 ## Si algo deja de funcionar más adelante
 
-- **El cajón dejó de abrir pero los tickets se siguen imprimiendo bien:**
-  probablemente el agente no está corriendo. Revisa con el Paso 6; si no
-  responde, ejecútalo a mano con el Paso 5 para ver el error exacto.
+- **El cajón/ticket dejaron de abrir o imprimir solos, pero el botón manual
+  "Imprimir" del modal sigue funcionando:** probablemente el agente no está
+  corriendo. Revisa con el Paso 6; si no responde, ejecútalo a mano con el
+  Paso 5 para ver el error exacto.
+- **El ícono 🖨️ de pagos.html aparece en gris (no azul) en esta PC:** significa
+  que no está activado en este navegador. Repite el Paso 8.
 - **Reinstalaron o reemplazaron la impresora:** repite el Paso 4, el nombre
   puede haber cambiado.
+- **El ticket imprime pero con acentos/ñ raros, o las columnas no alinean:**
+  abre `agente_cajon.py` y ajusta cerca del principio:
+  - `ANCHO_TICKET = 32` — súbelo o bájalo (30-33 es el rango normal) si el
+    texto se corta antes de tiempo o le sobra mucho espacio a la derecha.
+  - Si los acentos salen mal, prueba cambiando `ESC_CODEPAGE_CP850 =
+    b"\x1b\x74\x02"` a otro código de página (consulta el manual de la
+    Xprinter, la lista de códigos ESC/POS suele estar ahí).
 - **Quieres detenerlo temporalmente:** busca `pythonw.exe` en el Administrador
   de tareas de Windows y termínalo ahí; volverá a arrancar solo en el
   siguiente inicio de sesión mientras el acceso directo del Paso 7 siga en la
