@@ -93,7 +93,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   .menu-title{font-size:16px}
 }
 </style>
-<link rel="stylesheet" href="/static/modern.css?v=1787328487">
+<link rel="stylesheet" href="/static/modern.css?v=1787598500">
 </head>
 <body>
 
@@ -121,7 +121,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </div>
 
 <div class="menu">
-  <a class="menu-btn" href="/precios">
+  <a class="menu-btn no-enterprise" href="/precios">
     <div class="icon icon-precios">💲</div>
     <div class="menu-text">
       <div class="menu-title">Consulta de precios</div>
@@ -130,7 +130,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="arrow">›</div>
   </a>
 
-  <a class="menu-btn" href="/pagos">
+  <a class="menu-btn no-enterprise" href="/pagos">
     <div class="icon icon-pagos">💳</div>
     <div class="menu-text">
       <div class="menu-title">Punto de venta</div>
@@ -140,7 +140,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   </a>
 
 
-  <a class="menu-btn solo-gerente" href="/devoluciones" style="display:none">
+  <a class="menu-btn solo-gerente no-enterprise" href="/devoluciones" style="display:none">
     <div class="icon icon-precios">↩️</div>
     <div class="menu-text">
       <div class="menu-title">Devoluciones</div>
@@ -207,7 +207,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 <div class="footer">Servidor personal · acceso seguro vía Tailscale</div>
 
-<script src="/static/auth.js?v=1787328487"></script>
+<script src="/static/auth.js?v=1787598500"></script>
 <script>
 const sesion = requireAuth();
 if (sesion) {
@@ -230,6 +230,12 @@ if (sesion) {
       document.querySelectorAll('.solo-enterprise').forEach(el => el.style.display = 'flex');
       document.querySelectorAll('.config-enterprise-only').forEach(el => el.style.display = 'block');
     }
+  }
+  // Al revés que .solo-enterprise: esto se ve por omisión y se esconde solo
+  // para Only Enterprises, que no es una sucursal física —no tiene caja ni
+  // inventario propio que vender o devolver—, se usa administrativamente.
+  if (sesionVeTodo()) {
+    document.querySelectorAll('.no-enterprise').forEach(el => el.style.display = 'none');
   }
 }
 

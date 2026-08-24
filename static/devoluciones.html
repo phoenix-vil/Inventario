@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="/static/touch-icon-v3-180.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Devoluciones · Only Enterprises</title>
-<link rel="stylesheet" href="/static/modern.css?v=1787328487">
+<link rel="stylesheet" href="/static/modern.css?v=1787598500">
 <style>
 .msg{padding:10px;border-radius:8px;font-size:13px;margin-top:8px;display:none}
 .msg.show{display:block}
@@ -172,9 +172,10 @@ button.primary:hover{opacity:.85;background:var(--text)}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<script src="/static/auth.js?v=1787328487"></script>
+<script src="/static/auth.js?v=1787598500"></script>
 <script>
 requireGerente();
+requireSucursalOperativa();
 
 function money(n){return '$'+Number(n||0).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}

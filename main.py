@@ -211,6 +211,23 @@ def sucursal_restriccion(sesion: Optional[Sesion]) -> Optional[str]:
     return None
 
 
+def requerir_sucursal_operativa(sesion: Sesion) -> str:
+    """La sucursal física donde ocurre una operación de piso: vender, devolver,
+    cancelar. Only Enterprises no es una sucursal —no tiene caja ni inventario
+    propios que descontar—, se usa administrativamente para ver y comparar
+    las demás. `sesion.sucursal` para Only Enterprises SÍ trae el texto
+    "Only Enterprises" (no es None), así que un `if not sesion.sucursal` no
+    la detecta: hay que pasar por sucursal_restriccion(), que es quien de
+    verdad distingue una sucursal operativa de una sesión sin restricción."""
+    restriccion = sucursal_restriccion(sesion)
+    if restriccion is None:
+        raise HTTPException(
+            status_code=403,
+            detail="Only Enterprises no puede hacer ventas ni devoluciones; entra desde una sucursal.",
+        )
+    return restriccion
+
+
 def sucursales_visibles(db: Session, sesion: Optional[Sesion]) -> Optional[List[str]]:
     """Sucursales cuyo inventario puede consultar esta sesión: la suya y las
     demás que vendan alguna de sus mismas tiendas — desde Plaza se ve también
@@ -762,6 +779,7 @@ def autorizar_descuento(data: AutorizarDescuento, db: Session = Depends(get_db))
 # ─── Punto de venta: registrar venta y descontar stock ─────────────────────
 @app.post("/api/pos/venta")
 def registrar_venta(data: RegistrarVenta, sesion: Sesion = Depends(requerir_sesion), db: Session = Depends(get_db)):
+    sucursal_venta = requerir_sucursal_operativa(sesion)
     if not data.items:
         raise HTTPException(status_code=400, detail="La venta no tiene artículos")
 
@@ -845,7 +863,7 @@ def registrar_venta(data: RegistrarVenta, sesion: Sesion = Depends(requerir_sesi
         descuento_extra_pct=data.descuento_extra_pct,
         autorizado_por=data.autorizado_por,
         operador=sesion.usuario,
-        sucursal=sesion.sucursal,
+        sucursal=sucursal_venta,
         metodo_pago=metodo,
         cliente_id=data.cliente_id if metodo == "credito" else None,
         tpv_referencia=data.tpv_referencia if metodo == "tarjeta" else None,
@@ -879,7 +897,7 @@ def registrar_venta(data: RegistrarVenta, sesion: Sesion = Depends(requerir_sesi
         "transferencia_referencia": venta.transferencia_referencia,
         "autorizado_por": data.autorizado_por,
         "operador": sesion.usuario,
-        "sucursal": sesion.sucursal,
+        "sucursal": sucursal_venta,
         "detalle": detalle,
         "fecha": venta.creado_en.isoformat() + "Z",
     }
@@ -1243,6 +1261,7 @@ def devolver_items(
     sesion: Sesion = Depends(requerir_gerente),
     db: Session = Depends(get_db),
 ):
+    requerir_sucursal_operativa(sesion)
     v = db.query(Venta).filter(Venta.id == venta_id).first()
     if not v:
         raise HTTPException(status_code=404, detail="Venta no encontrada")
@@ -1348,6 +1367,7 @@ def cancelar_venta(
     sesion: Sesion = Depends(requerir_gerente),
     db: Session = Depends(get_db),
 ):
+    requerir_sucursal_operativa(sesion)
     v = db.query(Venta).filter(Venta.id == venta_id).first()
     if not v:
         raise HTTPException(status_code=404, detail="Venta no encontrada")

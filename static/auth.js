@@ -32,6 +32,16 @@ function requireEnterprise() {
   return s;
 }
 
+// Para las pantallas de piso (vender, devolver, cancelar) que Only Enterprises
+// no debe usar: no es una sucursal, no tiene caja ni inventario propio que
+// vender. El backend las protege con requerir_sucursal_operativa(); esto solo
+// evita que la sesión se quede viendo una pantalla que al confirmar le va a
+// fallar. Llamar después de requireAuth()/requireGerente(), no en su lugar.
+function requireSucursalOperativa() {
+  if (sesionVeTodo()) { location.href = '/'; return false; }
+  return true;
+}
+
 // true solo para las sesiones que ven el negocio completo: las de una sucursal
 // sin tienda asignada (Only Enterprises). El resto está restringida a su propia
 // sucursal, así que no tiene caso ofrecerle filtrar por otras — es el mismo
@@ -451,7 +461,7 @@ function _aceptarPromptGenerico(){
 (function(){
   if (!getSesion()) return;
   const s = document.createElement('script');
-  s.src = '/static/chat-widget.js?v=1787328487';
+  s.src = '/static/chat-widget.js?v=1787598500';
   s.defer = true;
   document.head.appendChild(s);
 })();
