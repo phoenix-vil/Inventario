@@ -63,7 +63,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .empty{text-align:center;padding:2rem 1rem;color:var(--text2);font-size:14px}
 @media(max-width:560px){.topbar{padding:0 .625rem}.container{padding:.875rem .875rem 4rem}}
 </style>
-<link rel="stylesheet" href="/static/modern.css?v=1787328487">
+<link rel="stylesheet" href="/static/modern.css?v=1787600127">
 </head>
 <body>
 
@@ -91,18 +91,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
     <div class="dif" id="dif"></div>
     <div class="field">
-      <label for="retirado">¿Cuánto retiras? (opcional)</label>
-      <input type="number" id="retirado" inputmode="decimal" step="0.01" min="0" placeholder="0.00" oninput="recalcular()">
-      <div class="hint" id="hint-queda">Lo que no retires se queda como fondo para el siguiente corte.</div>
+      <label for="deja">¿Cuánto dejas en la caja? (opcional)</label>
+      <input type="number" id="deja" inputmode="decimal" step="0.01" min="0" placeholder="0.00" oninput="recalcular()">
+      <div class="hint" id="hint-retira">Lo que no dejes se retira. Vacío = se queda todo, no se retira nada.</div>
     </div>
 
-    <div class="linea total" id="linea-queda">
-      <span class="et">Se queda en la caja</span>
-      <span class="val" id="val-queda">$0.00</span>
+    <div class="linea total" id="linea-retira">
+      <span class="et">Se retira de la caja</span>
+      <span class="val" id="val-retira">$0.00</span>
     </div>
     <div class="field">
       <label for="nota">Nota (opcional)</label>
-      <textarea id="nota" rows="2" placeholder="Ej. faltante por vuelto mal dado"></textarea>
+      <textarea id="nota" rows="2" placeholder="Ej. faltante por cambio mal dado"></textarea>
     </div>
     <button class="btn" id="btn-cerrar" onclick="cerrarCaja()">Registrar corte</button>
   </div>
@@ -133,7 +133,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="/static/auth.js?v=1787328487"></script>
+<script src="/static/auth.js?v=1787600127"></script>
 <script>
 const sesion = requireGerente();
 let calc = null;
@@ -177,7 +177,7 @@ async function cargarCalculo(){
 function recalcular(){
   const dif = document.getElementById('dif');
   const contadoRaw = document.getElementById('contado').value;
-  if(!calc || contadoRaw === ''){ dif.className = 'dif'; dif.textContent = ''; actualizarQueda(); return; }
+  if(!calc || contadoRaw === ''){ dif.className = 'dif'; dif.textContent = ''; actualizarRetiro(); return; }
   const d = Math.round((parseFloat(contadoRaw) - calc.esperado) * 100) / 100;
   if(Math.abs(d) < 0.005){
     dif.className = 'dif ok';
@@ -186,17 +186,30 @@ function recalcular(){
     dif.className = 'dif mal';
     dif.textContent = (d > 0 ? 'Sobran ' : 'Faltan ') + money(Math.abs(d));
   }
-  actualizarQueda();
+  actualizarRetiro();
 }
 
-function actualizarQueda(){
+// Se captura cuánto se deja de fondo (no cuánto se retira): es lo que de
+// verdad se decide al cerrar la caja, y lo que se retira es simplemente el
+// resto. Si se deja en blanco, se queda todo y no se retira nada — mismo
+// comportamiento que antes tenía "retirado" vacío.
+function dejaEnCaja(){
+  const raw = document.getElementById('deja').value;
   const contado = parseFloat(document.getElementById('contado').value) || 0;
-  const retirado = parseFloat(document.getElementById('retirado').value) || 0;
-  const queda = Math.round((contado - retirado) * 100) / 100;
-  document.getElementById('hint-queda').textContent = retirado > 0
-    ? 'Quedan ' + money(queda) + ' como fondo para el siguiente corte.'
-    : 'Lo que no retires se queda como fondo para el siguiente corte.';
-  document.getElementById('val-queda').textContent = money(queda);
+  return raw === '' ? contado : parseFloat(raw) || 0;
+}
+
+function retiradoDeCaja(){
+  const contado = parseFloat(document.getElementById('contado').value) || 0;
+  return Math.round((contado - dejaEnCaja()) * 100) / 100;
+}
+
+function actualizarRetiro(){
+  const retirado = retiradoDeCaja();
+  document.getElementById('hint-retira').textContent = retirado > 0
+    ? 'Se retiran ' + money(retirado) + ' y queda ' + money(dejaEnCaja()) + ' de fondo.'
+    : 'Lo que no dejes se retira. Vacío = se queda todo, no se retira nada.';
+  document.getElementById('val-retira').textContent = money(retirado);
 }
 
 // ─── Reporte del día en PDF ─────────────────────────────────────────────
@@ -343,11 +356,15 @@ async function armarPDF(d){
       + 'con este día.', RIGHT - M).forEach(function(t){ doc.text(t, M, y); y += 10; });
     doc.setTextColor(0); y += 6;
 
+    // "Fondo inicial" es lo que quedó del corte anterior y ya está sumado
+    // dentro de "Debía haber" (saldo_inicial + ventas + abonos - gastos); se
+    // muestra aparte para que se vea qué parte del total viene de antes.
     tabla([
-      {t:'Hora', x:0}, {t:'Sucursal', x:.13, max:.2}, {t:'Debía haber', x:.55, der:true},
-      {t:'Contado', x:.72, der:true}, {t:'Retiró', x:.86, der:true}, {t:'Quedó', x:1, der:true}
+      {t:'Hora', x:0}, {t:'Sucursal', x:.09, max:.11}, {t:'Fondo inicial', x:.37, der:true},
+      {t:'Debía haber', x:.51, der:true}, {t:'Contado', x:.67, der:true},
+      {t:'Retiró', x:.83, der:true}, {t:'Quedó', x:1, der:true}
     ], d.cortes.map(function(c){
-      return [c.hora, c.sucursal, money(c.esperado), money(c.contado),
+      return [c.hora, c.sucursal, money(c.saldo_inicial), money(c.esperado), money(c.contado),
               money(c.retirado), money(c.queda_en_caja)];
     }));
 
@@ -403,10 +420,8 @@ async function armarPDF(d){
   return doc.output('blob');
 }
 
-// El navegador no manda el token en una descarga normal, así que el archivo se
-// pide con authFetch y se entrega desde memoria. En el iPhone se abre la hoja
-// de compartir (guardar en Archivos, mandarlo por correo); en escritorio baja
-// directo.
+// El navegador no manda el token en una descarga normal, así que el archivo
+// se pide con authFetch y se entrega desde memoria como blob descargable.
 async function descargarReporte(formato){
   const esCSV = formato === 'csv';
   const btn = document.getElementById('btn-reporte');
@@ -435,23 +450,17 @@ async function descargarReporte(formato){
       blob = await armarPDF(datos);
       nombre = 'reporte_' + datos.fecha + '_' + datos.sucursal.replace(/\s+/g, '_') + '.pdf';
     }
-    const archivo = new File([blob], nombre, {type: esCSV ? 'text/csv' : 'application/pdf'});
-
-    if(navigator.canShare && navigator.canShare({files: [archivo]})){
-      await navigator.share({files: [archivo], title: 'Reporte del día'});
-      hint.textContent = 'Listo.';
-    }else{
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = nombre;
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 30000);
-      hint.textContent = 'Descargado: ' + nombre;
-    }
+    // Descarga directa siempre, sin pasar por la hoja de compartir de iOS
+    // (navigator.share): el botón dice "Descargar" y debe hacer justo eso.
+    // Mismo patrón que el reporte del historial de ventas.
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = nombre;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    hint.textContent = 'Descargado: ' + nombre;
   }catch(e){
-    // Cancelar la hoja de compartir lanza AbortError: no es un error que avisar
-    if(e && e.name === 'AbortError') hint.textContent = '';
-    else await confirmarPersonalizado('No se pudo generar el reporte.', 'Error');
+    await confirmarPersonalizado('No se pudo generar el reporte.', 'Error');
   }finally{
     btn.disabled = false; btn.textContent = etiqueta;
   }
@@ -461,14 +470,20 @@ async function cerrarCaja(){
   const contadoRaw = document.getElementById('contado').value;
   if(contadoRaw === ''){ await confirmarPersonalizado('Escribe cuánto contaste en el cajón.', 'Falta el conteo'); return; }
   const contado = parseFloat(contadoRaw);
-  const retirado = parseFloat(document.getElementById('retirado').value) || 0;
   if(isNaN(contado) || contado < 0){ await confirmarPersonalizado('El conteo no es un número válido.', 'Revisa el conteo'); return; }
-  if(retirado > contado){ await confirmarPersonalizado('No puedes retirar más de lo que contaste.', 'Revisa el retiro'); return; }
+  const dejaRaw = document.getElementById('deja').value;
+  if(dejaRaw !== '' && (isNaN(parseFloat(dejaRaw)) || parseFloat(dejaRaw) < 0)){
+    await confirmarPersonalizado('Lo que dejas en la caja no es un número válido.', 'Revisa el fondo');
+    return;
+  }
+  if(dejaEnCaja() > contado){ await confirmarPersonalizado('No puedes dejar en la caja más de lo que contaste.', 'Revisa el fondo'); return; }
+  const deja = dejaEnCaja();
+  const retirado = retiradoDeCaja();
 
   const d = Math.round((contado - calc.esperado) * 100) / 100;
   const resumen = 'Contaste ' + money(contado) + ' y deberían ser ' + money(calc.esperado) + '.\n\n'
     + (Math.abs(d) < 0.005 ? 'Cuadra exacto.' : (d > 0 ? 'Sobran ' : 'Faltan ') + money(Math.abs(d)) + '.')
-    + (retirado > 0 ? '\n\nRetiras ' + money(retirado) + ' y quedan ' + money(contado - retirado) + ' de fondo.' : '');
+    + (retirado > 0 ? '\n\nDejas ' + money(deja) + ' de fondo y retiras ' + money(retirado) + '.' : '');
   if(!await confirmarPersonalizado(resumen, '¿Registrar el corte?')) return;
 
   const btn = document.getElementById('btn-cerrar');
@@ -484,7 +499,7 @@ async function cerrarCaja(){
       return;
     }
     document.getElementById('contado').value = '';
-    document.getElementById('retirado').value = '';
+    document.getElementById('deja').value = '';
     document.getElementById('nota').value = '';
     await cargarCalculo();
     await cargarHistorial();
