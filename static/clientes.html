@@ -39,6 +39,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .search-bar input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px color-mix(in srgb,var(--blue) 18%,transparent)}
 
 .card{background:var(--bg2);border:0.5px solid var(--border);border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.grupo-titulo{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.03em;margin:1.25rem 0 .5rem}
+.grupo-titulo:first-child{margin-top:0}
+.grupo-titulo .badge{background:var(--border);color:var(--text2);border-radius:999px;padding:1px 8px;font-size:11px;font-weight:700;text-transform:none;letter-spacing:0}
+.grupo-titulo.deben{color:var(--red)}
+.grupo-titulo.deben .badge{background:var(--red-bg);color:var(--red)}
 .cliente-row{display:flex;justify-content:space-between;align-items:center;padding:.875rem 1rem;border-bottom:0.5px solid var(--border);cursor:pointer;transition:background .1s}
 .cliente-row:last-child{border-bottom:none}
 .cliente-row:hover{background:var(--bg)}
@@ -117,8 +122,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <input type="search" id="buscar" placeholder="Buscar cliente por nombre..." oninput="filtrarClientes()">
   </div>
 
-  <div class="card" id="lista-clientes">
-    <div class="empty">Cargando...</div>
+  <div id="lista-clientes">
+    <div class="card"><div class="empty">Cargando...</div></div>
   </div>
 </div>
 
@@ -216,7 +221,7 @@ async function cargarClientes(){
       document.getElementById('st-num').style.display='none';
     }
   }catch(e){
-    document.getElementById('lista-clientes').innerHTML = '<div class="empty">Error al cargar</div>';
+    document.getElementById('lista-clientes').innerHTML = '<div class="card"><div class="empty">Error al cargar</div></div>';
   }
 }
 
@@ -255,25 +260,42 @@ function errorTelefono(digitos){
   return null;
 }
 
+function filaCliente(c){
+  const saldoHtml = c.saldo>0
+    ? `<div class="cliente-saldo debe">${money(c.saldo)}</div>`
+    : `<div class="cliente-saldo sin-deuda">Sin saldo</div>`;
+  return `<div class="cliente-row" onclick="abrirDetalle(${c.id})">
+    <div>
+      <div class="cliente-nombre">${esc(c.nombre)}</div>
+      ${c.telefono?`<div class="cliente-tel">${esc(formatearTel(c.telefono))}</div>`:''}
+      ${c.nivel_precio?`<div class="cliente-tel" style="color:var(--blue);font-weight:600">Precio ${c.nivel_precio}</div>`:''}
+    </div>
+    ${saldoHtml}
+  </div>`;
+}
+
 function renderClientes(lista){
   const cont = document.getElementById('lista-clientes');
   if(!lista.length){
-    cont.innerHTML = '<div class="empty">Sin clientes registrados</div>';
+    cont.innerHTML = '<div class="card"><div class="empty">Sin clientes registrados</div></div>';
     return;
   }
-  cont.innerHTML = lista.map(c=>{
-    const saldoHtml = c.saldo>0
-      ? `<div class="cliente-saldo debe">${money(c.saldo)}</div>`
-      : `<div class="cliente-saldo sin-deuda">Sin saldo</div>`;
-    return `<div class="cliente-row" onclick="abrirDetalle(${c.id})">
-      <div>
-        <div class="cliente-nombre">${esc(c.nombre)}</div>
-        ${c.telefono?`<div class="cliente-tel">${esc(formatearTel(c.telefono))}</div>`:''}
-        ${c.nivel_precio?`<div class="cliente-tel" style="color:var(--blue);font-weight:600">Precio ${c.nivel_precio}</div>`:''}
-      </div>
-      ${saldoHtml}
-    </div>`;
-  }).join('');
+  // De un lado los que deben, del otro los que no tienen deuda. Los que
+  // deben, con más saldo pendiente primero; los que no deben, alfabético
+  // (ya vienen así del backend).
+  const deben = lista.filter(c => c.saldo > 0).sort((a,b) => b.saldo - a.saldo);
+  const sinDeuda = lista.filter(c => !(c.saldo > 0));
+
+  let html = '';
+  if(deben.length){
+    html += `<div class="grupo-titulo deben">Deben <span class="badge">${deben.length}</span></div>`;
+    html += `<div class="card">${deben.map(filaCliente).join('')}</div>`;
+  }
+  if(sinDeuda.length){
+    html += `<div class="grupo-titulo">Sin deuda <span class="badge">${sinDeuda.length}</span></div>`;
+    html += `<div class="card">${sinDeuda.map(filaCliente).join('')}</div>`;
+  }
+  cont.innerHTML = html;
 }
 
 // ─── Nuevo / editar cliente ────────────────────────────────────────────────
