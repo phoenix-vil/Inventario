@@ -9,19 +9,72 @@
   window.__chatWidget = true;
 
   const CSS = `
+/* Sin círculo de fondo: el robot flota libre sobre la página. La silueta ya
+   lleva contorno oscuro en cada pieza (ver robotSVG) precisamente para
+   leerse bien encima de cualquier fondo, claro u oscuro, así que no hace
+   falta la placa detrás. El botón sigue midiendo 68x68 para el área de
+   toque, solo que ahora es invisible. */
 .robot-fab{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom));z-index:60;
-  width:54px;height:54px;border-radius:50%;border:none;cursor:pointer;
-  background:var(--text,#1a1a18);color:var(--bg2,#fff);
-  box-shadow:0 4px 16px rgba(0,0,0,.22);display:flex;align-items:center;justify-content:center;
+  width:68px;height:68px;border-radius:50%;border:none;cursor:pointer;
+  background:transparent;display:flex;align-items:center;justify-content:center;
   transition:transform .18s cubic-bezier(.3,1.4,.5,1),opacity .18s;-webkit-tap-highlight-color:transparent}
 .robot-fab:active{transform:scale(.92)}
 .robot-fab.oculto{transform:scale(.4);opacity:0;pointer-events:none}
-.robot-fab svg{width:30px;height:30px}
-.robot-ojo{transform-origin:center;animation:robot-parpadeo 5.5s infinite}
+.robot-fab svg{width:43px;height:56px;overflow:visible;
+  filter:drop-shadow(0 3px 5px rgba(0,0,0,.35))}
+/* "Vuelo": más recorrido vertical que un simple flote, más el balanceo
+   (rotate) de lado a lado -- da la sensación de estar planeando, no solo
+   subiendo y bajando en el mismo sitio. */
+.robot-cuerpo{transform-box:fill-box;transform-origin:50% 50%;animation:robot-volar 3s ease-in-out infinite}
+@keyframes robot-volar{
+  0%,100%{transform:translate(0,0) rotate(-3deg)}
+  50%{transform:translate(1.5px,-7px) rotate(3deg)}
+}
+.robot-ojo{transform-box:fill-box;transform-origin:center;animation:robot-parpadeo 5.5s infinite}
 @keyframes robot-parpadeo{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.15)}}
-.robot-antena{transform-origin:16px 8px;animation:robot-antena 4s ease-in-out infinite}
-@keyframes robot-antena{0%,100%{transform:rotate(-7deg)}50%{transform:rotate(7deg)}}
-@media(prefers-reduced-motion:reduce){.robot-ojo,.robot-antena{animation:none}}
+.robot-brillo{transform-box:fill-box;transform-origin:center;animation:robot-brillo-pulso 2.4s ease-in-out infinite}
+@keyframes robot-brillo-pulso{0%,100%{opacity:.65;transform:scale(.9)}50%{opacity:1;transform:scale(1.1)}}
+/* Propulsores: laten al revés que el cuerpo (más brillantes cuando el
+   cuerpo sube), para que se lea como el empuje que lo hace volar. */
+.robot-propulsor{transform-box:fill-box;transform-origin:50% 0%;animation:robot-propulsor-pulso 3s ease-in-out infinite}
+@keyframes robot-propulsor-pulso{
+  0%,100%{opacity:.55;transform:scaleY(.8)}
+  50%{opacity:1;transform:scaleY(1.25)}
+}
+.robot-brazo{transform-box:fill-box;transform-origin:50% 0%;animation:robot-brazo-mece 3.6s ease-in-out infinite}
+@keyframes robot-brazo-mece{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(4deg)}}
+@media(prefers-reduced-motion:reduce){.robot-cuerpo,.robot-ojo,.robot-brillo,.robot-brazo,.robot-propulsor{animation:none}}
+
+/* Globo de invitación: aparece solo, una vez por sesión (ver mostrarGlobo),
+   señalando al robot. El bottom se calcula junto con el del botón en
+   acomodar(), para que también se suba si hay una barra fija abajo.
+   Entra y sale con @keyframes (no con transition): con solo transition, al
+   pasar de "display:none" a mostrado, la primera pintura no siempre alcanza
+   a interpolar -- con una animación de un solo tramo (forwards) siempre
+   arranca del fotograma inicial que se le pide, sin depender de ese primer
+   pintado. */
+.robot-globo{position:fixed;right:16px;z-index:59;max-width:180px;
+  background:var(--bg2,#fff);color:var(--text,#1a1a18);
+  border:0.5px solid var(--border,#e2e0d8);border-radius:14px 14px 3px 14px;
+  padding:9px 13px;font-size:13px;line-height:1.35;font-weight:600;
+  box-shadow:0 6px 18px rgba(0,0,0,.16);cursor:pointer;transform-origin:bottom right;
+  opacity:0;pointer-events:none;display:none}
+.robot-globo.visible{display:block;pointer-events:auto;
+  animation:robot-globo-entra .32s cubic-bezier(.3,1.4,.5,1) forwards}
+.robot-globo.saliendo{display:block;
+  animation:robot-globo-sale .22s ease-in forwards}
+@keyframes robot-globo-entra{
+  from{opacity:0;transform:scale(.35) translateY(6px)}
+  to{opacity:1;transform:scale(1) translateY(0)}
+}
+@keyframes robot-globo-sale{
+  from{opacity:1;transform:scale(1) translateY(0)}
+  to{opacity:0;transform:scale(.5) translateY(4px)}
+}
+@media(prefers-reduced-motion:reduce){
+  .robot-globo.visible{animation:none;opacity:1;transform:none}
+  .robot-globo.saliendo{animation:none;opacity:0}
+}
 
 .robot-panel{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom));z-index:61;
   width:min(380px,calc(100vw - 32px));height:min(560px,70vh);
@@ -86,25 +139,59 @@
 @keyframes robot-latir{0%,60%,100%{opacity:.25}30%{opacity:1}}
 `;
 
-  // Robot de trazo: hereda el color del botón, así queda bien en claro y oscuro.
-  const ROBOT = `
-<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.9"
-     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-  <g class="robot-antena">
-    <path d="M16 8V4.5"/>
-    <circle cx="16" cy="3" r="1.5" fill="currentColor" stroke="none"/>
+  // Robot de cuerpo completo, con degradados para el efecto "de juguete 3D"
+  // (en vez de un modelo 3D real vía WebGL: eso sería mucho para un ícono que
+  // vive todo el tiempo en pantalla, sobre todo en el iPhone). El contorno
+  // oscuro en cada pieza es lo que lo hace legible tanto sobre el botón claro
+  // como el oscuro (el botón invierte con el tema — ver .robot-fab arriba).
+  // Se llama con un sufijo distinto en cada aparición (botón y encabezado del
+  // panel) para que los degradados <defs> no compartan id en el documento.
+  function robotSVG(id) {
+    return `
+<svg viewBox="0 0 100 130" fill="none" aria-hidden="true">
+  <defs>
+    <linearGradient id="rgHead-${id}" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#eaf7ff"/><stop offset="1" stop-color="#5b9fdb"/>
+    </linearGradient>
+    <linearGradient id="rgTorso-${id}" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#c2d5e8"/>
+    </linearGradient>
+    <linearGradient id="rgVisor-${id}" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1c3a5e"/><stop offset="1" stop-color="#0a1520"/>
+    </linearGradient>
+    <linearGradient id="rgMetal-${id}" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f3f6f9"/><stop offset="1" stop-color="#aab9ca"/>
+    </linearGradient>
+    <radialGradient id="rgGlow-${id}" cx=".35" cy=".3" r=".75">
+      <stop offset="0" stop-color="#fff3c4"/><stop offset=".55" stop-color="#ffce54"/><stop offset="1" stop-color="#f5a623"/>
+    </radialGradient>
+  </defs>
+  <g class="robot-cuerpo" stroke="#16263b" stroke-width="2.2" stroke-linejoin="round">
+    <line x1="50" y1="14" x2="50" y2="4" stroke="url(#rgMetal-${id})" stroke-width="4" stroke-linecap="round"/>
+    <circle class="robot-brillo" cx="50" cy="4" r="5" fill="url(#rgGlow-${id})" stroke-width="1.4"/>
+    <ellipse class="robot-propulsor" cx="35" cy="122" rx="4.2" ry="6" fill="url(#rgGlow-${id})" stroke="none"/>
+    <ellipse class="robot-propulsor" cx="65" cy="122" rx="4.2" ry="6" fill="url(#rgGlow-${id})" stroke="none" style="animation-delay:-1.5s"/>
+    <rect x="26" y="100" width="48" height="16" rx="8" fill="url(#rgMetal-${id})"/>
+    <rect class="robot-brazo" x="6" y="66" width="15" height="32" rx="7.5" fill="url(#rgMetal-${id})"/>
+    <rect class="robot-brazo" x="79" y="66" width="15" height="32" rx="7.5" fill="url(#rgMetal-${id})" style="animation-delay:-1.8s"/>
+    <rect x="20" y="62" width="60" height="40" rx="20" fill="url(#rgTorso-${id})"/>
+    <circle class="robot-brillo" cx="50" cy="82" r="6.5" fill="url(#rgGlow-${id})" stroke-width="1.4" style="animation-delay:-1.2s"/>
+    <rect x="44" y="56" width="12" height="8" rx="3" fill="url(#rgMetal-${id})" stroke-width="1.8"/>
+    <rect x="22" y="14" width="56" height="42" rx="18" fill="url(#rgHead-${id})"/>
+    <rect x="30" y="28" width="40" height="18" rx="9" fill="url(#rgVisor-${id})" stroke="#0a1520" stroke-width="1.5"/>
+    <circle class="robot-ojo" cx="42" cy="37" r="4.3" fill="#8fe9ff" stroke="none"/>
+    <circle class="robot-ojo" cx="58" cy="37" r="4.3" fill="#8fe9ff" stroke="none"/>
+    <circle cx="43.2" cy="35.5" r="1.1" fill="#fff" opacity=".85" stroke="none"/>
+    <circle cx="59.2" cy="35.5" r="1.1" fill="#fff" opacity=".85" stroke="none"/>
   </g>
-  <rect x="4.5" y="8" width="23" height="17" rx="5.5"/>
-  <ellipse class="robot-ojo" cx="11.5" cy="15.5" rx="1.9" ry="2.2" fill="currentColor" stroke="none"/>
-  <ellipse class="robot-ojo" cx="20.5" cy="15.5" rx="1.9" ry="2.2" fill="currentColor" stroke="none"/>
-  <path d="M12.5 20.2h7"/>
-  <path d="M1.8 14v4M30.2 14v4"/>
 </svg>`;
+  }
 
   const SUG_BASE = ['¿A cuánto vendo…?', '¿Qué se está acabando?', '¿Dónde hay…?'];
   const SUG_GERENTE = ['¿Ventas de hoy?', '¿Quién me debe?', '¿Gastos del mes?'];
 
-  let hilo, entrada, enviarBtn, panel, fab, ocupado = false, saludado = false;
+  let hilo, entrada, enviarBtn, panel, fab, globo, ocupado = false, saludado = false;
+  let temporizadorOcultarGlobo;
 
   function montar() {
     const estilo = document.createElement('style');
@@ -114,7 +201,7 @@
     fab = document.createElement('button');
     fab.className = 'robot-fab';
     fab.setAttribute('aria-label', 'Abrir el asistente');
-    fab.innerHTML = ROBOT;
+    fab.innerHTML = robotSVG('fab');
     fab.onclick = abrir;
 
     panel = document.createElement('div');
@@ -122,7 +209,7 @@
     panel.className = 'robot-panel overlay';
     panel.innerHTML = `
       <div class="robot-cab">
-        <span style="width:26px;height:26px;display:flex;color:var(--text)">${ROBOT}</span>
+        <span style="width:20px;height:26px;display:flex;flex-shrink:0">${robotSVG('cab')}</span>
         <div class="robot-cab-t">Asistente<div class="robot-cab-s">solo consulta</div></div>
         <button title="Limpiar" data-accion="limpiar">🗑</button>
         <button title="Cerrar" data-accion="cerrar">✕</button>
@@ -134,8 +221,14 @@
         <button title="Enviar">↑</button>
       </div>`;
 
+    globo = document.createElement('div');
+    globo.className = 'robot-globo';
+    globo.textContent = 'Puedes preguntarme algo';
+    globo.onclick = abrir;
+
     document.body.appendChild(fab);
     document.body.appendChild(panel);
+    document.body.appendChild(globo);
 
     hilo = panel.querySelector('.robot-hilo');
     entrada = panel.querySelector('.robot-barra input');
@@ -160,6 +253,38 @@
       clearTimeout(temporizador);
       temporizador = setTimeout(acomodar, 150);
     });
+
+    // Invitación a preguntar: una sola vez por sesión de navegador, no en
+    // cada página que se visita -- si no, se vuelve molesta. sessionStorage
+    // se borra al cerrar la pestaña/PWA, así que en la siguiente sesión de
+    // trabajo se vuelve a mostrar una vez.
+    try {
+      if (!sessionStorage.getItem('robot_globo_visto')) {
+        sessionStorage.setItem('robot_globo_visto', '1');
+        setTimeout(mostrarGlobo, 3000);
+      }
+    } catch (e) { /* modo privado sin sessionStorage: sin invitación, no rompe nada */ }
+  }
+
+  function mostrarGlobo() {
+    // Si ya se abrió el chat (o CHAT_ABRIR_AL_CARGAR lo abrió de una vez en
+    // /chat) no tiene caso invitar a algo que ya está pasando.
+    if (!globo || panel.classList.contains('abierto')) return;
+    acomodar();
+    globo.classList.remove('saliendo');
+    globo.classList.add('visible');
+    clearTimeout(temporizadorOcultarGlobo);
+    temporizadorOcultarGlobo = setTimeout(ocultarGlobo, 5000);
+  }
+
+  function ocultarGlobo() {
+    clearTimeout(temporizadorOcultarGlobo);
+    if (!globo || !globo.classList.contains('visible')) return;
+    globo.classList.remove('visible');
+    globo.classList.add('saliendo');
+    // Quitar "saliendo" al terminar su propia animación (220ms), para que
+    // vuelva a display:none y no se quede estorbando al toque en el robot.
+    setTimeout(() => globo.classList.remove('saliendo'), 260);
   }
 
   function pintarSugerencias() {
@@ -188,6 +313,7 @@
   }
 
   function abrir() {
+    ocultarGlobo();
     acomodar();
     panel.classList.add('abierto', 'open');
     fab.classList.add('oculto');
@@ -229,6 +355,14 @@
       const sube = `calc(${Math.round(alto - tope + 12)}px + env(safe-area-inset-bottom))`;
       fab.style.bottom = sube;
       panel.style.bottom = sube;
+    }
+
+    // El globo va siempre pegado justo encima del robot -- se mide la
+    // posición final del botón (ya con el ajuste de arriba aplicado, si
+    // hubo) en vez de recalcular aparte, para no repetir esa lógica.
+    if (globo) {
+      const r = fab.getBoundingClientRect();
+      globo.style.bottom = `${Math.round(alto - r.top + 10)}px`;
     }
   }
 

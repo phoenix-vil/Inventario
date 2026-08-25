@@ -461,7 +461,7 @@ function _aceptarPromptGenerico(){
 (function(){
   if (!getSesion()) return;
   const s = document.createElement('script');
-  s.src = '/static/chat-widget.js?v=1787598500';
+  s.src = '/static/chat-widget.js?v=1787605997';
   s.defer = true;
   document.head.appendChild(s);
 })();
