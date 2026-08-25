@@ -39,19 +39,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .search-bar input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px color-mix(in srgb,var(--blue) 18%,transparent)}
 
 .card{background:var(--bg2);border:0.5px solid var(--border);border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
-.grupo-titulo{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.03em;margin:1.25rem 0 .5rem}
-.grupo-titulo:first-child{margin-top:0}
-.grupo-titulo .badge{background:var(--border);color:var(--text2);border-radius:999px;padding:1px 8px;font-size:11px;font-weight:700;text-transform:none;letter-spacing:0}
+.grid-clientes{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start}
+.grid-clientes .columna{min-width:0}
+.grid-clientes .card{min-width:0}
+.grupo-titulo{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.02em;margin:0 0 .5rem 2px}
+.grupo-titulo .badge{background:var(--border);color:var(--text2);border-radius:999px;padding:1px 7px;font-size:11px;font-weight:700;text-transform:none;letter-spacing:0}
 .grupo-titulo.deben{color:var(--red)}
 .grupo-titulo.deben .badge{background:var(--red-bg);color:var(--red)}
-.cliente-row{display:flex;justify-content:space-between;align-items:center;padding:.875rem 1rem;border-bottom:0.5px solid var(--border);cursor:pointer;transition:background .1s}
+.cliente-row{padding:.7rem .75rem;border-bottom:0.5px solid var(--border);cursor:pointer;transition:background .1s;overflow:hidden}
 .cliente-row:last-child{border-bottom:none}
 .cliente-row:hover{background:var(--bg)}
-.cliente-nombre{font-weight:600;font-size:15px}
-.cliente-tel{font-size:12px;color:var(--text2);margin-top:2px}
-.cliente-saldo{font-weight:800;font-size:16px}
+.cliente-nombre{font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cliente-row-sub{display:flex;justify-content:space-between;align-items:baseline;gap:6px;margin-top:2px}
+.cliente-tel{font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1 1 auto}
+.cliente-saldo{font-weight:800;font-size:13px;white-space:nowrap}
 .cliente-saldo.debe{color:var(--red)}
-.cliente-saldo.sin-deuda{color:var(--text2);font-weight:600;font-size:13px}
+.cliente-saldo.sin-deuda{color:var(--text2);font-weight:600;font-size:11px}
 
 .empty{text-align:center;padding:2.5rem 1rem;color:var(--text2);font-size:14px}
 
@@ -260,17 +263,31 @@ function errorTelefono(digitos){
   return null;
 }
 
+// Fila compacta: en columna angosta no alcanza el ancho para nombre+teléfono
+// a la izquierda y saldo a la derecha en la misma línea, así que el saldo va
+// debajo, junto al teléfono.
 function filaCliente(c){
   const saldoHtml = c.saldo>0
-    ? `<div class="cliente-saldo debe">${money(c.saldo)}</div>`
-    : `<div class="cliente-saldo sin-deuda">Sin saldo</div>`;
+    ? `<span class="cliente-saldo debe">${money(c.saldo)}</span>`
+    : `<span class="cliente-saldo sin-deuda">Sin saldo</span>`;
+  const sub = c.telefono ? esc(formatearTel(c.telefono)) : (c.nivel_precio ? 'Precio '+c.nivel_precio : '');
   return `<div class="cliente-row" onclick="abrirDetalle(${c.id})">
-    <div>
-      <div class="cliente-nombre">${esc(c.nombre)}</div>
-      ${c.telefono?`<div class="cliente-tel">${esc(formatearTel(c.telefono))}</div>`:''}
-      ${c.nivel_precio?`<div class="cliente-tel" style="color:var(--blue);font-weight:600">Precio ${c.nivel_precio}</div>`:''}
+    <div class="cliente-nombre">${esc(c.nombre)}</div>
+    <div class="cliente-row-sub">
+      <span class="cliente-tel">${sub}</span>
+      ${saldoHtml}
     </div>
-    ${saldoHtml}
+  </div>`;
+}
+
+function columnaClientes(titulo, clase, lista, vacio){
+  const badge = `<span class="badge">${lista.length}</span>`;
+  const cuerpo = lista.length
+    ? `<div class="card">${lista.map(filaCliente).join('')}</div>`
+    : `<div class="card"><div class="empty">${vacio}</div></div>`;
+  return `<div class="columna">
+    <div class="grupo-titulo ${clase}">${titulo} ${badge}</div>
+    ${cuerpo}
   </div>`;
 }
 
@@ -280,22 +297,15 @@ function renderClientes(lista){
     cont.innerHTML = '<div class="card"><div class="empty">Sin clientes registrados</div></div>';
     return;
   }
-  // De un lado los que deben, del otro los que no tienen deuda. Los que
-  // deben, con más saldo pendiente primero; los que no deben, alfabético
-  // (ya vienen así del backend).
+  // A la izquierda los que deben (más saldo pendiente primero), a la derecha
+  // los que no tienen deuda (alfabético, ya vienen así del backend).
   const deben = lista.filter(c => c.saldo > 0).sort((a,b) => b.saldo - a.saldo);
   const sinDeuda = lista.filter(c => !(c.saldo > 0));
 
-  let html = '';
-  if(deben.length){
-    html += `<div class="grupo-titulo deben">Deben <span class="badge">${deben.length}</span></div>`;
-    html += `<div class="card">${deben.map(filaCliente).join('')}</div>`;
-  }
-  if(sinDeuda.length){
-    html += `<div class="grupo-titulo">Sin deuda <span class="badge">${sinDeuda.length}</span></div>`;
-    html += `<div class="card">${sinDeuda.map(filaCliente).join('')}</div>`;
-  }
-  cont.innerHTML = html;
+  cont.innerHTML = '<div class="grid-clientes">'
+    + columnaClientes('Deben', 'deben', deben, 'Nadie debe')
+    + columnaClientes('Sin deuda', '', sinDeuda, 'Todos tienen deuda')
+    + '</div>';
 }
 
 // ─── Nuevo / editar cliente ────────────────────────────────────────────────
