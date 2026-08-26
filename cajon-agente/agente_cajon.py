@@ -16,25 +16,38 @@ hablarle por otra vía, y el navegador no puede hacerlo directo sin cambiarle
 el driver a la impresora (lo que rompería la impresión normal); este agente es
 el puente.
 
+El ticket se imprime como IMAGEN, no como texto: pagos.html genera exactamente
+el mismo dibujo que ya usa para compartir por WhatsApp o descargar en PDF (con
+el logo de la tienda y el mismo diseño) y manda ese PNG tal cual; este agente
+solo lo convierte a blanco y negro puro y lo empaqueta en el comando de imagen
+de la impresora. Es más lento que imprimir texto plano y el detalle fino
+(letras chicas) pierde algo de nitidez al pasar por blanco y negro, pero es
+la única forma de que el papel se vea igual al de pantalla.
+
 No toca el driver ni la cola de impresión normal: usa la API de impresión de
 Windows en modo RAW, el mismo mecanismo por el que ya imprimía tickets, así
 que no hay ningún cambio para lo que ya funciona — y si este agente no está
 corriendo, pagos.html cae solo de vuelta al diálogo de impresión de siempre.
 
-Requiere:  pip install pywin32
+Requiere:  pip install -r requirements.txt   (pywin32 y Pillow)
 Ejecutar con pythonw.exe (sin ventana de consola) para dejarlo en segundo
 plano; ver iniciar_agente.vbs y el README de esta carpeta.
 """
+import io
 import json
 import sys
-import textwrap
-from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 try:
     import win32print
 except ImportError:
-    print("Falta pywin32. Instálalo con:  pip install pywin32")
+    print("Falta pywin32. Instálalo con:  pip install -r requirements.txt")
+    sys.exit(1)
+
+try:
+    from PIL import Image
+except ImportError:
+    print("Falta Pillow. Instálalo con:  pip install -r requirements.txt")
     sys.exit(1)
 
 PUERTO = 8788
@@ -44,26 +57,16 @@ PUERTO = 8788
 # distinto (ver README de esta carpeta para cómo comprobarlo).
 NOMBRE_IMPRESORA = "XP-58IIH"
 
-# Caracteres por línea con la fuente normal en papel de 58mm. Es el valor
-# típico de esta impresora; si el ticket sale con líneas cortadas de más o
-# con mucho espacio sobrante a la derecha, ajusta este número (30-33 es el
-# rango habitual) y no hace falta tocar nada más.
-ANCHO_TICKET = 32
+# Ancho de impresión de esta impresora en puntos: 58mm de papel a 203dpi
+# (8 puntos por mm, la densidad estándar de estas térmicas) dan ~384 puntos
+# útiles. Si el ticket sale recortado por un lado o muy angosto con margen de
+# sobra, este es el número a ajustar.
+ANCHO_IMPRESORA_PX = 384
 
 # ESC p m t1 t2 — "generar pulso" de ESC/POS. m=0 es el pin 2 del RJ11, que es
 # donde casi todos los cajones (incluido el EC-CD-50M) esperan la señal. Si no
 # abre, el README explica cómo probar con m=1 (pin 5).
 PULSO_ABRIR_CAJON = b"\x1b\x70\x00\x19\xfa"
-
-# ─── Comandos ESC/POS usados para armar el ticket ───────────────────────────
-ESC_INICIALIZAR = b"\x1b\x40"
-ESC_CENTRAR = b"\x1b\x61\x01"
-ESC_IZQUIERDA = b"\x1b\x61\x00"
-ESC_NEGRITA_ON = b"\x1b\x45\x01"
-ESC_NEGRITA_OFF = b"\x1b\x45\x00"
-ESC_DOBLE_ON = b"\x1d\x21\x11"   # doble ancho y alto, para el total
-ESC_DOBLE_OFF = b"\x1d\x21\x00"
-ESC_CODEPAGE_CP850 = b"\x1b\x74\x02"  # para que á/é/í/ó/ú/ñ salgan bien
 
 # GS V m — corte de papel, en su forma clásica de un solo parámetro (la más
 # compatible con impresoras económicas/genéricas; hay una variante de dos
@@ -77,137 +80,40 @@ ESC_CODEPAGE_CP850 = b"\x1b\x74\x02"  # para que á/é/í/ó/ú/ñ salgan bien
 CORTE_PAPEL = b"\n\n\n\x1d\x56\x00"  # alimenta unas líneas y corta (total)
 
 
-def money(n):
-    """Mismo formato que money() en pagos.html: "$1,234.56"."""
-    try:
-        n = float(n or 0)
-    except (TypeError, ValueError):
-        n = 0.0
-    return "${:,.2f}".format(n)
+def imagen_a_comando_raster(datos_png: bytes) -> bytes:
+    """Convierte el PNG del ticket (el mismo que genera pagos.html para
+    compartir por WhatsApp o descargar) al comando ESC/POS de imagen raster
+    (GS v 0), listo para mandarse tal cual a la impresora.
 
+    Ojo con la convención de bits, que es la parte fácil de arruinar aquí:
+    Pillow empaqueta 1=blanco/0=negro en modo "1", pero ESC/POS espera lo
+    contrario (1=imprimir/negro, 0=no imprimir/blanco) — así que hay que
+    invertir cada byte, o el ticket saldría con los colores cambiados."""
+    img = Image.open(io.BytesIO(datos_png))
 
-def _codificar(texto):
-    # Las térmicas no hablan UTF-8: reemplaza lo que CP850 no tenga en vez de
-    # reventar con una excepción a media impresión.
-    return texto.encode("cp850", errors="replace")
-
-
-def _linea(izquierda, derecha, ancho=ANCHO_TICKET):
-    """Une dos textos en una línea de `ancho` columnas, izquierda pegada al
-    margen y derecha pegada al borde derecho. Si no caben juntos, el texto de
-    la izquierda se reparte en varias líneas y el de la derecha queda solo en
-    la última —igual que hace cualquier ticket de tienda con un nombre largo
-    de producto."""
-    espacio = ancho - len(izquierda) - len(derecha)
-    if espacio >= 1:
-        return izquierda + (" " * espacio) + derecha
-    renglones = textwrap.wrap(izquierda, ancho) or [""]
-    ultimo = renglones[-1]
-    espacio_ultimo = ancho - len(ultimo) - len(derecha)
-    if espacio_ultimo >= 1:
-        renglones[-1] = ultimo + (" " * espacio_ultimo) + derecha
+    # Sin esto, cualquier transparencia del PNG (por ejemplo alrededor del
+    # logo) se convertiría en negro sólido al pasar a blanco y negro.
+    if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+        fondo = Image.new("RGB", img.size, "white")
+        fondo.paste(img.convert("RGBA"), mask=img.convert("RGBA").split()[-1])
+        img = fondo
     else:
-        renglones.append(derecha.rjust(ancho))
-    return "\n".join(renglones)
+        img = img.convert("RGB")
 
+    if img.width != ANCHO_IMPRESORA_PX:
+        alto_nuevo = round(img.height * ANCHO_IMPRESORA_PX / img.width)
+        img = img.resize((ANCHO_IMPRESORA_PX, alto_nuevo), Image.LANCZOS)
 
-def _fecha_legible(iso):
-    try:
-        limpio = iso.replace("Z", "")
-        if "." in limpio:
-            limpio = limpio.split(".")[0]
-        dt = datetime.fromisoformat(limpio)
-        return dt.strftime("%d/%m/%Y %H:%M")
-    except Exception:
-        return iso or ""
+    # Blanco y negro puro, con difuminado (Floyd-Steinberg, el que usa Pillow
+    # por defecto): es lo que permite que el logo —que trae degradados de
+    # color— se siga distinguiendo en una impresora que solo pinta o no pinta.
+    bn = img.convert("1")
+    ancho_bytes = (bn.width + 7) // 8
+    datos = bytes(b ^ 0xFF for b in bn.tobytes())
 
-
-def construir_ticket_escpos(v):
-    """Arma los bytes del ticket a partir de los mismos datos que ya dibuja
-    generarTicketHTML() en pagos.html —incluida su misma forma un poco rara
-    de mostrar el descuento por artículo (ver comentario más abajo)—, para que
-    el ticket impreso diga siempre lo mismo que el que se ve en pantalla."""
-    raya = "-" * ANCHO_TICKET
-    partes = [ESC_INICIALIZAR, ESC_CODEPAGE_CP850]
-
-    def linea(txt=""):
-        partes.append(_codificar(txt + "\n"))
-
-    partes.append(ESC_CENTRAR)
-    partes.append(ESC_NEGRITA_ON)
-    linea(v.get("encabezado") or "Only Enterprises")
-    partes.append(ESC_NEGRITA_OFF)
-    if v.get("sucursal"):
-        linea("Sucursal " + v["sucursal"])
-    linea("Ticket de venta #%s" % v.get("id", ""))
-    linea(_fecha_legible(v.get("fecha")))
-    if v.get("operador"):
-        linea("Operador: " + v["operador"])
-    partes.append(ESC_IZQUIERDA)
-    linea(raya)
-
-    for it in v.get("detalle") or []:
-        cantidad = it.get("cantidad", 0)
-        cant_txt = ("%gx" % cantidad) if float(cantidad).is_integer() else ("%.3fkg" % cantidad)
-        nombre = "%s %s" % (cant_txt, it.get("nombre", ""))
-        precio_original = it.get("precio_original")
-        precio_unitario = it.get("precio_unitario", 0)
-        importe = it.get("importe", 0)
-        # Igual que en generarTicketHTML(): si hay descuento por artículo, la
-        # primera línea es el importe SIN descuento y la segunda dice
-        # "Descuento (X%)" pero con el importe YA descontado —no el monto
-        # restado—; se replica tal cual para que pantalla y papel coincidan.
-        if precio_original is not None and precio_original > precio_unitario:
-            importe_original = precio_original * cantidad
-            pct = round((1 - precio_unitario / precio_original) * 100)
-            linea(_linea(nombre, money(importe_original)))
-            linea(_linea("Descuento (%d%%)" % pct, money(importe)))
-        else:
-            linea(_linea(nombre, money(importe)))
-    linea(raya)
-
-    if (v.get("descuento_extra_pct") or 0) > 0:
-        pct = v["descuento_extra_pct"]
-        subtotal = v.get("subtotal", 0)
-        linea(_linea("Subtotal", money(subtotal)))
-        linea(_linea("Descuento %g%%" % pct, "-" + money(subtotal * pct / 100)))
-
-    ahorro = v.get("ahorro_total") or 0
-    if ahorro > 0.005:
-        linea(_linea("Ahorraste", money(ahorro)))
-
-    partes.append(ESC_DOBLE_ON)
-    linea(_linea("TOTAL", money(v.get("total", 0)), ancho=ANCHO_TICKET // 2))
-    partes.append(ESC_DOBLE_OFF)
-    linea(raya)
-
-    metodo = v.get("metodo_pago", "efectivo")
-    if metodo == "credito":
-        linea(_linea("Pago", "A CREDITO"))
-        if v.get("cliente_nombre"):
-            linea(_linea("Cliente", v["cliente_nombre"]))
-    elif metodo == "tarjeta":
-        linea(_linea("Pago", "TARJETA"))
-        if v.get("tpv_terminal"):
-            linea(_linea("Terminal", v["tpv_terminal"]))
-        if v.get("tpv_referencia"):
-            linea(_linea("Referencia", v["tpv_referencia"]))
-        if v.get("tpv_autorizacion"):
-            linea(_linea("Autorizacion", v["tpv_autorizacion"]))
-    elif metodo == "transferencia":
-        linea(_linea("Pago", "TRANSFERENCIA"))
-        if v.get("transferencia_referencia"):
-            linea(_linea("Referencia", v["transferencia_referencia"]))
-    else:
-        linea(_linea("Pago", "EFECTIVO"))
-        if v.get("pago_con") is not None:
-            linea(_linea("Pago con", money(v["pago_con"])))
-            linea(_linea("Cambio", money(v.get("cambio") or 0)))
-
-    partes.append(ESC_CENTRAR)
-    linea("Gracias por su compra!")
-    partes.append(CORTE_PAPEL)
-    return b"".join(partes)
+    xL, xH = ancho_bytes & 0xFF, (ancho_bytes >> 8) & 0xFF
+    yL, yH = bn.height & 0xFF, (bn.height >> 8) & 0xFF
+    return b"\x1d\x76\x30\x00" + bytes([xL, xH, yL, yH]) + datos
 
 
 def _mandar_a_impresora(nombre_trabajo, datos_raw):
@@ -230,8 +136,9 @@ def abrir_cajon():
     _mandar_a_impresora("Abrir cajon", PULSO_ABRIR_CAJON)
 
 
-def imprimir_ticket(datos_venta):
-    _mandar_a_impresora("Ticket de venta", construir_ticket_escpos(datos_venta))
+def imprimir_ticket(datos_png: bytes):
+    comando = imagen_a_comando_raster(datos_png)
+    _mandar_a_impresora("Ticket de venta", comando + CORTE_PAPEL)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -282,8 +189,10 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/imprimir-ticket":
             try:
                 largo = int(self.headers.get("Content-Length", 0))
-                datos_venta = json.loads(self.rfile.read(largo) or b"{}")
-                imprimir_ticket(datos_venta)
+                datos_png = self.rfile.read(largo) if largo else b""
+                if not datos_png:
+                    raise ValueError("no llegó ninguna imagen en el cuerpo de la petición")
+                imprimir_ticket(datos_png)
                 self._responder(200, {"ok": True})
             except Exception as e:
                 self._responder(500, {"ok": False, "error": str(e)})

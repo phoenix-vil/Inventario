@@ -1014,31 +1014,56 @@ function abrirCajonDinero(){
   fetch(AGENTE_BASE_URL + '/abrir-cajon', {method:'POST', signal: controlador.signal}).catch(()=>{});
 }
 
-// Nombre a mostrar como encabezado del ticket impreso directo (es solo texto,
-// a diferencia del ticket en pantalla que sí lleva el logo de la tienda).
-// Mismo criterio que logosActivos(): la tienda de la sesión, o "Only
-// Enterprises" si no hay una sola.
-function nombreTiendaParaTicket(){
-  const s = getSesion();
-  const tiendas = (s && s.tienda) || [];
-  return tiendas.length ? tiendas.join(' + ') : 'Only Enterprises';
+// Genera el ticket como imagen PNG, exactamente el mismo dibujo (con logo)
+// que ya se usa para compartir por WhatsApp o descargar en PDF —ver
+// generarPDFTicketVenta más abajo, este es el mismo patrón pero entregando
+// el canvas directo como Blob en vez de meterlo en un PDF—.
+async function generarImagenTicketTermica(v){
+  const contenedor = document.createElement('div');
+  contenedor.style.position = 'absolute';
+  contenedor.style.left = '-9999px';
+  contenedor.style.top = '0';
+  contenedor.style.width = '300px';
+  contenedor.style.background = '#ffffff';
+  contenedor.style.padding = '16px';
+  contenedor.style.fontFamily = 'monospace';
+  contenedor.style.fontSize = '13px';
+  contenedor.style.color = '#000000';
+  contenedor.innerHTML = generarTicketHTML(v);
+  contenedor.querySelectorAll('.tk-sub, .tk-foot, .tk-negocio, .tk-line, .tk-total').forEach(function(el){ el.style.color = '#000000'; });
+  contenedor.querySelectorAll('.tk-desc').forEach(function(el){ el.style.color = '#a32d2d'; });
+  contenedor.querySelectorAll('.tk-ahorro').forEach(function(el){ el.style.color = '#3b6d11'; });
+  document.body.appendChild(contenedor);
+  try{
+    await new Promise(function(r){ setTimeout(r, 80); });
+    const canvas = await html2canvas(contenedor, {scale:2, backgroundColor:'#ffffff', useCORS:true});
+    return await new Promise(function(resolve){ canvas.toBlob(resolve, 'image/png'); });
+  } finally {
+    document.body.removeChild(contenedor);
+  }
 }
 
-// Si esta PC tiene el agente activado, le pide que imprima el ticket directo
-// a la impresora. Si no responde a tiempo, cae solo al diálogo de impresión
-// de siempre —la "recaída automática"—, así nunca se pierde el ticket aunque
+// Si esta PC tiene el agente activado, le manda la imagen del ticket para
+// que la imprima directo en la impresora térmica. Si no responde a tiempo
+// (o falla por cualquier razón), cae solo al diálogo de impresión de
+// siempre —la "recaída automática"—, así nunca se pierde el ticket aunque
 // el agente se haya caído ese día. En cualquier dispositivo sin la bandera
 // activada (todas las demás sucursales) no se toca nada: se queda igual que
 // siempre, con el botón manual del modal.
+//
+// Generar la imagen y que la impresora la procese como blanco y negro puro
+// tarda bastante más que mandar texto plano, de ahí el timeout más generoso
+// que el que tenía la versión anterior.
 async function intentarImpresionDirecta(v){
   if(!agenteLocalActivo()) return;
-  const payload = Object.assign({}, v, {encabezado: nombreTiendaParaTicket()});
   const controlador = new AbortController();
-  const vencido = setTimeout(() => controlador.abort(), 2500);
+  const vencido = setTimeout(() => controlador.abort(), 8000);
   try{
+    const png = await generarImagenTicketTermica(v);
+    if(!png) throw new Error('no se pudo generar la imagen del ticket');
     const r = await fetch(AGENTE_BASE_URL + '/imprimir-ticket', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(payload), signal: controlador.signal
+      method: 'POST', headers: {'Content-Type': 'image/png'},
+      body: png, signal: controlador.signal
     });
     if(!r.ok) throw new Error('el agente respondió con error');
   }catch(e){

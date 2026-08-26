@@ -59,8 +59,9 @@ cd C:\cajon-agente
 pip install -r requirements.txt
 ```
 
-Eso instala `pywin32`, que es lo que permite mandarle datos directos a la
-impresora desde Python.
+Eso instala `pywin32` (para mandarle datos directos a la impresora desde
+Python) y `Pillow` (para convertir la imagen del ticket a blanco y negro
+antes de imprimirla — ver Paso 6).
 
 ## Paso 4 — Confirmar el nombre de la impresora
 
@@ -137,32 +138,16 @@ y cambia el tercer byte de `\x00` a `\x01` (ese byte es el que elige el pin:
 `\x00` = pin 2, `\x01` = pin 5). Guarda, detén el agente (Ctrl+C en su
 ventana) y repite el Paso 5 y esta prueba.
 
-**Impresión del ticket**, con un ticket de ejemplo. Pasar el JSON directo en
-la línea de comandos es frágil —`cmd` y PowerShell tratan las comillas de
-forma distinta, y es fácil que algo se rompa al copiar—, así que mejor
-ponerlo en un archivo aparte y decirle a `curl.exe` que lo lea de ahí: eso
-funciona igual sin importar cuál terminal uses.
+**Impresión del ticket:** a diferencia del cajón, esta prueba ya no se puede
+hacer fácilmente con `curl.exe` a mano —el agente ahora espera recibir la
+imagen PNG del ticket tal cual la genera `pagos.html` (con logo y todo, no
+un JSON de datos), y armar un PNG válido desde la línea de comandos no vale
+la pena—. La prueba real de este paso es el Paso 8: actívalo en `pagos.html`
+y haz una venta de verdad (puede ser mínima, de $1). Si el ticket sale
+impreso con el mismo diseño que ves en pantalla, quedó bien.
 
-1. Abre el Bloc de notas, pega exactamente esto (una sola línea):
-
-   ```
-   {"id":1,"encabezado":"Prueba","sucursal":"Prueba","operador":"Prueba","fecha":"2026-01-01T12:00:00Z","detalle":[{"nombre":"Producto de prueba","cantidad":1,"precio_unitario":100,"precio_original":null,"importe":100}],"subtotal":100,"descuento_extra_pct":0,"ahorro_total":0,"total":100,"metodo_pago":"efectivo","pago_con":100,"cambio":0}
-   ```
-
-2. Guárdalo como `prueba.json` dentro de `C:\cajon-agente\` —en "Guardar
-   como", cambia "Tipo" a "Todos los archivos" para que no quede como
-   `prueba.json.txt`.
-
-3. Ejecuta (igual en `cmd` o PowerShell, siempre que sea `curl.exe` con el
-   `.exe`):
-
-   ```
-   curl.exe -X POST http://127.0.0.1:8788/imprimir-ticket -H "Content-Type: application/json" -d "@prueba.json"
-   ```
-
-Debe salir un ticket de prueba con el papel cortándose solo al final. Si los
-acentos o la "ñ" salen como símbolos raros, o las columnas no alinean bien,
-revisa la sección de más abajo.
+Si el papel sale en blanco, con manchas, o la impresora tira error: revisa
+la sección de más abajo (calidad de imagen / dithering).
 
 **Si da un error de impresora no encontrada** (en cualquiera de las dos
 pruebas): el nombre del Paso 4 no coincide exactamente. Vuelve a copiarlo tal
@@ -215,13 +200,22 @@ siempre, con el botón manual de "Imprimir" del ticket.
   que no está activado en este navegador. Repite el Paso 8.
 - **Reinstalaron o reemplazaron la impresora:** repite el Paso 4, el nombre
   puede haber cambiado.
-- **El ticket imprime pero con acentos/ñ raros, o las columnas no alinean:**
-  abre `agente_cajon.py` y ajusta cerca del principio:
-  - `ANCHO_TICKET = 32` — súbelo o bájalo (30-33 es el rango normal) si el
-    texto se corta antes de tiempo o le sobra mucho espacio a la derecha.
-  - Si los acentos salen mal, prueba cambiando `ESC_CODEPAGE_CP850 =
-    b"\x1b\x74\x02"` a otro código de página (consulta el manual de la
-    Xprinter, la lista de códigos ESC/POS suele estar ahí).
+- **El ticket sale más angosto o más ancho de lo que debería, con margen de
+  sobra a un lado:** abre `agente_cajon.py` y ajusta cerca del principio
+  `ANCHO_IMPRESORA_PX = 384` (58mm de papel a 203dpi). Es el ancho nativo de
+  la Xprinter XP-58IIH; solo cámbialo si se instaló una impresora distinta
+  con otro ancho de papel.
+- **El texto pequeño del ticket sale borroso o el logo se ve como un manchón
+  de puntos:** es dithering (blanco y negro puro, sin escala de grises) —
+  esperado en cualquier impresora térmica, no es un error. Si se ve
+  demasiado degradado, en `pagos.html` se puede subir el `scale` que usa
+  `html2canvas` en `generarImagenTicketTermica` (actualmente 2) para partir
+  de una imagen más grande y nítida antes de reducirla al ancho del papel.
+- **No imprime nada y en la consola del agente aparece un error de Pillow o
+  "cannot identify image file":** revisa que `pip install -r
+  requirements.txt` haya instalado Pillow correctamente (Paso 3); si el
+  error persiste, seguramente llegó algo que no es un PNG válido en el
+  cuerpo de la petición.
 - **Quieres detenerlo temporalmente:** busca `pythonw.exe` en el Administrador
   de tareas de Windows y termínalo ahí; volverá a arrancar solo en el
   siguiente inicio de sesión mientras el acceso directo del Paso 7 siga en la
