@@ -193,6 +193,28 @@ requireGerente();
 
 let metodoActual = 'efectivo';
 
+// Misma bandera que usa /pagos para saber si esta PC tiene el agente del
+// cajón/impresora instalado (localStorage, no la sesión: es del dispositivo,
+// no del usuario). Aquí solo se usa para abrir el cajón al registrar un
+// gasto en efectivo —sacar dinero de la caja también debe abrirlo, aunque
+// no se imprima ningún ticket—; el botón para activarla vive en /pagos, no
+// hace falta repetirlo aquí.
+const AGENTE_ACTIVO_KEY = 'agente_pos_local';
+const AGENTE_BASE_URL = 'http://127.0.0.1:8788';
+
+function agenteLocalActivo(){
+  return localStorage.getItem(AGENTE_ACTIVO_KEY) === '1';
+}
+
+// "Best effort" a propósito: si el agente no responde a tiempo no debe
+// interrumpir ni avisar del gasto ya registrado.
+function abrirCajonDinero(){
+  if(!agenteLocalActivo()) return;
+  const controlador = new AbortController();
+  setTimeout(() => controlador.abort(), 1500);
+  fetch(AGENTE_BASE_URL + '/abrir-cajon', {method:'POST', signal: controlador.signal}).catch(()=>{});
+}
+
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function money(n){return '$'+Number(n||0).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});}
 
@@ -341,6 +363,7 @@ async function guardarGasto(){
     });
     const data = await r.json();
     if(!r.ok){ msg.className='msg error show'; msg.textContent=data.detail||'Error al guardar'; return; }
+    if(metodoActual==='efectivo') abrirCajonDinero();
     cerrarModal();
     cargarCategorias();
     cargarTodo();
