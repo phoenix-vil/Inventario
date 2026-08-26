@@ -1062,7 +1062,7 @@ async function confirmarCobro(){
     nombre: c.personalizado ? c.nombre : null,
     cantidad: c.cantidad,
     precio_unitario: c.precio,
-    precio_original: c.personalizado ? null : (c.precioOriginal||null),
+    precio_original: c.precioOriginal||null,
   }));
   let body={items,descuento_extra_pct:descuentoExtra,autorizado_por:autorizadoPor,metodo_pago:metodoPago};
 
