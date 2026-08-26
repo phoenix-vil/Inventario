@@ -64,7 +64,17 @@ ESC_NEGRITA_OFF = b"\x1b\x45\x00"
 ESC_DOBLE_ON = b"\x1d\x21\x11"   # doble ancho y alto, para el total
 ESC_DOBLE_OFF = b"\x1d\x21\x00"
 ESC_CODEPAGE_CP850 = b"\x1b\x74\x02"  # para que á/é/í/ó/ú/ñ salgan bien
-CORTE_PAPEL = b"\n\n\n\x1d\x56\x42\x00"  # alimenta unas líneas y corta
+
+# GS V m — corte de papel, en su forma clásica de un solo parámetro (la más
+# compatible con impresoras económicas/genéricas; hay una variante de dos
+# parámetros con avance incluido que no todos los modelos entienden igual).
+# m=0x00 corte total, m=0x01 corte parcial (deja una pestaña de papel sin
+# cortar). Si con ninguno de los dos corta, no es un problema de software:
+# revisa si la impresora tiene un DIP switch físico de "Cutter" apagado
+# (suele estar bajo una tapa lateral o inferior), o si este modelo en
+# particular no trae cuchilla instalada —los hay con y sin ella bajo el mismo
+# nombre— y el papel se corta a mano contra el borde dentado de la tapa.
+CORTE_PAPEL = b"\n\n\n\x1d\x56\x00"  # alimenta unas líneas y corta (total)
 
 
 def money(n):
@@ -228,10 +238,18 @@ class Handler(BaseHTTPRequestHandler):
     def _cors(self):
         # pagos.html se sirve desde el dominio de Tailscale (otro origen que
         # 127.0.0.1), así que el navegador exige estas cabeceras para permitir
-        # la petición.
+        # la petición. La última (Private-Network) es aparte de CORS: Chrome y
+        # Edge, desde que existe "Private Network Access", bloquean en
+        # silencio —sin ningún error visible para quien usa la app, solo un
+        # aviso en la consola del navegador— que una página cargada desde
+        # una dirección de internet (el dominio de Tailscale) llame a algo en
+        # localhost/la red local, salvo que el propio servidor lo autorice
+        # explícito. curl no aplica esta regla —por eso las pruebas manuales
+        # con curl.exe sí funcionaban aunque la app no disparara nada—.
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Private-Network", "true")
 
     def _responder(self, codigo, cuerpo):
         self.send_response(codigo)
