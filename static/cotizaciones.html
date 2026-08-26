@@ -136,6 +136,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .tk-btn-wa{width:100%;height:44px;border:none;border-radius:10px;background:#25D366;color:#fff;font-weight:700;font-size:15px;cursor:pointer;box-sizing:border-box;display:flex;align-items:center;justify-content:center;text-align:center}
 .tk-btn-sec{flex:1 1 0;height:44px;border:0.5px solid var(--border);border-radius:10px;background:transparent;color:var(--text);font-weight:600;font-size:14px;cursor:pointer;box-sizing:border-box;display:flex;align-items:center;justify-content:center;text-align:center}
 .tk-btn-cerrar{width:100%;height:44px;border:0.5px solid var(--border);border-radius:10px;background:transparent;color:var(--text);font-weight:600;font-size:14px;cursor:pointer;box-sizing:border-box;display:flex;align-items:center;justify-content:center;text-align:center}
+
+@media(max-width:560px){
+  /* En pantallas angostas el stepper de cantidad + precio + botones ya no
+     dejan casi nada de ancho para el nombre del producto (se veía cortado a
+     1-2 letras). Aquí el nombre pasa a ocupar su propia línea completa, y el
+     resto de los controles se acomoda debajo. */
+  .cart-item{flex-wrap:wrap}
+  .ci-info{flex-basis:100%}
+}
 </style>
 </head>
 <body>

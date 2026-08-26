@@ -130,6 +130,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 @media(max-width:560px){
   .topbar{padding:0 .625rem}.topbar-title{font-size:15px}.topbar-right{min-width:0}
   .container{padding:.875rem .875rem 18rem}
+  /* En pantallas angostas el stepper de cantidad + precio + botones ya no
+     dejan casi nada de ancho para el nombre del producto (se veía cortado a
+     1-2 letras). Aquí el nombre pasa a ocupar su propia línea completa, y el
+     resto de los controles se acomoda debajo. */
+  .cart-item{flex-wrap:wrap}
+  .ci-info{flex-basis:100%}
 }
 </style>
 <link rel="stylesheet" href="/static/modern.css?v=1787605997">
@@ -1127,8 +1133,8 @@ async function confirmarCobro(){
     cerrarCobro();
     carrito=[];descuentoExtra=0;autorizadoPor=null;
     renderCarrito();
-    mostrarTicket(data);
     if(data.metodo_pago==='efectivo') abrirCajonDinero();
+    mostrarTicket(data);
     if(cotizacionOrigenId){
       try{
         await authFetch('/api/cotizaciones/'+cotizacionOrigenId+'/marcar-vendida', {
@@ -1147,7 +1153,21 @@ function mostrarTicket(venta){
   ticketActual=venta;
   document.getElementById('ticket-contenido').innerHTML=generarTicketHTML(venta);
   document.getElementById('ticket-modal').classList.add('open');
-  intentarImpresionDirecta(venta);
+  decidirImpresionDirecta(venta);
+}
+
+// En efectivo el cajón ya se abrió (abrirCajonDinero, justo antes de esta
+// pantalla) y aquí se le pregunta al cajero si además quiere el ticket
+// impreso —antes se imprimía siempre, sin preguntar, lo cual gastaba papel
+// de más cuando no hacía falta—. El resto de métodos de pago no abren
+// cajón, así que se quedan igual que antes: imprimen directo sin preguntar.
+// Si esta PC no tiene el agente activo tampoco tiene caso preguntar: no hay
+// impresora que lo haga sola, y el botón manual del modal sigue ahí.
+async function decidirImpresionDirecta(venta){
+  if(!agenteLocalActivo()) return;
+  if(venta.metodo_pago!=='efectivo'){ intentarImpresionDirecta(venta); return; }
+  const imprimir = await confirmarPersonalizado('¿Deseas imprimir el ticket?', 'Cajón abierto');
+  if(imprimir) intentarImpresionDirecta(venta);
 }
 
 precargarLogosActivos();
