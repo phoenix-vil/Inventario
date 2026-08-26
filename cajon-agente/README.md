@@ -137,21 +137,28 @@ y cambia el tercer byte de `\x00` a `\x01` (ese byte es el que elige el pin:
 `\x00` = pin 2, `\x01` = pin 5). Guarda, detén el agente (Ctrl+C en su
 ventana) y repite el Paso 5 y esta prueba.
 
-**Impresión del ticket**, con un ticket de ejemplo. El comando cambia según la
-terminal, por cómo cada una trata las comillas — usa el que corresponda,
-tal cual, en una sola línea:
+**Impresión del ticket**, con un ticket de ejemplo. Pasar el JSON directo en
+la línea de comandos es frágil —`cmd` y PowerShell tratan las comillas de
+forma distinta, y es fácil que algo se rompa al copiar—, así que mejor
+ponerlo en un archivo aparte y decirle a `curl.exe` que lo lea de ahí: eso
+funciona igual sin importar cuál terminal uses.
 
-En **PowerShell** (`PS C:\...>`), con comillas simples por fuera:
+1. Abre el Bloc de notas, pega exactamente esto (una sola línea):
 
-```
-curl.exe -X POST http://127.0.0.1:8788/imprimir-ticket -H "Content-Type: application/json" -d '{"id":1,"encabezado":"Prueba","sucursal":"Prueba","operador":"Prueba","fecha":"2026-01-01T12:00:00Z","detalle":[{"nombre":"Producto de prueba","cantidad":1,"precio_unitario":100,"precio_original":null,"importe":100}],"subtotal":100,"descuento_extra_pct":0,"ahorro_total":0,"total":100,"metodo_pago":"efectivo","pago_con":100,"cambio":0}'
-```
+   ```
+   {"id":1,"encabezado":"Prueba","sucursal":"Prueba","operador":"Prueba","fecha":"2026-01-01T12:00:00Z","detalle":[{"nombre":"Producto de prueba","cantidad":1,"precio_unitario":100,"precio_original":null,"importe":100}],"subtotal":100,"descuento_extra_pct":0,"ahorro_total":0,"total":100,"metodo_pago":"efectivo","pago_con":100,"cambio":0}
+   ```
 
-En el **Símbolo del sistema** (`C:\...>`), con las comillas internas escapadas:
+2. Guárdalo como `prueba.json` dentro de `C:\cajon-agente\` —en "Guardar
+   como", cambia "Tipo" a "Todos los archivos" para que no quede como
+   `prueba.json.txt`.
 
-```
-curl.exe -X POST http://127.0.0.1:8788/imprimir-ticket -H "Content-Type: application/json" -d "{\"id\":1,\"encabezado\":\"Prueba\",\"sucursal\":\"Prueba\",\"operador\":\"Prueba\",\"fecha\":\"2026-01-01T12:00:00Z\",\"detalle\":[{\"nombre\":\"Producto de prueba\",\"cantidad\":1,\"precio_unitario\":100,\"precio_original\":null,\"importe\":100}],\"subtotal\":100,\"descuento_extra_pct\":0,\"ahorro_total\":0,\"total\":100,\"metodo_pago\":\"efectivo\",\"pago_con\":100,\"cambio\":0}"
-```
+3. Ejecuta (igual en `cmd` o PowerShell, siempre que sea `curl.exe` con el
+   `.exe`):
+
+   ```
+   curl.exe -X POST http://127.0.0.1:8788/imprimir-ticket -H "Content-Type: application/json" -d "@prueba.json"
+   ```
 
 Debe salir un ticket de prueba con el papel cortándose solo al final. Si los
 acentos o la "ñ" salen como símbolos raros, o las columnas no alinean bien,
