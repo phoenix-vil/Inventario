@@ -67,6 +67,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .field input,.field textarea{width:100%;height:44px;padding:0 14px;border:0.5px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);font-size:15px;font-family:inherit}
 .field textarea{height:70px;padding:10px 14px;resize:vertical}
 .field input:focus,.field textarea:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px color-mix(in srgb,var(--blue) 18%,transparent)}
+.metodo-btn{flex:1;height:44px;border:0.5px solid var(--border);border-radius:10px;background:transparent;color:var(--text);font-size:14px;font-weight:600;cursor:pointer}
+.metodo-btn.activo{background:var(--blue-bg);color:var(--blue);border-color:var(--blue)}
 .modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:1.25rem}
 .modal-footer button{height:44px;padding:0 18px;border-radius:10px;font-size:14px;cursor:pointer;border:0.5px solid var(--border);background:transparent;color:var(--text)}
 .modal-footer button.primary{background:var(--text);color:var(--bg2);border:none;font-weight:600}
@@ -91,12 +93,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <link rel="stylesheet" href="/static/modern.css?v=1787605997">
 <style>
 .tk-head,.tk-foot{text-align:center;margin:8px 0}
-.tk-sub{font-size:12px;color:#000;text-align:center}
+.tk-sub{font-size:12px;color:var(--text);text-align:center}
 .tk-items{padding:8px 0;margin:8px 0}
-.tk-line{display:flex;justify-content:space-between;margin-bottom:3px}
+.tk-line{display:flex;justify-content:space-between;margin-bottom:4px;font-family:ui-monospace,monospace;font-size:13px}
 .tk-total{font-weight:700;font-size:16px;margin-top:8px;padding-top:8px}
-.tk-desc{color:#a32d2d}
-.tk-ahorro{color:#3b6d11;font-weight:bold}
+.tk-desc{color:var(--red)}
+.tk-ahorro{color:var(--green);font-weight:600}
+.tk-foot{font-size:12px;color:var(--text2);margin-top:10px}
+#recibo-contenido{background:var(--bg);border-radius:10px;padding:1.25rem;margin-bottom:1rem}
 </style>
 </head>
 <body>
@@ -164,8 +168,27 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="detalle-saldo-valor" id="detalle-saldo-valor">$0.00</div>
     </div>
     <button class="btn-abono" onclick="mostrarFormAbono()">💰 Registrar abono</button>
+    <button class="btn-abono" id="btn-liquidar" onclick="abrirLiquidar()" style="display:none;background:var(--bg2);color:var(--red);border:0.5px solid var(--red)">🧾 Liquidar cuenta (poner en $0)</button>
     <div id="form-abono" style="display:none;margin-bottom:1.25rem;padding:.875rem;background:var(--bg);border-radius:10px">
       <div class="field"><label>Monto del abono *</label><input type="number" id="ab-monto" min="0" step="0.01" placeholder="0.00"></div>
+      <div class="field">
+        <label>Método de pago</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <button type="button" id="ab-btn-efectivo" class="metodo-btn activo" onclick="setMetodoAbono('efectivo')">💵 Efectivo</button>
+          <button type="button" id="ab-btn-tarjeta" class="metodo-btn" onclick="setMetodoAbono('tarjeta')">💳 Tarjeta</button>
+          <button type="button" id="ab-btn-transferencia" class="metodo-btn" onclick="setMetodoAbono('transferencia')">🏦 Transferencia</button>
+        </div>
+      </div>
+      <!-- Sección tarjeta (datos del ticket de la TPV) -->
+      <div id="ab-sec-tarjeta" style="display:none">
+        <div class="field"><label>Terminal (TPV)</label><input id="ab-tpv-term" placeholder="Ej: Clip, BBVA, etc." autocomplete="off"></div>
+        <div class="field"><label>Referencia / No. de operación *</label><input id="ab-tpv-ref" placeholder="Ej: 001234" autocomplete="off"></div>
+        <div class="field"><label>Código de autorización *</label><input id="ab-tpv-aut" placeholder="Ej: 456789" autocomplete="off"></div>
+      </div>
+      <!-- Sección transferencia -->
+      <div id="ab-sec-transferencia" style="display:none">
+        <div class="field"><label>Referencia / Folio (opcional)</label><input id="ab-transf-ref" placeholder="Ej: 998877" autocomplete="off"></div>
+      </div>
       <div class="field"><label>Nota (opcional)</label><input type="text" id="ab-nota" placeholder="Ej: Pago parcial"></div>
       <button onclick="confirmarAbono()" style="width:100%;height:42px;border:none;border-radius:8px;background:var(--green);color:#fff;font-weight:600;cursor:pointer">Confirmar abono</button>
       <div class="msg" id="abono-msg"></div>
@@ -375,22 +398,29 @@ async function guardarCliente(){
 precargarLogosActivos();
 
 function generarReciboHTML(v){
+  const esCondonado = v.metodo_pago==='condonado';
   const fecha = new Date(v.fecha).toLocaleString('es-MX').replace(',', '');
   const RAYA = '<svg width="100%" height="3" style="display:block;margin:6px 0"><line x1="0" y1="1.5" x2="100%" y2="1.5" stroke="#000" stroke-width="1" stroke-dasharray="4,3"/></svg>';
   let html = `<div class="tk-head">
     ${logosTicketHTML(88)}
-    <div class="tk-sub">Recibo de abono</div>
+    <div class="tk-sub">${esCondonado?'Comprobante de liquidación de cuenta':'Recibo de abono'}</div>
     <div class="tk-sub">Cliente: ${esc(v.cliente_nombre)}</div>
     <div class="tk-sub">${fecha}</div>
     ${v.operador?`<div class="tk-sub">Atendió: ${esc(v.operador)}</div>`:''}
     ${v.sucursal?`<div class="tk-sub">Sucursal: ${esc(v.sucursal)}</div>`:''}
   </div>${RAYA}`;
-  html += `<div class="tk-line"><span>Monto abonado</span><span>${money(v.monto)}</span></div>`;
-  html += `<div class="tk-line"><span>Método</span><span>${esc(v.metodo_pago)}</span></div>`;
+  const nombresMet = {efectivo:'EFECTIVO', tarjeta:'TARJETA', transferencia:'TRANSFERENCIA', condonado:'CONDONADO (sin cobro)'};
+  html += `<div class="tk-line"><span>${esCondonado?'Monto condonado':'Monto abonado'}</span><span>${money(v.monto)}</span></div>`;
+  html += `<div class="tk-line"><span>Método</span><span>${nombresMet[v.metodo_pago]||esc(v.metodo_pago)}</span></div>`;
+  if(v.tpv_terminal) html += `<div class="tk-line"><span>Terminal</span><span>${esc(v.tpv_terminal)}</span></div>`;
+  if(v.tpv_referencia) html += `<div class="tk-line"><span>Referencia</span><span>${esc(v.tpv_referencia)}</span></div>`;
+  if(v.tpv_autorizacion) html += `<div class="tk-line"><span>Autorización</span><span>${esc(v.tpv_autorizacion)}</span></div>`;
+  if(v.transferencia_referencia) html += `<div class="tk-line"><span>Referencia</span><span>${esc(v.transferencia_referencia)}</span></div>`;
+  if(v.autorizado_por) html += `<div class="tk-line"><span>Autorizó</span><span>${esc(v.autorizado_por)}</span></div>`;
   if(v.nota) html += `<div class="tk-line"><span>Nota</span><span>${esc(v.nota)}</span></div>`;
   html += RAYA;
   html += `<div class="tk-line tk-total"><span>Saldo restante</span><span>${money(v.saldo_restante)}</span></div>`;
-  html += '<div class="tk-foot">¡Gracias por su pago!</div>';
+  html += `<div class="tk-foot">${esCondonado?'Cuenta liquidada':'¡Gracias por su pago!'}</div>`;
   return html;
 }
 
@@ -408,6 +438,8 @@ async function generarPDFRecibo(datos){
   contenedor.style.color = '#000000';
   contenedor.innerHTML = generarReciboHTML(datos);
   contenedor.querySelectorAll('.tk-sub, .tk-foot, .tk-line, .tk-total').forEach(function(el){ el.style.color = '#000000'; });
+  contenedor.querySelectorAll('.tk-desc').forEach(function(el){ el.style.color = '#a32d2d'; });
+  contenedor.querySelectorAll('.tk-ahorro').forEach(function(el){ el.style.color = '#3b6d11'; });
   document.body.appendChild(contenedor);
 
   try{
@@ -451,26 +483,35 @@ async function compartirComoPDF(datos, nombreArchivo){
 let reciboActual = null;
 
 function generarTextoRecibo(v){
+  const esCondonado = v.metodo_pago==='condonado';
   const fecha = new Date(v.fecha).toLocaleString('es-MX').replace(',', '');
   let txt = '🏪 ONLY ENTERPRISES\n';
-  txt += 'Recibo de abono\n';
+  txt += (esCondonado?'Comprobante de liquidación de cuenta':'Recibo de abono') + '\n';
   txt += '─────────────────────\n';
   txt += 'Cliente: ' + v.cliente_nombre + '\n';
   txt += 'Fecha: ' + fecha + '\n';
   if(v.operador) txt += 'Atendió: ' + v.operador + '\n';
   if(v.sucursal) txt += 'Sucursal: ' + v.sucursal + '\n';
   txt += '─────────────────────\n';
-  txt += 'Monto abonado: ' + money(v.monto) + '\n';
-  txt += 'Método: ' + v.metodo_pago + '\n';
+  const nombresMet = {efectivo:'EFECTIVO', tarjeta:'TARJETA', transferencia:'TRANSFERENCIA', condonado:'CONDONADO (sin cobro)'};
+  txt += (esCondonado?'Monto condonado: ':'Monto abonado: ') + money(v.monto) + '\n';
+  txt += 'Método: ' + (nombresMet[v.metodo_pago]||v.metodo_pago) + '\n';
+  if(v.tpv_terminal) txt += 'Terminal: ' + v.tpv_terminal + '\n';
+  if(v.tpv_referencia) txt += 'Ref: ' + v.tpv_referencia + '\n';
+  if(v.tpv_autorizacion) txt += 'Autorización: ' + v.tpv_autorizacion + '\n';
+  if(v.transferencia_referencia) txt += 'Ref: ' + v.transferencia_referencia + '\n';
+  if(v.autorizado_por) txt += 'Autorizó: ' + v.autorizado_por + '\n';
   if(v.nota) txt += 'Nota: ' + v.nota + '\n';
   txt += '─────────────────────\n';
   txt += 'Saldo restante: ' + money(v.saldo_restante) + '\n';
-  txt += '\n¡Gracias por su pago!';
+  txt += esCondonado ? '\nCuenta liquidada' : '\n¡Gracias por su pago!';
   return txt;
 }
 
 function mostrarRecibo(data){
   reciboActual = data;
+  const tit = document.querySelector('#modal-recibo h2');
+  if(tit) tit.textContent = data.metodo_pago==='condonado' ? '✅ Cuenta liquidada' : '✅ Abono registrado';
   document.getElementById('recibo-contenido').innerHTML = generarReciboHTML(data);
   document.getElementById('modal-recibo').classList.add('open');
 }
@@ -492,11 +533,13 @@ async function descargarRecibo(){
 function imprimirRecibo(){
   if(!reciboActual) return;
   const win = window.open('', '_blank');
-  const estilos = '<style>body{font-family:monospace;font-size:13px;max-width:300px;margin:20px auto;color:#000}'
-    + '.tk-head,.tk-foot{text-align:center;margin:8px 0}.tk-sub{font-size:12px;color:#000;text-align:center}'
-    + '.tk-line{display:flex;justify-content:space-between;margin-bottom:3px}'
-    + '.tk-total{font-weight:700;font-size:16px;margin-top:8px;padding-top:8px}</style>';
-  win.document.write('<html><head><title>Recibo de abono</title>' + estilos + '</head><body>' + reemplazarLogosPorURL(generarReciboHTML(reciboActual)) + '</body></html>');
+  win.document.write(`<html><head><title>Recibo de abono · Only Enterprises</title>
+    <style>@page{size:58mm auto;margin:0}body{font-family:monospace;font-size:11px;width:48mm;margin:0 auto;padding:2mm 0;line-height:1.35}img{max-width:42mm;height:auto}.tk-desc,.tk-ahorro,.tk-line span,.tk-total,.tk-sub,.tk-foot{color:#000 !important}.tk-desc,.tk-ahorro{font-weight:bold}
+    .tk-line{display:flex;justify-content:space-between;margin-bottom:3px}
+    .tk-total{font-weight:bold;font-size:15px;margin-top:6px;padding-top:6px}
+    .tk-desc{color:#a32d2d}.tk-ahorro{color:#3b6d11;font-weight:bold}.tk-head,.tk-foot{text-align:center;margin:8px 0}
+    .tk-negocio{font-size:18px;font-weight:bold}.tk-items{padding:6px 0;margin:6px 0}
+    </style></head><body>${reemplazarLogosPorURL(generarReciboHTML(reciboActual))}</body></html>`);
   win.document.close();
   setTimeout(function(){win.print();}, 300);
 }
@@ -505,6 +548,9 @@ function compartirReciboWhatsApp(){
   if(!reciboActual) return;
   compartirComoPDF(reciboActual, 'abono_' + reciboActual.id + '.pdf');
 }
+
+let saldoActual = 0;
+let clienteActualNombre = '';
 
 async function abrirDetalle(id){
   clienteActualId = id;
@@ -515,6 +561,9 @@ async function abrirDetalle(id){
     const r = await authFetch('/api/clientes/'+id);
     const c = await r.json();
     document.getElementById('detalle-nombre').textContent = '👤 ' + c.nombre;
+    saldoActual = c.saldo;
+    clienteActualNombre = c.nombre;
+    document.getElementById('btn-liquidar').style.display = c.saldo>0 ? 'block' : 'none';
 
     const saldoCont = document.getElementById('detalle-saldo-cont');
     saldoCont.className = 'detalle-saldo' + (c.saldo<=0 ? ' sin-deuda' : '');
@@ -536,7 +585,10 @@ async function abrirDetalle(id){
     pagosCont.innerHTML = c.pagos.length
       ? c.pagos.map(p=>{
           const fecha = new Date(p.fecha).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'});
-          return `<div class="hist-row"><span>${p.nota?esc(p.nota):'Abono'}<div class="hist-fecha">${fecha} · ${esc(p.operador||'')}</div></span><span style="color:var(--green)">+${money(p.monto)}</span></div>`;
+          const esCondonado = p.metodo_pago==='condonado';
+          const metodoTxt = {efectivo:'Efectivo',tarjeta:'Tarjeta',transferencia:'Transferencia',condonado:'🧾 Condonado'}[p.metodo_pago] || p.metodo_pago;
+          const autorizo = p.autorizado_por ? ` · Autorizó: ${esc(p.autorizado_por)}` : '';
+          return `<div class="hist-row"><span>${p.nota?esc(p.nota):'Abono'}<div class="hist-fecha">${fecha} · ${esc(p.operador||'')} · ${metodoTxt}${autorizo}</div></span><span style="color:${esCondonado?'var(--red)':'var(--green)'}">+${money(p.monto)}</span></div>`;
         }).join('')
       : '<div style="font-size:12px;color:var(--text2);padding:6px 0">Sin pagos registrados</div>';
   }catch(e){
@@ -567,12 +619,27 @@ function cerrarDetalle(){
   document.getElementById('modal-detalle').classList.remove('open');
 }
 
+let metodoAbono = 'efectivo';
+function setMetodoAbono(m){
+  metodoAbono = m;
+  document.getElementById('ab-btn-efectivo').classList.toggle('activo', m==='efectivo');
+  document.getElementById('ab-btn-tarjeta').classList.toggle('activo', m==='tarjeta');
+  document.getElementById('ab-btn-transferencia').classList.toggle('activo', m==='transferencia');
+  document.getElementById('ab-sec-tarjeta').style.display = m==='tarjeta'?'block':'none';
+  document.getElementById('ab-sec-transferencia').style.display = m==='transferencia'?'block':'none';
+}
+
 function mostrarFormAbono(){
   const f = document.getElementById('form-abono');
   f.style.display = f.style.display==='none' ? 'block' : 'none';
   document.getElementById('ab-monto').value='';
   document.getElementById('ab-nota').value='';
+  document.getElementById('ab-tpv-term').value='';
+  document.getElementById('ab-tpv-ref').value='';
+  document.getElementById('ab-tpv-aut').value='';
+  document.getElementById('ab-transf-ref').value='';
   document.getElementById('abono-msg').className='msg';
+  setMetodoAbono('efectivo');
 }
 
 async function confirmarAbono(){
@@ -582,14 +649,66 @@ async function confirmarAbono(){
 
   if(isNaN(monto) || monto<=0){ msg.className='msg error show'; msg.textContent='Monto inválido'; return; }
 
+  const body = {monto, nota, metodo_pago: metodoAbono};
+  if(metodoAbono==='tarjeta'){
+    const ref = document.getElementById('ab-tpv-ref').value.trim();
+    const aut = document.getElementById('ab-tpv-aut').value.trim();
+    if(!ref || !aut){ msg.className='msg error show'; msg.textContent='Ingresa la referencia y autorización de la TPV'; return; }
+    body.tpv_referencia = ref;
+    body.tpv_autorizacion = aut;
+    body.tpv_terminal = document.getElementById('ab-tpv-term').value.trim() || null;
+  }else if(metodoAbono==='transferencia'){
+    body.transferencia_referencia = document.getElementById('ab-transf-ref').value.trim() || null;
+  }
+
   try{
     const r = await authFetch('/api/clientes/'+clienteActualId+'/pagos', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({monto, nota})
+      body: JSON.stringify(body)
     });
     const data = await r.json();
     if(!r.ok){ msg.className='msg error show'; msg.textContent=data.detail||'Error'; return; }
     document.getElementById('form-abono').style.display='none';
+    abrirDetalle(clienteActualId);
+    cargarClientes();
+    mostrarRecibo(data);
+  }catch(e){
+    msg.className='msg error show'; msg.textContent='Error de conexión';
+  }
+}
+
+// ─── Liquidar cuenta (condonar saldo, requiere autorización) ───────────────
+function abrirLiquidar(){
+  if(saldoActual<=0) return;
+  document.getElementById('liq-cliente-nombre').textContent = clienteActualNombre;
+  document.getElementById('liq-saldo').textContent = money(saldoActual);
+  document.getElementById('liq-password').value = '';
+  document.getElementById('liq-nota').value = '';
+  document.getElementById('liquidar-msg').className = 'msg';
+  document.getElementById('modal-liquidar').classList.add('open');
+}
+
+function cerrarLiquidar(){
+  document.getElementById('modal-liquidar').classList.remove('open');
+}
+
+async function confirmarLiquidar(){
+  const msg = document.getElementById('liquidar-msg');
+  const usuario = document.getElementById('liq-usuario').value.trim();
+  const password = document.getElementById('liq-password').value;
+  const nota = document.getElementById('liq-nota').value.trim() || null;
+  if(!usuario || !password){ msg.className='msg error show'; msg.textContent='Ingresa usuario y contraseña'; return; }
+
+  try{
+    // skipAuthRedirect: un 401 aquí es "contraseña incorrecta" de Daniel, no
+    // que haya caducado la sesión de quien está usando la pantalla.
+    const r = await authFetch('/api/clientes/'+clienteActualId+'/liquidar', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({usuario, password, nota})
+    }, true);
+    const data = await r.json();
+    if(!r.ok){ msg.className='msg error show'; msg.textContent=data.detail||'Error'; return; }
+    cerrarLiquidar();
     abrirDetalle(clienteActualId);
     cargarClientes();
     mostrarRecibo(data);
@@ -605,18 +724,39 @@ document.addEventListener('keydown', e=>{
 cargarClientes();
 </script>
 
+<!-- Modal liquidar cuenta (condonar saldo, requiere autorización) -->
+<div class="overlay" id="modal-liquidar">
+  <div class="modal">
+    <h2>🧾 Liquidar cuenta</h2>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:12px">
+      Esto pone en $0 el saldo de <b id="liq-cliente-nombre"></b> (<span id="liq-saldo"></span>) sin cobrarlo.
+      Requiere autorización de Daniel Mondragon.
+    </p>
+    <div class="field"><label>Usuario gerente</label><input id="liq-usuario" value="Daniel Mondragon" autocomplete="off"></div>
+    <div class="field"><label>Contraseña</label><input type="password" id="liq-password" autocomplete="off"></div>
+    <div class="field"><label>Motivo (opcional)</label><input type="text" id="liq-nota" placeholder="Ej: cuenta incobrable"></div>
+    <div class="msg" id="liquidar-msg"></div>
+    <div class="modal-footer">
+      <button onclick="cerrarLiquidar()">Cancelar</button>
+      <button class="primary" onclick="confirmarLiquidar()" style="background:var(--red)">Liquidar</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal de recibo de abono -->
 <div class="overlay" id="modal-recibo">
   <div class="modal">
     <h2>✅ Abono registrado</h2>
-    <div id="recibo-contenido" style="background:#fff;border-radius:10px;padding:1.25rem;margin-bottom:1rem;color:#000"></div>
-    <div style="display:flex;gap:8px;margin-bottom:8px">
-      <button onclick="descargarRecibo()" style="flex:1;height:42px;border:0.5px solid var(--border);border-radius:8px;background:transparent;color:var(--text);cursor:pointer;font-size:13px">⬇ Descargar</button>
-      <button onclick="imprimirRecibo()" style="flex:1;height:42px;border:0.5px solid var(--border);border-radius:8px;background:transparent;color:var(--text);cursor:pointer;font-size:13px">🖨 Imprimir</button>
+    <div id="recibo-contenido"></div>
+    <div style="display:flex;flex-direction:column;gap:8px;width:100%;box-sizing:border-box">
+      <button onclick="compartirReciboWhatsApp()" style="display:block;width:100%;box-sizing:border-box;height:50px;border-radius:12px;border:none;background:#25d366;color:#fff;font-weight:700;font-size:15px;cursor:pointer">Compartir por WhatsApp</button>
+      <div style="display:flex;gap:8px;width:100%;box-sizing:border-box">
+        <button onclick="descargarRecibo()" style="flex:1;height:38px;border-radius:8px;border:0.5px solid var(--border);background:transparent;color:var(--text2);font-size:13px;font-weight:500;cursor:pointer">Descargar</button>
+        <button onclick="imprimirRecibo()" style="flex:1;height:38px;border-radius:8px;border:0.5px solid var(--border);background:transparent;color:var(--text2);font-size:13px;font-weight:500;cursor:pointer">Imprimir</button>
+      </div>
     </div>
-    <button onclick="compartirReciboWhatsApp()" style="width:100%;height:42px;border:0.5px solid #25d366;border-radius:8px;background:#e9fbe9;color:#1a6e38;cursor:pointer;font-size:13px;font-weight:600;margin-bottom:8px">💬 Compartir por WhatsApp</button>
     <div class="modal-footer">
-      <button class="primary" onclick="cerrarRecibo()">Cerrar</button>
+      <button class="primary" onclick="cerrarRecibo()" style="width:100%">Cerrar</button>
     </div>
   </div>
 </div>

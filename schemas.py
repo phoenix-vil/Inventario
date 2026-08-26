@@ -197,6 +197,16 @@ class CrearPagoCredito(BaseModel):
     monto: float = Field(..., gt=0)
     metodo_pago: str = Field(default="efectivo")
     nota: Optional[str] = Field(None, max_length=500)
+    tpv_referencia: Optional[str] = None
+    tpv_autorizacion: Optional[str] = None
+    tpv_terminal: Optional[str] = None
+    transferencia_referencia: Optional[str] = None
+
+
+class LiquidarCuenta(BaseModel):
+    usuario: str
+    password: str
+    nota: Optional[str] = Field(None, max_length=500)
 
 
 class RegistrarCorteCaja(BaseModel):

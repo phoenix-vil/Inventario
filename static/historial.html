@@ -176,6 +176,9 @@ button.primary:hover{opacity:.85;background:var(--text)}
 requireGerente();
 let ventas=[];
 let ventaDetalle=null;
+let abonosListaGlobal=[];
+let abonoDetalle=null;
+let detalleTipo='venta'; // 'venta' | 'abono': qué botones de acción usar en el modal compartido
 
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function money(n){return '$'+Number(n).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -230,7 +233,8 @@ async function cargar(){
     if(ra.ok){
       const abonosData=await ra.json();
       document.getElementById('s-abonos').textContent=money(abonosData.total||0);
-      renderAbonos(abonosData.abonos||[]);
+      abonosListaGlobal=abonosData.abonos||[];
+      renderAbonos(abonosListaGlobal);
     }
   }catch(e){console.error(e);}
 }
@@ -242,11 +246,17 @@ function renderAbonos(lista){
   if(!lista.length){titulo.style.display='none';cont.style.display='none';return;}
   titulo.style.display='block';
   cont.style.display='block';
+  const etiquetasMet={tarjeta:'💳 Tarjeta',transferencia:'🏦 Transferencia',efectivo:'💵 Efectivo',condonado:'🧾 Condonado'};
   cont.innerHTML=lista.map(a=>{
     const fecha=new Date(a.fecha).toLocaleString('es-MX',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
-    return `<div class="hist-row" style="display:flex;justify-content:space-between;padding:.75rem 1rem;border-bottom:0.5px solid var(--border)">
-      <span>👤 ${esc(a.cliente_nombre)}${a.nota?' · '+esc(a.nota):''}<div style="font-size:11px;color:var(--text2)">${fecha} · ${esc(a.operador||'')}${a.sucursal?' · Suc. '+esc(a.sucursal):''}</div></span>
-      <span style="color:var(--blue);font-weight:600">+${money(a.monto)}</span>
+    const esCondonado=a.metodo_pago==='condonado';
+    const met=etiquetasMet[a.metodo_pago]||'💵 Efectivo';
+    const autorizo=a.autorizado_por?` · Autorizó: ${esc(a.autorizado_por)}`:'';
+    const ref = a.tpv_referencia || a.transferencia_referencia
+      ? `<div style="font-size:11px;color:var(--text2)">Ref: ${esc(a.tpv_referencia||a.transferencia_referencia)}${a.tpv_autorizacion?' · Aut: '+esc(a.tpv_autorizacion):''}</div>` : '';
+    return `<div class="hist-row" onclick="verAbono(${a.id})" style="display:flex;justify-content:space-between;padding:.75rem 1rem;border-bottom:0.5px solid var(--border);cursor:pointer">
+      <span>👤 ${esc(a.cliente_nombre)}${a.nota?' · '+esc(a.nota):''}<div style="font-size:11px;color:var(--text2)">${fecha} · ${esc(a.operador||'')}${a.sucursal?' · Suc. '+esc(a.sucursal):''} · ${met}${autorizo}</div>${ref}</span>
+      <span style="color:${esCondonado?'var(--red)':'var(--blue)'};font-weight:600">+${money(a.monto)}</span>
     </div>`;
   }).join('');
 }
@@ -337,6 +347,7 @@ async function verDetalle(id){
   try{
     const r=await authFetch('/api/ventas/'+id);
     ventaDetalle=await r.json();
+    detalleTipo='venta';
     const _esDev = ventaDetalle && ((ventaDetalle.estado === 'devolucion') || (ventaDetalle.total < 0));
   const _tit = document.querySelector('#detalle-modal h2');
   if(_tit) _tit.textContent = _esDev ? 'Detalle de devolución' : 'Detalle de venta';
@@ -344,6 +355,46 @@ async function verDetalle(id){
     document.getElementById('detalle-modal').classList.add('open');
   }catch(e){}
 }
+
+// El abono ya viene completo en la lista que se cargó con /abonos-periodo:
+// no hace falta otra petición, a diferencia de verDetalle() con la venta.
+function verAbono(id){
+  const a=abonosListaGlobal.find(x=>x.id===id);
+  if(!a)return;
+  abonoDetalle=a;
+  detalleTipo='abono';
+  const _tit=document.querySelector('#detalle-modal h2');
+  if(_tit) _tit.textContent='Recibo de abono';
+  document.getElementById('detalle-contenido').innerHTML=reciboAbonoHTML(a);
+  document.getElementById('detalle-modal').classList.add('open');
+}
+
+function reciboAbonoHTML(a){
+  const esCondonado=a.metodo_pago==='condonado';
+  const fecha=new Date(a.fecha).toLocaleString('es-MX').replace(',', '');
+  const RAYA='<svg width="100%" height="3" style="display:block;margin:6px 0"><line x1="0" y1="1.5" x2="100%" y2="1.5" stroke="#000" stroke-width="1" stroke-dasharray="4,3"/></svg>';
+  const nombresMet={efectivo:'EFECTIVO', tarjeta:'TARJETA', transferencia:'TRANSFERENCIA', condonado:'CONDONADO (sin cobro)'};
+  let html=`<div class="tk-head">
+    ${logosTicketHTML(88)}
+    ${a.sucursal?`<div class="tk-sub">Sucursal ${esc(a.sucursal)}</div>`:''}
+    <div class="tk-sub">${esCondonado?'Comprobante de liquidación de cuenta':'Recibo de abono'}</div>
+    <div class="tk-sub">Cliente: ${esc(a.cliente_nombre)}</div>
+    <div class="tk-sub">${fecha}</div>
+    ${a.operador?`<div class="tk-sub">Atendió: ${esc(a.operador)}</div>`:''}
+  </div>${RAYA}`;
+  html+=`<div class="tk-line tk-total"><span>${esCondonado?'Monto condonado':'Monto abonado'}</span><span>${money(a.monto)}</span></div>`;
+  html+=RAYA;
+  html+=`<div class="tk-line"><span>Método</span><span>${nombresMet[a.metodo_pago]||esc(a.metodo_pago)}</span></div>`;
+  if(a.tpv_terminal) html+=`<div class="tk-line"><span>Terminal</span><span>${esc(a.tpv_terminal)}</span></div>`;
+  if(a.tpv_referencia) html+=`<div class="tk-line"><span>Referencia</span><span>${esc(a.tpv_referencia)}</span></div>`;
+  if(a.tpv_autorizacion) html+=`<div class="tk-line"><span>Autorización</span><span>${esc(a.tpv_autorizacion)}</span></div>`;
+  if(a.transferencia_referencia) html+=`<div class="tk-line"><span>Referencia</span><span>${esc(a.transferencia_referencia)}</span></div>`;
+  if(a.autorizado_por) html+=`<div class="tk-line"><span>Autorizó</span><span>${esc(a.autorizado_por)}</span></div>`;
+  if(a.nota) html+=`<div class="tk-line"><span>Nota</span><span>${esc(a.nota)}</span></div>`;
+  html+=`<div class="tk-foot">${esCondonado?'Cuenta liquidada':'¡Gracias por su pago!'}</div>`;
+  return html;
+}
+
 function cerrarDetalle(){document.getElementById('detalle-modal').classList.remove('open');}
 
 precargarLogosActivos();
@@ -378,6 +429,56 @@ async function generarPDFTicketVenta(v){
   } finally {
     document.body.removeChild(contenedor);
   }
+}
+
+async function generarPDFAbono(a){
+  const jsPDFCtor = window.jspdf.jsPDF;
+  const contenedor = document.createElement('div');
+  contenedor.style.position = 'absolute';
+  contenedor.style.left = '-9999px';
+  contenedor.style.top = '0';
+  contenedor.style.width = '300px';
+  contenedor.style.background = '#ffffff';
+  contenedor.style.padding = '16px';
+  contenedor.style.fontFamily = 'monospace';
+  contenedor.style.fontSize = '13px';
+  contenedor.style.color = '#000000';
+  contenedor.innerHTML = reciboAbonoHTML(a);
+  contenedor.querySelectorAll('.tk-sub, .tk-foot, .tk-line, .tk-total').forEach(function(el){ el.style.color = '#000000'; });
+  document.body.appendChild(contenedor);
+
+  try{
+    await new Promise(function(r){ setTimeout(r, 80); });
+    const canvas = await html2canvas(contenedor, {scale:2, backgroundColor:'#ffffff', useCORS:true});
+    const imgData = canvas.toDataURL('image/png');
+    const pdfWidth = 320;
+    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+    const doc = new jsPDFCtor({unit:'pt', format:[pdfWidth, pdfHeight], orientation:'portrait'});
+    doc.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+    return doc.output('blob');
+  } finally {
+    document.body.removeChild(contenedor);
+  }
+}
+
+async function compartirComoPDFAbono(a, nombreArchivo){
+  const blob = await generarPDFAbono(a);
+  const archivo = new File([blob], nombreArchivo, {type:'application/pdf'});
+  const puedeCompartir = navigator.canShare && navigator.canShare({files:[archivo]});
+  if(puedeCompartir){
+    try{
+      await navigator.share({files:[archivo]});
+      return;
+    }catch(e){
+      if(e.name === 'AbortError') return;
+    }
+  }
+  const url = URL.createObjectURL(blob);
+  const a2 = document.createElement('a');
+  a2.href = url; a2.download = nombreArchivo;
+  document.body.appendChild(a2); a2.click(); a2.remove();
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 3000);
+  alert('Tu navegador no permite compartir directo. Se descargó el PDF: adjúntalo manualmente en WhatsApp.');
 }
 
 async function compartirComoPDFVenta(v, nombreArchivo){
@@ -507,6 +608,16 @@ function ticketHTML(v){
 }
 
 async function descargarTicketDetalle(){
+  if(detalleTipo==='abono'){
+    if(!abonoDetalle)return;
+    const blob = await generarPDFAbono(abonoDetalle);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'abono_' + abonoDetalle.id + '.pdf';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 3000);
+    return;
+  }
   if(!ventaDetalle)return;
   const blob = await generarPDFTicketVenta(ventaDetalle);
   const url = URL.createObjectURL(blob);
@@ -517,7 +628,10 @@ async function descargarTicketDetalle(){
 }
 
 function imprimirDetalle(){
-  if(!ventaDetalle)return;
+  const contenidoHTML = detalleTipo==='abono'
+    ? (abonoDetalle ? reciboAbonoHTML(abonoDetalle) : null)
+    : (ventaDetalle ? ticketHTML(ventaDetalle) : null);
+  if(!contenidoHTML)return;
   const win=window.open('','_blank');
   win.document.write(`<html><head><title>Historial · Only Enterprises</title>
     <style>@page{size:58mm auto;margin:0}body{font-family:monospace;font-size:11px;width:48mm;margin:0 auto;padding:2mm 0;line-height:1.35}img{max-width:42mm;height:auto}.tk-desc,.tk-ahorro,.tk-line span,.tk-total,.tk-sub,.tk-foot{color:#000 !important}.tk-desc,.tk-ahorro{font-weight:bold}
@@ -525,7 +639,7 @@ function imprimirDetalle(){
     .tk-total{font-weight:bold;font-size:15px;margin-top:6px;padding-top:6px}
     .tk-desc{color:#a32d2d}.tk-ahorro{color:#3b6d11;font-weight:bold}.tk-head,.tk-foot{text-align:center;margin:8px 0}
     .tk-negocio{font-size:18px;font-weight:bold}.tk-items{padding:6px 0;margin:6px 0}
-    </style></head><body>${reemplazarLogosPorURL(ticketHTML(ventaDetalle))}</body></html>`);
+    </style></head><body>${reemplazarLogosPorURL(contenidoHTML)}</body></html>`);
   win.document.close();
   setTimeout(()=>win.print(),300);
 }
@@ -572,6 +686,11 @@ function ticketTextoPlano(v){
 }
 
 function compartirWhatsApp(){
+  if(detalleTipo==='abono'){
+    if(!abonoDetalle)return;
+    compartirComoPDFAbono(abonoDetalle, 'abono_'+abonoDetalle.id+'.pdf');
+    return;
+  }
   if(!ventaDetalle)return;
   compartirComoPDFVenta(ventaDetalle, 'ticket_'+ventaDetalle.id+'.pdf');
 }

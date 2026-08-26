@@ -221,6 +221,14 @@ class PagoCredito(Base):
     operador = Column(String, nullable=True)
     sucursal = Column(String, nullable=True)
     nota = Column(String, nullable=True)
+    tpv_referencia = Column(String, nullable=True)
+    tpv_autorizacion = Column(String, nullable=True)
+    tpv_terminal = Column(String, nullable=True)
+    transferencia_referencia = Column(String, nullable=True)
+    # Quién autorizó el movimiento cuando no es un cobro normal (p. ej. quién
+    # autorizó condonar/liquidar una cuenta). Distinto de "operador": ese es
+    # quien lo registró, este es quien dio el visto bueno.
+    autorizado_por = Column(String, nullable=True)
     creado_en = Column(DateTime, default=datetime.utcnow)
 
 

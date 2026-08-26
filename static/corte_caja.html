@@ -216,7 +216,7 @@ function actualizarRetiro(){
 // Mismo formato que el reporte del historial de ventas: A4, Courier, líneas
 // punteadas y el logo centrado arriba. Los datos vienen del servidor ya
 // calculados; aquí solo se dibujan.
-const NOMBRES_METODO = {efectivo:'Efectivo', tarjeta:'Tarjeta', credito:'Crédito', transferencia:'Transferencia'};
+const NOMBRES_METODO = {efectivo:'Efectivo', tarjeta:'Tarjeta', credito:'Crédito', transferencia:'Transferencia', condonado:'Condonado (sin cobro)'};
 
 async function armarPDF(d){
   const jsPDFCtor = window.jspdf.jsPDF;
@@ -313,7 +313,7 @@ async function armarPDF(d){
   y += 6; linea();
 
   espacio(altoDe(b.desglose_metodos_pago.length));
-  titulo('Métodos de pago');
+  titulo('Métodos de pago (ventas)');
   if(!b.desglose_metodos_pago.length){
     vacio('Sin ventas este día');
   }else{
@@ -322,6 +322,18 @@ async function armarPDF(d){
     });
   }
   y += 6; linea();
+
+  // Solo si hubo abonos: antes se confundían con la caja porque "Abonos de
+  // clientes" (arriba) suma todos los métodos, pero "Abonos cobrados en
+  // efectivo" (abajo, cuadre de caja) solo cuenta los que son en efectivo.
+  if(b.desglose_metodos_abonos.length){
+    espacio(altoDe(b.desglose_metodos_abonos.length));
+    titulo('Métodos de pago (abonos de clientes)');
+    b.desglose_metodos_abonos.forEach(function(m){
+      fila((NOMBRES_METODO[m.metodo] || m.metodo) + ' (' + m.cantidad + ')', money(m.total));
+    });
+    y += 6; linea();
+  }
 
   espacio(140);
   titulo('Cuadre de caja (efectivo)');

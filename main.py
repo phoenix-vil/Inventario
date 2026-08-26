@@ -23,7 +23,7 @@ from schemas import (
     AutorizarDescuento, RegistrarVenta, CrearUsuario, CambiarPassword,
     Login, LogoutReq, CrearSucursal, DescuentoCategoria, AsignarStockSucursal, TrasladoStock)
 from schemas import CrearTienda, ClasificarProductosMasivo, EditarSucursal
-from schemas import CrearCliente, CrearPagoCredito
+from schemas import CrearCliente, CrearPagoCredito, LiquidarCuenta
 from schemas import CrearGasto
 from schemas import CrearVentaPendiente
 from schemas import RegistrarCotizacion
@@ -2474,8 +2474,14 @@ def reporte_del_dia(
     ]
     for m in bloque["desglose_metodos_pago"]:
         L.append(_csv_linea([m["metodo"], m["cantidad"], m["total"]]))
+    L.append("")
+    if bloque["desglose_metodos_abonos"]:
+        L.append(_csv_linea(["ABONOS DE CLIENTES POR MÉTODO DE PAGO"]))
+        L.append(_csv_linea(["Método", "Abonos", "Monto"]))
+        for m in bloque["desglose_metodos_abonos"]:
+            L.append(_csv_linea([m["metodo"], m["cantidad"], m["total"]]))
+        L.append("")
     L += [
-        "",
         _csv_linea(["EFECTIVO DEL DÍA"]),
         _csv_linea(["Ventas en efectivo", cc["ventas_efectivo"]]),
         _csv_linea(["Abonos cobrados en efectivo", cc["abonos_efectivo"]]),
@@ -2732,6 +2738,11 @@ def abonos_periodo(
             "sucursal": p.sucursal,
             "fecha": p.creado_en.isoformat() + "Z",
             "nota": p.nota,
+            "tpv_referencia": p.tpv_referencia,
+            "tpv_autorizacion": p.tpv_autorizacion,
+            "tpv_terminal": p.tpv_terminal,
+            "transferencia_referencia": p.transferencia_referencia,
+            "autorizado_por": p.autorizado_por,
         } for p in pagos],
     }
 
@@ -2762,6 +2773,9 @@ def detalle_cliente(cliente_id: int, sesion: Sesion = Depends(requerir_sesion), 
         "pagos": [{
             "id": p.id, "monto": p.monto, "metodo_pago": p.metodo_pago,
             "fecha": p.creado_en.isoformat() + "Z", "operador": p.operador, "nota": p.nota,
+            "tpv_referencia": p.tpv_referencia, "tpv_autorizacion": p.tpv_autorizacion,
+            "tpv_terminal": p.tpv_terminal, "transferencia_referencia": p.transferencia_referencia,
+            "autorizado_por": p.autorizado_por,
         } for p in pagos],
     }
 
@@ -2799,6 +2813,8 @@ def registrar_pago_credito(cliente_id: int, data: CrearPagoCredito, sesion: Sesi
     if not c:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
     metodo = data.metodo_pago if data.metodo_pago in ("efectivo", "tarjeta", "transferencia") else "efectivo"
+    if metodo == "tarjeta" and (not data.tpv_referencia or not data.tpv_autorizacion):
+        raise HTTPException(status_code=400, detail="Ingresa la referencia y autorización de la TPV")
     p = PagoCredito(
         cliente_id=cliente_id,
         monto=data.monto,
@@ -2806,6 +2822,10 @@ def registrar_pago_credito(cliente_id: int, data: CrearPagoCredito, sesion: Sesi
         operador=sesion.usuario,
         sucursal=sesion.sucursal,
         nota=data.nota,
+        tpv_referencia=data.tpv_referencia if metodo == "tarjeta" else None,
+        tpv_autorizacion=data.tpv_autorizacion if metodo == "tarjeta" else None,
+        tpv_terminal=data.tpv_terminal if metodo == "tarjeta" else None,
+        transferencia_referencia=data.transferencia_referencia if metodo == "transferencia" else None,
     )
     db.add(p)
     db.commit()
@@ -2819,6 +2839,58 @@ def registrar_pago_credito(cliente_id: int, data: CrearPagoCredito, sesion: Sesi
         "operador": p.operador,
         "sucursal": p.sucursal,
         "nota": p.nota,
+        "tpv_referencia": p.tpv_referencia,
+        "tpv_autorizacion": p.tpv_autorizacion,
+        "tpv_terminal": p.tpv_terminal,
+        "transferencia_referencia": p.transferencia_referencia,
+        "fecha": p.creado_en.isoformat() + "Z",
+    }
+
+
+# El negocio pidió que condonar/liquidar una cuenta a $0 sin que de verdad
+# entre el dinero quede reservado a una sola persona (no "cualquier gerente"),
+# porque es una decisión de negocio, no una autorización operativa como el
+# descuento en el punto de venta. Por eso se valida el usuario exacto, no el rol.
+USUARIO_AUTORIZA_LIQUIDACION = "Daniel Mondragon"
+
+
+@app.post("/api/clientes/{cliente_id}/liquidar", status_code=201)
+def liquidar_cuenta_cliente(cliente_id: int, data: LiquidarCuenta, sesion: Sesion = Depends(requerir_sesion), db: Session = Depends(get_db)):
+    c = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    saldo = _saldo_cliente(db, cliente_id)
+    if saldo <= 0:
+        raise HTTPException(status_code=400, detail="Este cliente no tiene saldo pendiente")
+
+    u = db.query(Usuario).filter(Usuario.usuario == data.usuario).first()
+    if not u or not verificar_password(data.password, u.password_hash, u.salt):
+        raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
+    if u.usuario != USUARIO_AUTORIZA_LIQUIDACION:
+        raise HTTPException(status_code=403, detail=f"Solo {USUARIO_AUTORIZA_LIQUIDACION} puede autorizar liquidar una cuenta")
+
+    p = PagoCredito(
+        cliente_id=cliente_id,
+        monto=saldo,
+        metodo_pago="condonado",
+        operador=sesion.usuario,
+        sucursal=sesion.sucursal,
+        nota=data.nota,
+        autorizado_por=u.usuario,
+    )
+    db.add(p)
+    db.commit()
+    db.refresh(p)
+    return {
+        "id": p.id,
+        "saldo_restante": _saldo_cliente(db, cliente_id),
+        "cliente_nombre": c.nombre,
+        "monto": p.monto,
+        "metodo_pago": p.metodo_pago,
+        "operador": p.operador,
+        "sucursal": p.sucursal,
+        "nota": p.nota,
+        "autorizado_por": p.autorizado_por,
         "fecha": p.creado_en.isoformat() + "Z",
     }
 
@@ -2844,6 +2916,18 @@ def _bloque_reporte(ventas_b, gastos_b, abonos_b):
 
     devs = [x for x in ventas_b if x.total < 0]
 
+    por_metodo_abonos = {}
+    for p in abonos_b:
+        m = p.metodo_pago or "efectivo"
+        if m not in por_metodo_abonos:
+            por_metodo_abonos[m] = {"cantidad": 0, "total": 0.0}
+        por_metodo_abonos[m]["cantidad"] += 1
+        por_metodo_abonos[m]["total"] += p.monto
+    desglose_metodos_abonos = sorted(
+        [{"metodo": k, "cantidad": v["cantidad"], "total": round(v["total"], 2)} for k, v in por_metodo_abonos.items()],
+        key=lambda x: x["total"], reverse=True
+    )
+
     ventas_efectivo = round(sum(v.total for v in ventas_b if (v.metodo_pago or "efectivo") == "efectivo"), 2)
     abonos_efectivo = round(sum(p.monto for p in abonos_b if (p.metodo_pago or "efectivo") == "efectivo"), 2)
     gastos_efectivo = round(sum(g.monto for g in gastos_b if (g.metodo_pago or "efectivo") == "efectivo"), 2)
@@ -2859,6 +2943,7 @@ def _bloque_reporte(ventas_b, gastos_b, abonos_b):
         "abonos_total": round(sum(p.monto for p in abonos_b), 2),
         "num_abonos": len(abonos_b),
         "desglose_metodos_pago": desglose_metodos,
+        "desglose_metodos_abonos": desglose_metodos_abonos,
         # Lo que debe haber en el cajón no son solo las ventas en efectivo: los
         # abonos cobrados en efectivo entran, y los gastos pagados en efectivo salen.
         "cuadre_caja": {
