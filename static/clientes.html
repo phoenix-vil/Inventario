@@ -549,6 +549,80 @@ function compartirReciboWhatsApp(){
   compartirComoPDF(reciboActual, 'abono_' + reciboActual.id + '.pdf');
 }
 
+// Misma bandera que usa /pagos para saber si esta PC tiene el agente del
+// cajón/impresora instalado (localStorage, no la sesión: es del dispositivo,
+// no del usuario). Un abono en efectivo también saca dinero de la caja —debe
+// abrir el cajón igual que una venta— y aquí además se imprime el recibo
+// directo, con el mismo diseño que ves en pantalla; el botón para activar
+// la bandera vive en /pagos, no hace falta repetirlo aquí.
+const AGENTE_ACTIVO_KEY = 'agente_pos_local';
+const AGENTE_BASE_URL = 'http://127.0.0.1:8788';
+
+function agenteLocalActivo(){
+  return localStorage.getItem(AGENTE_ACTIVO_KEY) === '1';
+}
+
+// "Best effort" a propósito: si el agente no responde a tiempo no debe
+// interrumpir ni avisar del abono ya registrado.
+function abrirCajonDinero(){
+  if(!agenteLocalActivo()) return;
+  const controlador = new AbortController();
+  setTimeout(() => controlador.abort(), 1500);
+  fetch(AGENTE_BASE_URL + '/abrir-cajon', {method:'POST', signal: controlador.signal}).catch(()=>{});
+}
+
+// Genera el recibo del abono como imagen PNG, igual al diseño que se ve en
+// pantalla o se comparte por WhatsApp/PDF (mismo patrón que generarPDFRecibo,
+// solo que entrega el canvas directo como Blob en vez de meterlo en un PDF).
+async function generarImagenReciboTermica(data){
+  const contenedor = document.createElement('div');
+  contenedor.style.position = 'absolute';
+  contenedor.style.left = '-9999px';
+  contenedor.style.top = '0';
+  contenedor.style.width = '300px';
+  contenedor.style.background = '#ffffff';
+  contenedor.style.padding = '16px 24px';
+  contenedor.style.fontFamily = 'monospace';
+  contenedor.style.fontSize = '13px';
+  contenedor.style.color = '#000000';
+  contenedor.innerHTML = generarReciboHTML(data);
+  contenedor.querySelectorAll('.tk-sub, .tk-foot, .tk-line, .tk-total').forEach(function(el){ el.style.color = '#000000'; });
+  contenedor.querySelectorAll('.tk-desc').forEach(function(el){ el.style.color = '#a32d2d'; });
+  contenedor.querySelectorAll('.tk-ahorro').forEach(function(el){ el.style.color = '#3b6d11'; });
+  document.body.appendChild(contenedor);
+  try{
+    await new Promise(function(r){ setTimeout(r, 80); });
+    const canvas = await html2canvas(contenedor, {scale:2, backgroundColor:'#ffffff', useCORS:true});
+    return await new Promise(function(resolve){ canvas.toBlob(resolve, 'image/png'); });
+  } finally {
+    document.body.removeChild(contenedor);
+  }
+}
+
+// Si esta PC tiene el agente activado, le manda la imagen del recibo para
+// que la imprima directo en la impresora térmica. Si no responde a tiempo o
+// falla, cae sola al diálogo de impresión de siempre (imprimirRecibo, que
+// usa reciboActual —ya asignado por mostrarRecibo antes de llamar aquí—),
+// así nunca se pierde el recibo aunque el agente se haya caído ese día.
+async function intentarImpresionDirectaRecibo(data){
+  if(!agenteLocalActivo()) return;
+  const controlador = new AbortController();
+  const vencido = setTimeout(() => controlador.abort(), 8000);
+  try{
+    const png = await generarImagenReciboTermica(data);
+    if(!png) throw new Error('no se pudo generar la imagen del recibo');
+    const r = await fetch(AGENTE_BASE_URL + '/imprimir-ticket', {
+      method: 'POST', headers: {'Content-Type': 'image/png'},
+      body: png, signal: controlador.signal
+    });
+    if(!r.ok) throw new Error('el agente respondió con error');
+  }catch(e){
+    imprimirRecibo();
+  }finally{
+    clearTimeout(vencido);
+  }
+}
+
 let saldoActual = 0;
 let clienteActualNombre = '';
 
@@ -672,6 +746,10 @@ async function confirmarAbono(){
     abrirDetalle(clienteActualId);
     cargarClientes();
     mostrarRecibo(data);
+    if(data.metodo_pago==='efectivo'){
+      abrirCajonDinero();
+      intentarImpresionDirectaRecibo(data);
+    }
   }catch(e){
     msg.className='msg error show'; msg.textContent='Error de conexión';
   }
