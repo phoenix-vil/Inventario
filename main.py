@@ -1649,7 +1649,12 @@ def pos_buscar(
             Producto.codigo_barras == q,
         )
     )
-    rows = aplicar_filtro_tienda(query, sesion).order_by(Producto.nombre).limit(20).all()
+    # Antes el límite era 20: con nombres largos y varias variantes del mismo
+    # producto (tallas, colores, %s, etc.) una sola palabra podía tener más
+    # de 20 coincidencias y las de más abajo (alfabéticamente) no aparecían
+    # nunca en la búsqueda, aunque sí coincidieran. 100 es margen de sobra
+    # para cualquier búsqueda razonable sin mandar el catálogo completo.
+    rows = aplicar_filtro_tienda(query, sesion).order_by(Producto.nombre).limit(100).all()
     cliente = _cliente_de(db, cliente_id)
     resultado = []
     for p in rows:
