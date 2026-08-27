@@ -91,23 +91,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   .menu-btn{padding:1.25rem}
   .icon{width:48px;height:48px;font-size:24px}
   .menu-title{font-size:16px}
-  /* Con una sucursal larga ("Only Enterprises") y un nombre largo (ej.
-     "Daniel Mondragon · gerente"), la barra de arriba no cabía en una sola
-     línea: se partía a media palabra y el bloque de usuario, al tener
-     margin-left:auto, se iba pegado a la derecha en su propio renglón,
-     dejando todo amontonado. Aquí se acomoda a propósito en dos renglones
-     completos, cada uno pegado a la izquierda, en vez de partirse solo. */
-  .topbar-nav{flex-direction:column;align-items:flex-start !important}
-  .topbar-userwrap{margin-left:0 !important}
 }
 </style>
 <link rel="stylesheet" href="/static/modern.css?v=1787605997">
 </head>
 <body>
 
-<div class="topbar-nav" style="background:color-mix(in srgb, var(--bg2) 70%, transparent);backdrop-filter:blur(16px) saturate(160%);-webkit-backdrop-filter:blur(16px) saturate(160%);border-bottom:0.5px solid var(--border);padding:.75rem 1.25rem;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;position:sticky;top:0;z-index:10">
+<div style="background:color-mix(in srgb, var(--bg2) 70%, transparent);backdrop-filter:blur(16px) saturate(160%);-webkit-backdrop-filter:blur(16px) saturate(160%);border-bottom:0.5px solid var(--border);padding:.75rem 1.25rem;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;position:sticky;top:0;z-index:10">
   <span id="nav-sucursal" style="font-size:12px;font-weight:600;color:var(--blue);background:var(--blue-bg);padding:5px 12px;border-radius:20px;white-space:nowrap;display:none"></span>
-  <div class="topbar-userwrap" style="display:flex;align-items:center;gap:12px;margin-left:auto">
+  <div style="display:flex;align-items:center;gap:12px;margin-left:auto">
     <span style="font-size:13px;color:var(--text2);white-space:nowrap">👤 <strong id="nav-usuario" style="color:var(--text)"></strong> <span id="nav-rol" style="color:var(--text2)"></span></span>
     <div style="position:relative">
       <button onclick="toggleConfigMenu()" id="btn-config" style="display:flex;height:32px;width:32px;align-items:center;justify-content:center;border:0.5px solid var(--border);border-radius:8px;background:transparent;color:var(--text);font-size:15px;cursor:pointer;flex-shrink:0" title="Menú">☰</button>
