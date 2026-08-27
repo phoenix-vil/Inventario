@@ -209,10 +209,26 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 <script src="/static/auth.js?v=1787605997"></script>
 <script>
+// Con un apellido largo (ej. "Daniel Mondragon") el nombre completo + rol +
+// sucursal no cabían en una sola línea de la barra de arriba en el celular
+// y se partía solo. En vez de acomodarlo en dos renglones, aquí se abrevia
+// el apellido (Daniel Mondragon -> Daniel M.) solo cuando el nombre
+// completo es largo de verdad; los nombres cortos se quedan intactos.
+function nombreParaBarra(nombreCompleto){
+  const UMBRAL = 12;
+  if(nombreCompleto.length <= UMBRAL) return nombreCompleto;
+  const partes = nombreCompleto.trim().split(/\s+/);
+  if(partes.length < 2) return nombreCompleto; // no hay apellido que abreviar
+  const iniciales = partes.slice(1).map(a => a.charAt(0).toUpperCase() + '.').join(' ');
+  return partes[0] + ' ' + iniciales;
+}
+
 const sesion = requireAuth();
 if (sesion) {
   renderLogos('logo-principal-wrap', sesion.tienda, 160);
-  document.getElementById('nav-usuario').textContent = sesion.usuario;
+  const _navUsuario = document.getElementById('nav-usuario');
+  _navUsuario.textContent = nombreParaBarra(sesion.usuario);
+  _navUsuario.title = sesion.usuario;
   const _saludo = document.getElementById('saludo-usuario');
   if(_saludo) _saludo.textContent = 'Hola, ' + sesion.usuario + ', ¿qué quieres hacer?';
   const _el = document.getElementById('nav-nombre-completo');
