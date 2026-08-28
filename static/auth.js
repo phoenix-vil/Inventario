@@ -4,9 +4,42 @@ function getSesion() {
   catch (e) { return null; }
 }
 
+// ─── Tema oscuro / claro / automático ───────────────────────────────────────
+// Preferencia manual del dispositivo (independiente de la sesión, como la
+// bandera del agente del cajón): 'oscuro' | 'claro' | guardado ausente =
+// 'auto' (sigue el tema del teléfono, el comportamiento de siempre). Se usa
+// desde el botón ☰ del menú principal, pero aplica en todas las pantallas.
+function temaPreferido() {
+  return localStorage.getItem('tema_preferido') || 'auto';
+}
+
+// Único lugar que debe decidir "¿estoy en oscuro?": si hay preferencia
+// manual, gana ella; si no, el prefers-color-scheme del sistema de siempre.
+function modoOscuroActivo() {
+  const t = temaPreferido();
+  if (t === 'oscuro') return true;
+  if (t === 'claro') return false;
+  return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+}
+
+function aplicarTemaPreferido() {
+  const t = temaPreferido();
+  document.documentElement.classList.remove('tema-oscuro', 'tema-claro');
+  if (t === 'oscuro') document.documentElement.classList.add('tema-oscuro');
+  else if (t === 'claro') document.documentElement.classList.add('tema-claro');
+}
+
+function elegirTema(t) {
+  if (t === 'auto') localStorage.removeItem('tema_preferido');
+  else localStorage.setItem('tema_preferido', t);
+  aplicarTemaPreferido();
+  aplicarTemaTienda(); // el acento de color por tienda también depende de oscuro/claro
+}
+
 function requireAuth() {
   const s = getSesion();
   if (!s || !s.token) { location.href = '/login'; return null; }
+  aplicarTemaPreferido();
   aplicarTemaTienda();
   return s;
 }
@@ -151,7 +184,7 @@ const TEMA_GENERICO = { icono: '/static/logo-o.png', t1: '#1a1a18', t2: '#3a3a36
 function aplicarTemaTienda() {
   const s = getSesion();
   const tiendas = (s && s.tienda) || [];
-  const oscuro = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const oscuro = modoOscuroActivo();
 
   if (tiendas.length === 0) {
     _inyectarMarcaDeAguaTienda(TEMA_GENERICO.icono);
