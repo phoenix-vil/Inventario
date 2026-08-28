@@ -1,6 +1,6 @@
 {
-  "name": "Only Enterprises",
-  "short_name": "Only",
+  "name": "Vilnix Punto de Venta",
+  "short_name": "Vilnix POS",
   "description": "Sistema de inventario y punto de venta",
   "start_url": "/",
   "display": "standalone",

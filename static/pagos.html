@@ -9,7 +9,7 @@
 <link rel="icon" type="image/png" href="/static/icon-nav-blanco.png" media="(prefers-color-scheme: dark)">
 <link rel="apple-touch-icon" href="/static/touch-icon-v3-180.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Punto de venta · Only Enterprises</title>
+<title>Punto de venta · Vilnix</title>
 <script type="module">
 import { BarcodeDetector } from 'https://cdn.jsdelivr.net/npm/barcode-detector@3/dist/es/ponyfill.min.js';
 window.BarcodeDetectorPolyfill = BarcodeDetector;
@@ -1356,7 +1356,7 @@ async function descargarTicket(){
 function imprimirTicket(){
   if(!ticketActual)return;
   const win=window.open('','_blank');
-  win.document.write(`<html><head><title>Punto de venta · Only Enterprises</title>
+  win.document.write(`<html><head><title>Punto de venta · Vilnix</title>
     <style>@page{size:58mm auto;margin:0}body{font-family:monospace;font-size:11px;width:48mm;margin:0 auto;padding:2mm 0;line-height:1.35}img{max-width:42mm;height:auto}.tk-desc,.tk-ahorro,.tk-line span,.tk-total,.tk-sub,.tk-foot{color:#000 !important}.tk-desc,.tk-ahorro{font-weight:bold}
     .tk-line{display:flex;justify-content:space-between;margin-bottom:3px}
     .tk-total{font-weight:bold;font-size:15px;margin-top:6px;padding-top:6px}

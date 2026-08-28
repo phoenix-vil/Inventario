@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#1a1a18">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Clientes · Only Enterprises</title>
+<title>Clientes · Vilnix</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -533,7 +533,7 @@ async function descargarRecibo(){
 function imprimirRecibo(){
   if(!reciboActual) return;
   const win = window.open('', '_blank');
-  win.document.write(`<html><head><title>Recibo de abono · Only Enterprises</title>
+  win.document.write(`<html><head><title>Recibo de abono · Vilnix</title>
     <style>@page{size:58mm auto;margin:0}body{font-family:monospace;font-size:11px;width:48mm;margin:0 auto;padding:2mm 0;line-height:1.35}img{max-width:42mm;height:auto}.tk-desc,.tk-ahorro,.tk-line span,.tk-total,.tk-sub,.tk-foot{color:#000 !important}.tk-desc,.tk-ahorro{font-weight:bold}
     .tk-line{display:flex;justify-content:space-between;margin-bottom:3px}
     .tk-total{font-weight:bold;font-size:15px;margin-top:6px;padding-top:6px}
