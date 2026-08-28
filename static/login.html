@@ -1,5 +1,17 @@
 <!DOCTYPE html>
 <html lang="es">
+<script>
+// La app de Android manda "VilnixPOSApp" en el user-agent (ver MainActivity.java,
+// ~/android-build). Ahí el fondo animado (blobs + logo flotando) detrás del
+// backdrop-filter de la tarjeta parpadeaba al abrirse el teclado -un choque
+// conocido de WebView entre animaciones infinitas, backdrop-filter y el
+// resize de la ventana-. Se detecta lo antes posible, antes de que el CSS
+// empiece a animar nada, y se apaga igual que ya se apaga con
+// prefers-reduced-motion (ver más abajo).
+if (navigator.userAgent.indexOf('VilnixPOSApp') !== -1) {
+  document.documentElement.className += ' app-nativa';
+}
+</script>
 <head>
 <meta charset="UTF-8">
 <link rel="manifest" href="/static/manifest.json">
@@ -61,6 +73,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   75%{transform:translate(30px,25px) rotate(10deg) scale(1.05);border-radius:38% 62% 55% 45% / 55% 42% 58% 40%}
 }
 @media(prefers-reduced-motion:reduce){.fondo-capa,.blob,.logo .ico,.card{animation:none}}
+.app-nativa .fondo-capa,.app-nativa .blob,.app-nativa .logo .ico,.app-nativa .card{animation:none}
 
 .card{position:relative;z-index:1;background:color-mix(in srgb, var(--bg2) 82%, transparent);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:0.5px solid var(--border);border-radius:18px;padding:2rem 1.75rem;width:380px;max-width:100%;box-shadow:0 12px 40px rgba(0,0,0,.14);transition:box-shadow .3s;animation:entrada .6s cubic-bezier(.2,.8,.2,1) both}
 @keyframes entrada{from{opacity:0;transform:translateY(26px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
