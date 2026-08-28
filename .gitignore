@@ -23,3 +23,6 @@ serper_log.csv
 
 # APK del contenedor Android: se genera con ~/android-build/compilar.sh
 *.apk
+
+# Instalador de escritorio Windows: se genera con ~/windows-build/compilar.sh
+*.exe
