@@ -1178,21 +1178,7 @@ function mostrarTicket(venta){
   ticketActual=venta;
   document.getElementById('ticket-contenido').innerHTML=generarTicketHTML(venta);
   document.getElementById('ticket-modal').classList.add('open');
-  decidirImpresionDirecta(venta);
-}
-
-// En efectivo el cajón ya se abrió (abrirCajonDinero, justo antes de esta
-// pantalla) y aquí se le pregunta al cajero si además quiere el ticket
-// impreso —antes se imprimía siempre, sin preguntar, lo cual gastaba papel
-// de más cuando no hacía falta—. El resto de métodos de pago no abren
-// cajón, así que se quedan igual que antes: imprimen directo sin preguntar.
-// Si esta PC no tiene el agente activo tampoco tiene caso preguntar: no hay
-// impresora que lo haga sola, y el botón manual del modal sigue ahí.
-async function decidirImpresionDirecta(venta){
-  if(!agenteLocalActivo()) return;
-  if(venta.metodo_pago!=='efectivo'){ intentarImpresionDirecta(venta); return; }
-  const imprimir = await confirmarPersonalizado('¿Deseas imprimir el ticket?', 'Cajón abierto');
-  if(imprimir) intentarImpresionDirecta(venta);
+  intentarImpresionDirecta(venta);
 }
 
 precargarLogosActivos();

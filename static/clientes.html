@@ -755,12 +755,11 @@ async function confirmarAbono(){
     document.getElementById('form-abono').style.display='none';
     abrirDetalle(clienteActualId);
     cargarClientes();
-    if(data.metodo_pago==='efectivo') abrirCajonDinero();
-    mostrarRecibo(data);
-    if(data.metodo_pago==='efectivo' && agenteLocalActivo()){
-      const imprimir = await confirmarPersonalizado('¿Deseas imprimir el recibo?', 'Cajón abierto');
-      if(imprimir) intentarImpresionDirectaRecibo(data);
+    if(data.metodo_pago==='efectivo'){
+      abrirCajonDinero();
+      intentarImpresionDirectaRecibo(data);
     }
+    mostrarRecibo(data);
   }catch(e){
     msg.className='msg error show'; msg.textContent='Error de conexión';
   }
