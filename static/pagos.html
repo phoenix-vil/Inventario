@@ -269,10 +269,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="field">
       <label>Método de pago</label>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <button type="button" id="btn-efectivo" class="metodo-btn activo" onclick="setMetodo('efectivo')" onkeydown="navegarMetodo(event)">💵 Efectivo</button>
-        <button type="button" id="btn-tarjeta" class="metodo-btn" onclick="setMetodo('tarjeta')" onkeydown="navegarMetodo(event)">💳 Tarjeta</button>
-        <button type="button" id="btn-credito" class="metodo-btn" onclick="setMetodo('credito')" onkeydown="navegarMetodo(event)">📒 Crédito</button>
-        <button type="button" id="btn-transferencia" class="metodo-btn" onclick="setMetodo('transferencia')" onkeydown="navegarMetodo(event)">🏦 Transferencia</button>
+        <button type="button" id="btn-efectivo" class="metodo-btn activo" onclick="setMetodo('efectivo')" onkeydown="navegarMetodoBoton(event)">💵 Efectivo</button>
+        <button type="button" id="btn-tarjeta" class="metodo-btn" onclick="setMetodo('tarjeta')" onkeydown="navegarMetodoBoton(event)">💳 Tarjeta</button>
+        <button type="button" id="btn-credito" class="metodo-btn" onclick="setMetodo('credito')" onkeydown="navegarMetodoBoton(event)">📒 Crédito</button>
+        <button type="button" id="btn-transferencia" class="metodo-btn" onclick="setMetodo('transferencia')" onkeydown="navegarMetodoBoton(event)">🏦 Transferencia</button>
       </div>
     </div>
 
@@ -827,19 +827,38 @@ function extraerMensajeError(detail, fallback){
 
 const ORDEN_METODOS = ['efectivo', 'tarjeta', 'credito', 'transferencia'];
 
-// Flechas o Tab sobre uno de los 4 botones de método cambian de opción
-// igual que un clic —no solo mueven el foco, como haría Tab por sí solo—:
-// como setMetodo() ya salta al campo principal de esa opción, un solo toque
-// de flecha/Tab deja listo para escribir el dato, sin soltar el teclado.
-function navegarMetodo(e){
-  const avanza = e.key === 'ArrowRight' || e.key === 'ArrowDown' || (e.key === 'Tab' && !e.shiftKey);
-  const retrocede = e.key === 'ArrowLeft' || e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey);
-  if(!avanza && !retrocede) return;
-  e.preventDefault();
+function irAMetodo(direccion){
   const n = ORDEN_METODOS.length;
   const i = ORDEN_METODOS.indexOf(metodoPago);
-  setMetodo(ORDEN_METODOS[(i + (avanza ? 1 : -1) + n) % n]);
+  setMetodo(ORDEN_METODOS[(i + direccion + n) % n]);
 }
+
+// Flecha arriba/abajo solo cuando el foco sigue en uno de los 4 botones de
+// método (ahí no chocan con nada). Izquierda/derecha y Tab se manejan aparte,
+// a nivel de todo el modal —ver más abajo—: como setMetodo() salta el foco
+// al campo principal apenas se elige un método, el foco casi nunca sigue en
+// estos botones, y flechas/Tab que solo escucharan aquí nunca se disparaban.
+function navegarMetodoBoton(e){
+  if(e.key === 'ArrowDown'){ e.preventDefault(); irAMetodo(1); }
+  else if(e.key === 'ArrowUp'){ e.preventDefault(); irAMetodo(-1); }
+}
+
+// Izquierda/derecha cambian el método desde cualquier parte del modal de
+// cobro, sin importar qué campo tenga el foco en ese momento —a diferencia
+// de arriba/abajo, no chocan con nada al escribir un número o una
+// referencia corta—. Se exceptúa el buscador de cliente (crédito): ahí sí
+// hace falta mover el cursor dentro del texto para corregir un nombre.
+// Tab solo se atrapa si el foco sigue en uno de los 4 botones, para no
+// romper el Tab normal del resto del formulario (nota, checkboxes, etc.).
+document.getElementById('cobro-modal').addEventListener('keydown', function(e){
+  if(e.target.id === 'c-cliente-buscar') return;
+  if(e.key === 'ArrowRight'){ e.preventDefault(); irAMetodo(1); }
+  else if(e.key === 'ArrowLeft'){ e.preventDefault(); irAMetodo(-1); }
+  else if(e.key === 'Tab' && e.target.classList && e.target.classList.contains('metodo-btn')){
+    e.preventDefault();
+    irAMetodo(e.shiftKey ? -1 : 1);
+  }
+});
 
 function setMetodo(m){
   metodoPago = m;
