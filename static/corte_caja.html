@@ -135,7 +135,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="hint" id="hint-reporte" style="text-align:center"></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="card-reporte-rango">
     <h2>📊 Reporte por rango de fechas</h2>
     <div class="hint" style="margin:-.5rem 0 1rem">
       Lo mismo que el reporte del día, pero sumando varios días —para cerrar
@@ -167,7 +167,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="/static/auth.js?v=1787605997"></script>
 <script>
-const sesion = requireGerente();
+// Un cajero también cierra su caja, no solo el gerente —con reporte
+// reducido, ver descargarReporte()/armarPDF()—. Igual que vender o
+// devolver, es una operación de piso: Only Enterprises no tiene caja
+// propia que cerrar.
+const sesion = requireAuth();
+requireSucursalOperativa();
+if(!esGerente()) document.getElementById('card-reporte-rango').style.display = 'none';
 let calc = null;
 
 const money = n => '$' + (n || 0).toLocaleString('es-MX', {minimumFractionDigits: 2, maximumFractionDigits: 2});
@@ -336,35 +342,40 @@ async function armarPDF(d){
 
   const b = d.resumen, cc = b.cuadre_caja;
 
-  titulo('Resumen');
-  fila('Ventas totales (' + b.num_ventas + ')', money(b.total_vendido));
-  fila('Gastos (' + b.num_gastos + ')', '-' + money(b.gastos));
-  if(b.devoluciones_num) fila('Devoluciones (' + b.devoluciones_num + ')', '-' + money(b.devoluciones_total));
-  if(b.num_abonos) fila('Abonos de clientes (' + b.num_abonos + ')', money(b.abonos_total));
-  fila('Ganancia después de gastos', money(b.ganancia_neta), 12);
-  y += 6; linea();
-
-  espacio(altoDe(b.desglose_metodos_pago.length));
-  titulo('Métodos de pago (ventas)');
-  if(!b.desglose_metodos_pago.length){
-    vacio('Sin ventas este día');
-  }else{
-    b.desglose_metodos_pago.forEach(function(m){
-      fila((NOMBRES_METODO[m.metodo] || m.metodo) + ' (' + m.cantidad + ')', money(m.total));
-    });
-  }
-  y += 6; linea();
-
-  // Solo si hubo abonos: antes se confundían con la caja porque "Abonos de
-  // clientes" (arriba) suma todos los métodos, pero "Abonos cobrados en
-  // efectivo" (abajo, cuadre de caja) solo cuenta los que son en efectivo.
-  if(b.desglose_metodos_abonos.length){
-    espacio(altoDe(b.desglose_metodos_abonos.length));
-    titulo('Métodos de pago (abonos de clientes)');
-    b.desglose_metodos_abonos.forEach(function(m){
-      fila((NOMBRES_METODO[m.metodo] || m.metodo) + ' (' + m.cantidad + ')', money(m.total));
-    });
+  // Un cajero solo ve el cuadre de caja de aquí para abajo: ganancia,
+  // desglose por método y el detalle de cada movimiento son información de
+  // dueño, no de cajero (d.reducido lo decide el servidor, no el navegador).
+  if(!d.reducido){
+    titulo('Resumen');
+    fila('Ventas totales (' + b.num_ventas + ')', money(b.total_vendido));
+    fila('Gastos (' + b.num_gastos + ')', '-' + money(b.gastos));
+    if(b.devoluciones_num) fila('Devoluciones (' + b.devoluciones_num + ')', '-' + money(b.devoluciones_total));
+    if(b.num_abonos) fila('Abonos de clientes (' + b.num_abonos + ')', money(b.abonos_total));
+    fila('Ganancia después de gastos', money(b.ganancia_neta), 12);
     y += 6; linea();
+
+    espacio(altoDe(b.desglose_metodos_pago.length));
+    titulo('Métodos de pago (ventas)');
+    if(!b.desglose_metodos_pago.length){
+      vacio('Sin ventas este día');
+    }else{
+      b.desglose_metodos_pago.forEach(function(m){
+        fila((NOMBRES_METODO[m.metodo] || m.metodo) + ' (' + m.cantidad + ')', money(m.total));
+      });
+    }
+    y += 6; linea();
+
+    // Solo si hubo abonos: antes se confundían con la caja porque "Abonos de
+    // clientes" (arriba) suma todos los métodos, pero "Abonos cobrados en
+    // efectivo" (abajo, cuadre de caja) solo cuenta los que son en efectivo.
+    if(b.desglose_metodos_abonos.length){
+      espacio(altoDe(b.desglose_metodos_abonos.length));
+      titulo('Métodos de pago (abonos de clientes)');
+      b.desglose_metodos_abonos.forEach(function(m){
+        fila((NOMBRES_METODO[m.metodo] || m.metodo) + ' (' + m.cantidad + ')', money(m.total));
+      });
+      y += 6; linea();
+    }
   }
 
   espacio(140);
@@ -423,42 +434,44 @@ async function armarPDF(d){
   }
   y += 6; linea();
 
-  espacio(altoDe(d.ventas.length));
-  titulo('Detalle de ventas');
-  if(!d.ventas.length){ vacio('Sin ventas este día'); }
-  else{
-    tabla([
-      {t:'Hora', x:0}, {t:'Folio', x:.12}, {t:'Operador', x:.24, max:.18},
-      {t:'Método', x:.46, max:.14}, {t:'Cliente', x:.62, max:.2}, {t:'Total', x:1, der:true}
-    ], d.ventas.map(function(v){
-      return [v.hora, '#' + v.folio, v.operador || '', NOMBRES_METODO[v.metodo] || v.metodo,
-              v.cliente || '', money(v.total)];
-    }));
-  }
+  if(!d.reducido){
+    espacio(altoDe(d.ventas.length));
+    titulo('Detalle de ventas');
+    if(!d.ventas.length){ vacio('Sin ventas este día'); }
+    else{
+      tabla([
+        {t:'Hora', x:0}, {t:'Folio', x:.12}, {t:'Operador', x:.24, max:.18},
+        {t:'Método', x:.46, max:.14}, {t:'Cliente', x:.62, max:.2}, {t:'Total', x:1, der:true}
+      ], d.ventas.map(function(v){
+        return [v.hora, '#' + v.folio, v.operador || '', NOMBRES_METODO[v.metodo] || v.metodo,
+                v.cliente || '', money(v.total)];
+      }));
+    }
 
-  espacio(altoDe(d.gastos.length));
-  titulo('Detalle de gastos');
-  if(!d.gastos.length){ vacio('Sin gastos este día'); }
-  else{
-    tabla([
-      {t:'Hora', x:0}, {t:'Concepto', x:.12, max:.35}, {t:'Categoría', x:.52, max:.2},
-      {t:'Método', x:.76, max:.14}, {t:'Monto', x:1, der:true}
-    ], d.gastos.map(function(g){
-      return [g.hora, g.concepto || '', g.categoria || '',
-              NOMBRES_METODO[g.metodo] || g.metodo, money(g.monto)];
-    }));
-  }
+    espacio(altoDe(d.gastos.length));
+    titulo('Detalle de gastos');
+    if(!d.gastos.length){ vacio('Sin gastos este día'); }
+    else{
+      tabla([
+        {t:'Hora', x:0}, {t:'Concepto', x:.12, max:.35}, {t:'Categoría', x:.52, max:.2},
+        {t:'Método', x:.76, max:.14}, {t:'Monto', x:1, der:true}
+      ], d.gastos.map(function(g){
+        return [g.hora, g.concepto || '', g.categoria || '',
+                NOMBRES_METODO[g.metodo] || g.metodo, money(g.monto)];
+      }));
+    }
 
-  espacio(altoDe(d.abonos.length));
-  titulo('Abonos de clientes');
-  if(!d.abonos.length){ vacio('Sin abonos este día'); }
-  else{
-    tabla([
-      {t:'Hora', x:0}, {t:'Cliente', x:.12, max:.4}, {t:'Método', x:.6, max:.16},
-      {t:'Monto', x:1, der:true}
-    ], d.abonos.map(function(a){
-      return [a.hora, a.cliente || '', NOMBRES_METODO[a.metodo] || a.metodo, money(a.monto)];
-    }));
+    espacio(altoDe(d.abonos.length));
+    titulo('Abonos de clientes');
+    if(!d.abonos.length){ vacio('Sin abonos este día'); }
+    else{
+      tabla([
+        {t:'Hora', x:0}, {t:'Cliente', x:.12, max:.4}, {t:'Método', x:.6, max:.16},
+        {t:'Monto', x:1, der:true}
+      ], d.abonos.map(function(a){
+        return [a.hora, a.cliente || '', NOMBRES_METODO[a.metodo] || a.metodo, money(a.monto)];
+      }));
+    }
   }
 
   return doc.output('blob');

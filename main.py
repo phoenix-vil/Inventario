@@ -2248,13 +2248,14 @@ def _calcular_corte(db: Session, sucursal: str):
 
 
 @app.get("/api/corte-caja/preview")
-def preview_corte(sesion: Sesion = Depends(requerir_gerente), db: Session = Depends(get_db)):
-    """Qué se cerraría si se hiciera el corte ahora mismo."""
+def preview_corte(sesion: Sesion = Depends(requerir_sesion), db: Session = Depends(get_db)):
+    """Qué se cerraría si se hiciera el corte ahora mismo. Un cajero también
+    puede cerrar su caja, no solo un gerente."""
     return _calcular_corte(db, _sucursal_de_corte(sesion))
 
 
 @app.post("/api/corte-caja", status_code=201)
-def registrar_corte(data: RegistrarCorteCaja, sesion: Sesion = Depends(requerir_gerente), db: Session = Depends(get_db)):
+def registrar_corte(data: RegistrarCorteCaja, sesion: Sesion = Depends(requerir_sesion), db: Session = Depends(get_db)):
     sucursal = _sucursal_de_corte(sesion)
     calc = _calcular_corte(db, sucursal)
 
@@ -2299,7 +2300,7 @@ def registrar_corte(data: RegistrarCorteCaja, sesion: Sesion = Depends(requerir_
 @app.get("/api/cortes-caja")
 def listar_cortes(
     limit: int = Query(60, le=365),
-    sesion: Sesion = Depends(requerir_gerente),
+    sesion: Sesion = Depends(requerir_sesion),
     db: Session = Depends(get_db),
 ):
     q = db.query(CorteCaja)
@@ -2360,7 +2361,7 @@ def reporte_del_dia(
     hasta: Optional[str] = Query(None, description="Fin del rango, AAAA-MM-DD en hora local. Si no se manda, el reporte es de un solo día (fecha)."),
     tz_offset_min: int = Query(360, description="getTimezoneOffset() del navegador"),
     formato: str = Query("json", description="json para armar el PDF, csv para hoja de cálculo"),
-    sesion: Sesion = Depends(requerir_gerente),
+    sesion: Sesion = Depends(requerir_sesion),
     db: Session = Depends(get_db),
 ):
     """Todo el periodo: ventas, gastos, abonos, los cortes de caja y cuánto
@@ -2369,9 +2370,17 @@ def reporte_del_dia(
 
     Sin 'hasta', es el reporte de un solo día de siempre. Con 'hasta', junta
     varios días —reutiliza _rango_dia_local dos veces: una para el inicio del
-    día de 'fecha' y otra para el fin del día de 'hasta'—."""
+    día de 'fecha' y otra para el fin del día de 'hasta'—.
+
+    Un cajero también puede cerrar su caja, pero solo ve el reporte de un
+    solo día (nunca por rango) y reducido: cuadre de efectivo y los cortes,
+    sin ganancia, sin desglose de métodos de pago ni el detalle de cada
+    venta/gasto/abono —eso es información de dueño, no de cajero—."""
+    reducido = sesion.rol != "gerente"
     desde, hasta_dt, desde_iso = _rango_dia_local(fecha, tz_offset_min)
     es_rango = bool(hasta) and hasta[:10] != desde_iso
+    if es_rango and reducido:
+        raise HTTPException(status_code=403, detail="El reporte por rango de fechas es solo para gerentes")
     if es_rango:
         _, hasta_dt, hasta_iso = _rango_dia_local(hasta, tz_offset_min)
         if hasta_dt <= desde:
@@ -2437,10 +2446,14 @@ def reporte_del_dia(
         "fecha": dia_iso,
         "es_rango": es_rango,
         "etiqueta_periodo": etiqueta_periodo,
+        "reducido": reducido,
         "sucursal": ambito,
         "generado_por": sesion.usuario,
         "generado_el": (datetime.utcnow() - timedelta(minutes=tz_offset_min)).strftime("%Y-%m-%d %H:%M"),
-        "resumen": bloque,
+        # Un cajero solo ve el cuadre de efectivo (lo mismo que ya ve arriba
+        # en pantalla al hacer el corte), no la ganancia ni el desglose de
+        # métodos de pago —eso queda para "resumen" completo del gerente—.
+        "resumen": {"cuadre_caja": bloque["cuadre_caja"]} if reducido else bloque,
         "cortes": [{
             "hora": hora(c.creado_en), "sucursal": c.sucursal, "operador": c.operador,
             "saldo_inicial": c.saldo_inicial, "ventas_efectivo": c.ventas_efectivo,
@@ -2454,18 +2467,20 @@ def reporte_del_dia(
         "queda_en_caja": round(sum(queda_por_sucursal.values()), 2),
         "retirado_total": round(sum(c.retirado or 0 for c in cortes), 2),
         "caja_ahora": caja_ahora,
-        "ventas": [{
+        # None (no []) a propósito: en el PDF/CSV distingue "no te toca verlo"
+        # de "no hubo ninguno este día", que se verían idénticos con [].
+        "ventas": None if reducido else [{
             "hora": hora(v.creado_en), "folio": v.id, "sucursal": v.sucursal,
             "operador": v.operador, "metodo": v.metodo_pago or "efectivo",
             "cliente": nombres_cliente.get(v.cliente_id, ""), "estado": v.estado or "activa",
             "devuelto": v.total_devuelto or 0, "total": v.total,
         } for v in ventas],
-        "gastos": [{
+        "gastos": None if reducido else [{
             "hora": hora(g.fecha), "sucursal": g.sucursal, "concepto": g.concepto,
             "categoria": g.categoria, "metodo": g.metodo_pago or "efectivo",
             "operador": g.operador, "monto": g.monto,
         } for g in gastos],
-        "abonos": [{
+        "abonos": None if reducido else [{
             "hora": hora(p.creado_en), "sucursal": p.sucursal,
             "cliente": nombres_cliente.get(p.cliente_id, ""), "metodo": p.metodo_pago or "efectivo",
             "operador": p.operador, "monto": p.monto,
@@ -2484,26 +2499,32 @@ def reporte_del_dia(
         _csv_linea(["Generado por", datos["generado_por"]]),
         _csv_linea(["Generado el", datos["generado_el"]]),
         "",
-        _csv_linea(["RESUMEN"]),
-        _csv_linea(["Concepto", "Cantidad", "Monto"]),
-        _csv_linea(["Ventas", bloque["num_ventas"], bloque["total_vendido"]]),
-        _csv_linea(["Devoluciones", bloque["devoluciones_num"], bloque["devoluciones_total"]]),
-        _csv_linea(["Gastos", bloque["num_gastos"], bloque["gastos"]]),
-        _csv_linea(["Abonos de clientes", bloque["num_abonos"], bloque["abonos_total"]]),
-        _csv_linea(["Ganancia neta (ventas - gastos)", "", bloque["ganancia_neta"]]),
-        "",
-        _csv_linea(["VENTAS POR MÉTODO DE PAGO"]),
-        _csv_linea(["Método", "Tickets", "Monto"]),
     ]
-    for m in bloque["desglose_metodos_pago"]:
-        L.append(_csv_linea([m["metodo"], m["cantidad"], m["total"]]))
-    L.append("")
-    if bloque["desglose_metodos_abonos"]:
-        L.append(_csv_linea(["ABONOS DE CLIENTES POR MÉTODO DE PAGO"]))
-        L.append(_csv_linea(["Método", "Abonos", "Monto"]))
-        for m in bloque["desglose_metodos_abonos"]:
+    # Ganancia, desglose por método y detalle de movimientos son información
+    # de dueño, no de cajero: con reducido=True se saltan por completo, no
+    # solo se ocultan cifras sueltas.
+    if not reducido:
+        L += [
+            _csv_linea(["RESUMEN"]),
+            _csv_linea(["Concepto", "Cantidad", "Monto"]),
+            _csv_linea(["Ventas", bloque["num_ventas"], bloque["total_vendido"]]),
+            _csv_linea(["Devoluciones", bloque["devoluciones_num"], bloque["devoluciones_total"]]),
+            _csv_linea(["Gastos", bloque["num_gastos"], bloque["gastos"]]),
+            _csv_linea(["Abonos de clientes", bloque["num_abonos"], bloque["abonos_total"]]),
+            _csv_linea(["Ganancia neta (ventas - gastos)", "", bloque["ganancia_neta"]]),
+            "",
+            _csv_linea(["VENTAS POR MÉTODO DE PAGO"]),
+            _csv_linea(["Método", "Tickets", "Monto"]),
+        ]
+        for m in bloque["desglose_metodos_pago"]:
             L.append(_csv_linea([m["metodo"], m["cantidad"], m["total"]]))
         L.append("")
+        if bloque["desglose_metodos_abonos"]:
+            L.append(_csv_linea(["ABONOS DE CLIENTES POR MÉTODO DE PAGO"]))
+            L.append(_csv_linea(["Método", "Abonos", "Monto"]))
+            for m in bloque["desglose_metodos_abonos"]:
+                L.append(_csv_linea([m["metodo"], m["cantidad"], m["total"]]))
+            L.append("")
     L += [
         _csv_linea(["EFECTIVO DEL DÍA"]),
         _csv_linea(["Ventas en efectivo", cc["ventas_efectivo"]]),
@@ -2542,31 +2563,32 @@ def reporte_del_dia(
             L.append(_csv_linea(["Efectivo acumulado sin cortar nunca", caja_ahora["monto"]]))
             L.append(_csv_linea(["Aviso", "Esta sucursal no tiene ningún corte registrado: "
                                  f"la cifra anterior abarca todo el histórico, no solo {periodo_txt}"]))
-    L += ["", _csv_linea(["DETALLE DE VENTAS"])]
-    if datos["ventas"]:
-        L.append(_csv_linea(["Hora", "Folio", "Sucursal", "Operador", "Método", "Cliente",
-                             "Estado", "Devuelto", "Total"]))
-        for v in datos["ventas"]:
-            L.append(_csv_linea([v["hora"], v["folio"], v["sucursal"], v["operador"], v["metodo"],
-                                 v["cliente"], v["estado"], v["devuelto"], v["total"]]))
-    else:
-        L.append(_csv_linea([f"Sin ventas {periodo_txt}"]))
-    L += ["", _csv_linea(["DETALLE DE GASTOS"])]
-    if datos["gastos"]:
-        L.append(_csv_linea(["Hora", "Sucursal", "Concepto", "Categoría", "Método", "Operador", "Monto"]))
-        for g in datos["gastos"]:
-            L.append(_csv_linea([g["hora"], g["sucursal"], g["concepto"], g["categoria"],
-                                 g["metodo"], g["operador"], g["monto"]]))
-    else:
-        L.append(_csv_linea([f"Sin gastos {periodo_txt}"]))
-    L += ["", _csv_linea(["ABONOS DE CLIENTES"])]
-    if datos["abonos"]:
-        L.append(_csv_linea(["Hora", "Sucursal", "Cliente", "Método", "Operador", "Monto"]))
-        for a in datos["abonos"]:
-            L.append(_csv_linea([a["hora"], a["sucursal"], a["cliente"], a["metodo"],
-                                 a["operador"], a["monto"]]))
-    else:
-        L.append(_csv_linea([f"Sin abonos {periodo_txt}"]))
+    if not reducido:
+        L += ["", _csv_linea(["DETALLE DE VENTAS"])]
+        if datos["ventas"]:
+            L.append(_csv_linea(["Hora", "Folio", "Sucursal", "Operador", "Método", "Cliente",
+                                 "Estado", "Devuelto", "Total"]))
+            for v in datos["ventas"]:
+                L.append(_csv_linea([v["hora"], v["folio"], v["sucursal"], v["operador"], v["metodo"],
+                                     v["cliente"], v["estado"], v["devuelto"], v["total"]]))
+        else:
+            L.append(_csv_linea([f"Sin ventas {periodo_txt}"]))
+        L += ["", _csv_linea(["DETALLE DE GASTOS"])]
+        if datos["gastos"]:
+            L.append(_csv_linea(["Hora", "Sucursal", "Concepto", "Categoría", "Método", "Operador", "Monto"]))
+            for g in datos["gastos"]:
+                L.append(_csv_linea([g["hora"], g["sucursal"], g["concepto"], g["categoria"],
+                                     g["metodo"], g["operador"], g["monto"]]))
+        else:
+            L.append(_csv_linea([f"Sin gastos {periodo_txt}"]))
+        L += ["", _csv_linea(["ABONOS DE CLIENTES"])]
+        if datos["abonos"]:
+            L.append(_csv_linea(["Hora", "Sucursal", "Cliente", "Método", "Operador", "Monto"]))
+            for a in datos["abonos"]:
+                L.append(_csv_linea([a["hora"], a["sucursal"], a["cliente"], a["metodo"],
+                                     a["operador"], a["monto"]]))
+        else:
+            L.append(_csv_linea([f"Sin abonos {periodo_txt}"]))
 
     # BOM al inicio: sin él, Excel abre los acentos como basura
     cuerpo = "\ufeff" + "\r\n".join(L) + "\r\n"
