@@ -2356,21 +2356,37 @@ def _csv_linea(campos) -> str:
 
 @app.get("/api/corte-caja/reporte")
 def reporte_del_dia(
-    fecha: Optional[str] = Query(None, description="Día a reportar, AAAA-MM-DD en hora local"),
+    fecha: Optional[str] = Query(None, description="Día a reportar, AAAA-MM-DD en hora local (o inicio del rango, si se manda 'hasta')"),
+    hasta: Optional[str] = Query(None, description="Fin del rango, AAAA-MM-DD en hora local. Si no se manda, el reporte es de un solo día (fecha)."),
     tz_offset_min: int = Query(360, description="getTimezoneOffset() del navegador"),
     formato: str = Query("json", description="json para armar el PDF, csv para hoja de cálculo"),
     sesion: Sesion = Depends(requerir_gerente),
     db: Session = Depends(get_db),
 ):
-    """Todo lo del día: ventas, gastos, abonos, los cortes de caja y cuánto
+    """Todo el periodo: ventas, gastos, abonos, los cortes de caja y cuánto
     quedó en el cajón. En JSON alimenta el PDF que arma la pantalla de corte de
-    caja; en CSV se abre en Excel o Numbers. Los dos salen de los mismos datos."""
-    desde, hasta, dia_iso = _rango_dia_local(fecha, tz_offset_min)
+    caja; en CSV se abre en Excel o Numbers. Los dos salen de los mismos datos.
+
+    Sin 'hasta', es el reporte de un solo día de siempre. Con 'hasta', junta
+    varios días —reutiliza _rango_dia_local dos veces: una para el inicio del
+    día de 'fecha' y otra para el fin del día de 'hasta'—."""
+    desde, hasta_dt, desde_iso = _rango_dia_local(fecha, tz_offset_min)
+    es_rango = bool(hasta) and hasta[:10] != desde_iso
+    if es_rango:
+        _, hasta_dt, hasta_iso = _rango_dia_local(hasta, tz_offset_min)
+        if hasta_dt <= desde:
+            raise HTTPException(status_code=400, detail="La fecha final debe ser posterior a la inicial")
+        dia_iso = f"{desde_iso}_a_{hasta_iso}"
+        etiqueta_periodo = f"Del {desde_iso} al {hasta_iso}"
+    else:
+        dia_iso = desde_iso
+        etiqueta_periodo = desde_iso
+    periodo_txt = "este periodo" if es_rango else "este día"
     restriccion = sucursal_restriccion(sesion)
     ambito = restriccion or "Todas las sucursales"
 
     def acotar(q, campo):
-        q = q.filter(campo >= desde, campo < hasta)
+        q = q.filter(campo >= desde, campo < hasta_dt)
         return q
 
     ventas_q = acotar(db.query(Venta), Venta.creado_en)
@@ -2419,6 +2435,8 @@ def reporte_del_dia(
 
     datos = {
         "fecha": dia_iso,
+        "es_rango": es_rango,
+        "etiqueta_periodo": etiqueta_periodo,
         "sucursal": ambito,
         "generado_por": sesion.usuario,
         "generado_el": (datetime.utcnow() - timedelta(minutes=tz_offset_min)).strftime("%Y-%m-%d %H:%M"),
@@ -2460,8 +2478,8 @@ def reporte_del_dia(
     # ─── Mismos datos, en CSV para hoja de cálculo ───
     cc = bloque["cuadre_caja"]
     L = [
-        _csv_linea(["Reporte del día"]),
-        _csv_linea(["Fecha", datos["fecha"]]),
+        _csv_linea(["Reporte por rango de fechas" if es_rango else "Reporte del día"]),
+        _csv_linea(["Periodo" if es_rango else "Fecha", etiqueta_periodo]),
         _csv_linea(["Sucursal", datos["sucursal"]]),
         _csv_linea(["Generado por", datos["generado_por"]]),
         _csv_linea(["Generado el", datos["generado_el"]]),
@@ -2501,7 +2519,7 @@ def reporte_del_dia(
         # día anterior no se cerró la caja, sus cifras no coinciden con las de
         # arriba. Se avisa aquí para que nadie lo lea como un descuadre.
         L.append(_csv_linea(["Nota", "Las cifras de cada corte abarcan desde el corte anterior, "
-                             "que puede no coincidir con este día"]))
+                             f"que puede no coincidir con {periodo_txt}"]))
         L.append(_csv_linea(["Hora", "Sucursal", "Operador", "Fondo inicial", "Ventas efectivo",
                              "Abonos efectivo", "Gastos efectivo", "Debía haber", "Contado",
                              "Diferencia", "Retirado", "Se quedó en caja", "Nota"]))
@@ -2517,13 +2535,13 @@ def reporte_del_dia(
         L.append(_csv_linea(["Efectivo que se quedó en la caja", datos["queda_en_caja"]]))
         L.append(_csv_linea(["Efectivo retirado en el día", datos["retirado_total"]]))
     else:
-        L.append(_csv_linea(["Sin cortes registrados este día"]))
+        L.append(_csv_linea([f"Sin cortes registrados {periodo_txt}"]))
         if caja_ahora and caja_ahora["hubo_corte_antes"]:
             L.append(_csv_linea(["Debería haber ahora en el cajón (sin cerrar)", caja_ahora["monto"]]))
         elif caja_ahora:
             L.append(_csv_linea(["Efectivo acumulado sin cortar nunca", caja_ahora["monto"]]))
             L.append(_csv_linea(["Aviso", "Esta sucursal no tiene ningún corte registrado: "
-                                 "la cifra anterior abarca todo el histórico, no solo este día"]))
+                                 f"la cifra anterior abarca todo el histórico, no solo {periodo_txt}"]))
     L += ["", _csv_linea(["DETALLE DE VENTAS"])]
     if datos["ventas"]:
         L.append(_csv_linea(["Hora", "Folio", "Sucursal", "Operador", "Método", "Cliente",
@@ -2532,7 +2550,7 @@ def reporte_del_dia(
             L.append(_csv_linea([v["hora"], v["folio"], v["sucursal"], v["operador"], v["metodo"],
                                  v["cliente"], v["estado"], v["devuelto"], v["total"]]))
     else:
-        L.append(_csv_linea(["Sin ventas este día"]))
+        L.append(_csv_linea([f"Sin ventas {periodo_txt}"]))
     L += ["", _csv_linea(["DETALLE DE GASTOS"])]
     if datos["gastos"]:
         L.append(_csv_linea(["Hora", "Sucursal", "Concepto", "Categoría", "Método", "Operador", "Monto"]))
@@ -2540,7 +2558,7 @@ def reporte_del_dia(
             L.append(_csv_linea([g["hora"], g["sucursal"], g["concepto"], g["categoria"],
                                  g["metodo"], g["operador"], g["monto"]]))
     else:
-        L.append(_csv_linea(["Sin gastos este día"]))
+        L.append(_csv_linea([f"Sin gastos {periodo_txt}"]))
     L += ["", _csv_linea(["ABONOS DE CLIENTES"])]
     if datos["abonos"]:
         L.append(_csv_linea(["Hora", "Sucursal", "Cliente", "Método", "Operador", "Monto"]))
@@ -2548,7 +2566,7 @@ def reporte_del_dia(
             L.append(_csv_linea([a["hora"], a["sucursal"], a["cliente"], a["metodo"],
                                  a["operador"], a["monto"]]))
     else:
-        L.append(_csv_linea(["Sin abonos este día"]))
+        L.append(_csv_linea([f"Sin abonos {periodo_txt}"]))
 
     # BOM al inicio: sin él, Excel abre los acentos como basura
     cuerpo = "\ufeff" + "\r\n".join(L) + "\r\n"
