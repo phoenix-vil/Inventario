@@ -278,19 +278,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
     <!-- Sección efectivo -->
     <div id="sec-efectivo">
-      <div class="field"><label>Paga con ($) *</label><input type="number" id="c-pago" min="0" step="0.01" placeholder="0.00" oninput="calcCambio()"></div>
+      <div class="field"><label>Paga con ($) *</label><input type="number" id="c-pago" min="0" step="0.01" placeholder="0.00" oninput="calcCambio()" onkeydown="confirmarConEnter(event)"></div>
       <div class="linea-total"><span>Cambio</span><span id="c-cambio">$0.00</span></div>
     </div>
 
     <!-- Sección tarjeta (datos del ticket de la TPV) -->
     <div id="sec-tarjeta" style="display:none">
-      <div class="field"><label>Terminal (TPV)</label><input id="c-tpv-term" placeholder="Ej: Clip, BBVA, etc." autocomplete="off"></div>
-      <div class="field"><label>Referencia / No. de operación *</label><input id="c-tpv-ref" placeholder="Ej: 001234" autocomplete="off"></div>
-      <div class="field"><label>Código de autorización *</label><input id="c-tpv-aut" placeholder="Ej: 456789" autocomplete="off"></div>
+      <div class="field"><label>Terminal (TPV)</label><input id="c-tpv-term" placeholder="Ej: Clip, BBVA, etc." autocomplete="off" onkeydown="confirmarConEnter(event)"></div>
+      <div class="field"><label>Referencia / No. de operación *</label><input id="c-tpv-ref" placeholder="Ej: 001234" autocomplete="off" onkeydown="confirmarConEnter(event)"></div>
+      <div class="field"><label>Código de autorización *</label><input id="c-tpv-aut" placeholder="Ej: 456789" autocomplete="off" onkeydown="confirmarConEnter(event)"></div>
     </div>
     <!-- Sección transferencia -->
     <div id="sec-transferencia" style="display:none">
-      <div class="field"><label>Referencia / Folio (opcional)</label><input id="c-transf-ref" placeholder="Ej: 998877" autocomplete="off"></div>
+      <div class="field"><label>Referencia / Folio (opcional)</label><input id="c-transf-ref" placeholder="Ej: 998877" autocomplete="off" onkeydown="confirmarConEnter(event)"></div>
     </div>
     <!-- Sección crédito (buscar o crear cliente) -->
     <div id="sec-credito" style="display:none">
@@ -836,6 +836,32 @@ function setMetodo(m){
   document.getElementById('sec-credito').style.display = m==='credito'?'block':'none';
   document.getElementById('sec-transferencia').style.display = m==='transferencia'?'block':'none';
   document.getElementById('cobro-msg').className='msg';
+  // Salta el cursor directo al campo principal de cada método —pensado para
+  // cobrar con mouse + teclado en escritorio sin soltar el teclado para
+  // hacer clic: se escribe el dato y se da Enter (ver confirmarConEnter) en
+  // vez de tener que ir a buscar el campo primero.
+  const campoPrincipal = {
+    efectivo: 'c-pago', tarjeta: 'c-tpv-ref',
+    transferencia: 'c-transf-ref', credito: 'c-cliente-buscar',
+  }[m];
+  if(campoPrincipal) document.getElementById(campoPrincipal).focus();
+}
+
+// Enter en el campo principal de efectivo/tarjeta/transferencia termina la
+// venta directo, sin soltar el teclado para hacer clic en "Confirmar venta".
+// En tarjeta, si no se alcanzó a llenar referencia o autorización, se
+// completan con "N/A" en vez de bloquear la venta —se puede corregir
+// después desde el historial si hace falta el dato real de la terminal—.
+function confirmarConEnter(e){
+  if(e.key !== 'Enter') return;
+  e.preventDefault();
+  if(metodoPago === 'tarjeta'){
+    const ref = document.getElementById('c-tpv-ref');
+    const aut = document.getElementById('c-tpv-aut');
+    if(!ref.value.trim()) ref.value = 'N/A';
+    if(!aut.value.trim()) aut.value = 'N/A';
+  }
+  confirmarCobro();
 }
 
 let clienteSeleccionado = null;
@@ -957,8 +983,11 @@ function abrirCobro(){
   document.getElementById('c-cliente-nuevo').style.display='none';
   clienteSeleccionado = null;
   document.getElementById('cobro-msg').className='msg';
-  setMetodo('efectivo');
+  // El modal se muestra ANTES de fijar el método: setMetodo() enfoca el
+  // campo principal, y un elemento oculto (display:none, antes de abrir el
+  // overlay) no puede recibir foco.
   document.getElementById('cobro-modal').classList.add('open');
+  setMetodo('efectivo');
 }
 function cerrarCobro(){document.getElementById('cobro-modal').classList.remove('open');}
 
