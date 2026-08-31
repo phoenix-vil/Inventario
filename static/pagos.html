@@ -284,8 +284,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
     <!-- Sección tarjeta (datos del ticket de la TPV) -->
     <div id="sec-tarjeta" style="display:none">
-      <div class="field"><label>Terminal (TPV)</label><input id="c-tpv-term" placeholder="Ej: Clip, BBVA, etc." autocomplete="off" onkeydown="confirmarConEnter(event)"></div>
-      <div class="field"><label>Referencia / No. de operación *</label><input id="c-tpv-ref" placeholder="Ej: 001234" autocomplete="off" onkeydown="confirmarConEnter(event)"></div>
+      <div class="field"><label>Terminal (TPV)</label><input id="c-tpv-term" placeholder="Ej: Clip, BBVA, etc." autocomplete="off" onkeydown="siguienteCampo(event, 'c-tpv-ref')"></div>
+      <div class="field"><label>Referencia / No. de operación *</label><input id="c-tpv-ref" placeholder="Ej: 001234" autocomplete="off" onkeydown="siguienteCampo(event, 'c-tpv-aut')"></div>
       <div class="field"><label>Código de autorización *</label><input id="c-tpv-aut" placeholder="Ej: 456789" autocomplete="off" onkeydown="confirmarConEnter(event)"></div>
     </div>
     <!-- Sección transferencia -->
@@ -839,19 +839,32 @@ function setMetodo(m){
   // Salta el cursor directo al campo principal de cada método —pensado para
   // cobrar con mouse + teclado en escritorio sin soltar el teclado para
   // hacer clic: se escribe el dato y se da Enter (ver confirmarConEnter) en
-  // vez de tener que ir a buscar el campo primero.
+  // vez de tener que ir a buscar el campo primero. En tarjeta empieza en
+  // Terminal, el primero de la fila (Referencia y Autorización van después,
+  // uno por uno, con Enter —ver siguienteCampo—).
   const campoPrincipal = {
-    efectivo: 'c-pago', tarjeta: 'c-tpv-ref',
+    efectivo: 'c-pago', tarjeta: 'c-tpv-term',
     transferencia: 'c-transf-ref', credito: 'c-cliente-buscar',
   }[m];
   if(campoPrincipal) document.getElementById(campoPrincipal).focus();
 }
 
-// Enter en el campo principal de efectivo/tarjeta/transferencia termina la
+// Tarjeta tiene tres campos en fila (Terminal, Referencia, Autorización):
+// Enter en los dos primeros solo avanza al siguiente, para que se puedan
+// llenar uno tras otro sin tocar el mouse. Solo el último (Autorización)
+// termina la venta al dar Enter —ver confirmarConEnter—.
+function siguienteCampo(e, siguienteId){
+  if(e.key !== 'Enter') return;
+  e.preventDefault();
+  document.getElementById(siguienteId).focus();
+}
+
+// Enter en el campo final de efectivo/tarjeta/transferencia termina la
 // venta directo, sin soltar el teclado para hacer clic en "Confirmar venta".
-// En tarjeta, si no se alcanzó a llenar referencia o autorización, se
-// completan con "N/A" en vez de bloquear la venta —se puede corregir
-// después desde el historial si hace falta el dato real de la terminal—.
+// En tarjeta, si no se alcanzó a llenar referencia o autorización (o se
+// dejaron vacías a propósito), se completan con "N/A" en vez de bloquear la
+// venta —se puede corregir después desde el historial si hace falta el
+// dato real de la terminal—.
 function confirmarConEnter(e){
   if(e.key !== 'Enter') return;
   e.preventDefault();
@@ -1431,6 +1444,16 @@ async function onCodigo(codigo){
 }
 
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){cerrarEscaner();cerrarPeso();cerrarDescuento();cerrarCobro();cerrarTicket();}});
+
+// Con el ticket ya mostrado (venta terminada), Enter hace lo mismo que
+// tocar "Nueva venta" —no hay ningún campo de texto en ese modal con el que
+// pueda chocar—, para encadenar varias ventas seguidas sin usar el mouse.
+document.addEventListener('keydown', e => {
+  if(e.key === 'Enter' && document.getElementById('ticket-modal').classList.contains('open')){
+    e.preventDefault();
+    cerrarTicket();
+  }
+});
 
 if(sesionPOS){
   let txt='👤 '+sesionPOS.usuario;
