@@ -1673,6 +1673,60 @@ def pos_buscar(
     return resultado
 
 
+@app.get("/api/pos/mas-vendidos")
+def pos_mas_vendidos(
+    cliente_id: Optional[int] = Query(None),
+    dias: int = Query(30, ge=1, le=365),
+    limit: int = Query(12, ge=1, le=30),
+    sesion: Optional[Sesion] = Depends(sesion_opcional),
+    db: Session = Depends(get_db),
+):
+    """Los productos más vendidos de esta sucursal en los últimos `dias`, en
+    el mismo formato que /api/pos/buscar —para que el buscador de pagos.html
+    pueda mostrarlos con el mismo renderResultados()/agregar() de siempre,
+    sin código aparte—. Se usan cuando el buscador está vacío, en vez de
+    dejar esa columna en blanco."""
+    desde = datetime.utcnow() - timedelta(days=dias)
+    q = db.query(Venta).filter(Venta.creado_en >= desde, Venta.total > 0)
+    restriccion = sucursal_restriccion(sesion)
+    if restriccion is not None:
+        q = q.filter(Venta.sucursal == restriccion)
+
+    acumulado = {}
+    for v in q.all():
+        for it in json.loads(v.detalle_json):
+            pid = it.get("producto_id")
+            if pid is None:  # los artículos personalizados no tienen inventario que sugerir
+                continue
+            acumulado[pid] = acumulado.get(pid, 0) + (it.get("cantidad") or 0)
+
+    if not acumulado:
+        return []
+
+    top_ids = sorted(acumulado, key=lambda pid: acumulado[pid], reverse=True)[:limit]
+    query = aplicar_filtro_tienda(db.query(Producto).filter(Producto.id.in_(top_ids)), sesion)
+    por_id = {p.id: p for p in query.all()}
+    cliente = _cliente_de(db, cliente_id)
+
+    resultado = []
+    for pid in top_ids:  # conserva el orden de más vendido primero
+        p = por_id.get(pid)
+        if not p:
+            continue
+        resultado.append({
+            "id": p.id,
+            "nombre": p.nombre,
+            "categoria": p.categoria,
+            "precio_venta": p.precio_venta,
+            "precio_final": calcular_precio_final(p, cliente),
+            "stock": p.stock,
+            "unidad": p.unidad,
+            "vendido_por_peso": bool(p.vendido_por_peso),
+            "codigo_barras": p.codigo_barras,
+        })
+    return resultado
+
+
 @app.post("/api/pos/precios-cliente")
 def precios_para_cliente(data: dict = Body(...), sesion: Sesion = Depends(requerir_sesion), db: Session = Depends(get_db)):
     """Precios que le tocan a un cliente para los productos que ya están en el

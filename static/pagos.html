@@ -154,32 +154,40 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
    botones de pago debajo) a la derecha ───────────────────────────────────
    Solo entra a partir de 1024px (una PC o el contenedor de escritorio,
    nunca un teléfono ni la mayoría de las tabletas en vertical) — la versión
-   móvil de aquí abajo no se toca en nada. .container pasa a display:contents
-   (desaparece como caja, sin cambiar el DOM) para que sus 4 hijos entren
-   directo a la cuadrícula de .pos-layout, junto con .totales -que hoy es su
-   hermano, no su hijo-, y así poder acomodar cada pieza en su columna sin
-   tener que mover ni un solo elemento del HTML. */
+   móvil de aquí abajo no se toca en nada: panel-buscar/panel-carrito son
+   bloques normales sin ningún estilo en móvil, y .totales sigue fija abajo
+   con position:fixed sin importar en qué nivel del HTML esté anidada.
+   .container pasa a display:contents (desaparece como caja, sin tocar el
+   DOM) para que panel-buscar y panel-carrito entren directo a la cuadrícula
+   de .pos-layout como sus dos columnas.
+
+   Las dos columnas quedan con una altura fija (la pantalla completa menos
+   la barra de arriba), y adentro cada una es un renglón de flex en columna:
+   el encabezado no se encoge, la lista de en medio sí (flex:1) y hace
+   scroll interno propio si no cabe, y el bloque de pago se queda siempre
+   visible al fondo del carrito, nunca empujado fuera de la pantalla. */
 @media(min-width:1024px){
   .pos-layout{
     display:grid;
     grid-template-columns:1fr 1fr;
-    grid-template-rows:auto auto auto;
-    align-items:start;
-    gap:8px 24px;
+    gap:8px 56px;
     max-width:1400px;
     margin:0 auto;
     padding:1.25rem;
+    height:calc(100vh - 54px - 2.5rem);
   }
   .container{display:contents}
-  .search-row{grid-column:1;grid-row:1}
-  .resultados{grid-column:1;grid-row:2;max-height:none}
-  .section-title{grid-column:2;grid-row:1}
-  .cart{grid-column:2;grid-row:2;max-height:none}
+  .panel-buscar,.panel-carrito{display:flex;flex-direction:column;min-height:0;height:100%}
+  /* Línea divisoria entre las dos columnas, además del espacio del gap: se
+     nota más la separación que solo con aire en blanco. */
+  .panel-carrito{border-left:0.5px solid var(--border);padding-left:28px}
+  .search-row,.section-title,#resultados-titulo{flex-shrink:0}
+  .resultados,.cart{flex:1;min-height:0;max-height:none;overflow-y:auto}
   /* El carrito completo (título + lista + pago) queda del lado derecho, uno
-     debajo del otro; ya no flota fijo abajo como en móvil, sino que es una
-     columna más de la cuadrícula. */
+     debajo del otro; ya no flota fijo abajo como en móvil, sino el último
+     renglón fijo (no se encoge) de esa columna. */
   .totales{
-    grid-column:2;grid-row:3;
+    flex-shrink:0;
     position:static;
     border-radius:16px;
     border-bottom:0.5px solid var(--border);
@@ -211,29 +219,37 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
      dos columnas, para aprovechar el espacio que sobra en un monitor. -->
 <div class="pos-layout">
 <div class="container">
-  <div class="search-row">
-    <input type="search" id="buscar" placeholder="Buscar producto por nombre…" oninput="buscar()" autocomplete="off">
-    <button onclick="abrirEscaner()" title="Escanear">📷</button>
-  </div>
-  <div class="resultados" id="resultados"></div>
-
-  <div class="section-title">Carrito</div>
-  <div class="cart" id="cart"></div>
-</div>
-
-<div class="totales">
-  <div class="totales-inner">
-    <div class="linea"><span>Subtotal</span><span id="t-subtotal">$0.00</span></div>
-    <div class="linea desc" id="linea-desc" style="display:none"><span id="desc-label">Descuento</span><span id="t-desc">-$0.00</span></div>
-    <div class="linea linea-ahorro" id="linea-ahorro" style="display:none"><span>🎉 Ahorraste</span><span id="t-ahorro">$0.00</span></div>
-    <div class="linea-total"><span>Total</span><span id="t-total">$0.00</span></div>
-    <div style="display:flex;gap:8px;margin-bottom:8px">
-      <button class="btn-desc" onclick="abrirDescuento()" style="flex:1;height:48px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;border:0.5px solid var(--border)">% Descuento</button>
-      <button onclick="abrirCustomVenta()" style="flex:1;height:48px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;border:0.5px solid var(--blue-bg);background:var(--blue-bg);color:var(--blue)">+ Personalizado</button>
+  <!-- panel-buscar/panel-carrito no hacen nada en móvil (bloques normales,
+       transparentes): el orden visual sigue siendo el de siempre. En
+       escritorio (@media min-width:1024px) son las dos columnas. -->
+  <div class="panel-buscar">
+    <div class="search-row">
+      <input type="search" id="buscar" placeholder="Buscar producto por nombre…" oninput="buscar()" autocomplete="off">
+      <button onclick="abrirEscaner()" title="Escanear">📷</button>
     </div>
-    <div class="acciones">
-      <button onclick="dejarEnEspera()" style="width:100%;height:40px;margin-bottom:8px;border:0.5px solid var(--border);border-radius:10px;background:transparent;color:var(--text);font-size:14px;cursor:pointer">⏸ Dejar en espera</button>
-      <button class="btn-cobrar" id="btn-cobrar" onclick="abrirCobro()" disabled>Cobrar</button>
+    <div class="section-title" id="resultados-titulo" style="display:none"></div>
+    <div class="resultados" id="resultados"></div>
+  </div>
+
+  <div class="panel-carrito">
+    <div class="section-title">Carrito</div>
+    <div class="cart" id="cart"></div>
+
+    <div class="totales">
+      <div class="totales-inner">
+        <div class="linea"><span>Subtotal</span><span id="t-subtotal">$0.00</span></div>
+        <div class="linea desc" id="linea-desc" style="display:none"><span id="desc-label">Descuento</span><span id="t-desc">-$0.00</span></div>
+        <div class="linea linea-ahorro" id="linea-ahorro" style="display:none"><span>🎉 Ahorraste</span><span id="t-ahorro">$0.00</span></div>
+        <div class="linea-total"><span>Total</span><span id="t-total">$0.00</span></div>
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <button class="btn-desc" onclick="abrirDescuento()" style="flex:1;height:48px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;border:0.5px solid var(--border)">% Descuento</button>
+          <button onclick="abrirCustomVenta()" style="flex:1;height:48px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;border:0.5px solid var(--blue-bg);background:var(--blue-bg);color:var(--blue)">+ Personalizado</button>
+        </div>
+        <div class="acciones">
+          <button onclick="dejarEnEspera()" style="width:100%;height:40px;margin-bottom:8px;border:0.5px solid var(--border);border-radius:10px;background:transparent;color:var(--text);font-size:14px;cursor:pointer">⏸ Dejar en espera</button>
+          <button class="btn-cobrar" id="btn-cobrar" onclick="abrirCobro()" disabled>Cobrar</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -448,11 +464,32 @@ function buscar(){clearTimeout(debTimer);debTimer=setTimeout(ejecutarBusqueda,25
 
 async function ejecutarBusqueda(){
   const q = document.getElementById('buscar').value.trim();
-  if(!q){document.getElementById('resultados').innerHTML='';return;}
+  if(!q){ mostrarMasVendidos(); return; }
+  document.getElementById('resultados-titulo').style.display='none';
   try{
     const r = await authFetch('/api/pos/buscar?q='+encodeURIComponent(q));
     const items = await r.json();
     renderResultados(items);
+  }catch(e){}
+}
+
+// Con el buscador vacío (recién entrando, o al borrar lo que se escribió),
+// en vez de dejar esa columna en blanco se sugieren los productos más
+// vendidos de esta sucursal —mismo formato que una búsqueda normal, así que
+// se agregan al carrito igual, con un clic—. Se pide una sola vez por
+// visita a la pantalla: no cambia mientras se sigue vendiendo, así que no
+// vale la pena consultarlo de nuevo cada vez que se borra el buscador.
+let masVendidosCache = null;
+async function mostrarMasVendidos(){
+  const titulo = document.getElementById('resultados-titulo');
+  titulo.textContent = '🔥 Más vendidos';
+  titulo.style.display = 'block';
+  if(masVendidosCache){ renderResultados(masVendidosCache); return; }
+  try{
+    const r = await authFetch('/api/pos/mas-vendidos');
+    masVendidosCache = await r.json();
+    // Si ya se escribió algo mientras esto cargaba, no lo pise
+    if(!document.getElementById('buscar').value.trim()) renderResultados(masVendidosCache);
   }catch(e){}
 }
 
@@ -1548,6 +1585,7 @@ if(sesionPOS){
   document.getElementById('nav-operador').textContent=txt;
 }
 renderCarrito();
+mostrarMasVendidos();
 
 // ─── Importar cotizacion (llega desde /pagos?cotizacion=ID) ─────────────
 async function importarCotizacion(cotId){
