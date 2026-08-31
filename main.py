@@ -2450,10 +2450,14 @@ def reporte_del_dia(
         "sucursal": ambito,
         "generado_por": sesion.usuario,
         "generado_el": (datetime.utcnow() - timedelta(minutes=tz_offset_min)).strftime("%Y-%m-%d %H:%M"),
-        # Un cajero solo ve el cuadre de efectivo (lo mismo que ya ve arriba
-        # en pantalla al hacer el corte), no la ganancia ni el desglose de
-        # métodos de pago —eso queda para "resumen" completo del gerente—.
-        "resumen": {"cuadre_caja": bloque["cuadre_caja"]} if reducido else bloque,
+        # Un cajero ve el cuadre de efectivo y el desglose por método de pago,
+        # pero no la ganancia ni el detalle de cada venta/gasto/abono —eso
+        # queda para "resumen" completo del gerente—.
+        "resumen": {
+            "cuadre_caja": bloque["cuadre_caja"],
+            "desglose_metodos_pago": bloque["desglose_metodos_pago"],
+            "desglose_metodos_abonos": bloque["desglose_metodos_abonos"],
+        } if reducido else bloque,
         "cortes": [{
             "hora": hora(c.creado_en), "sucursal": c.sucursal, "operador": c.operador,
             "saldo_inicial": c.saldo_inicial, "ventas_efectivo": c.ventas_efectivo,
@@ -2500,9 +2504,10 @@ def reporte_del_dia(
         _csv_linea(["Generado el", datos["generado_el"]]),
         "",
     ]
-    # Ganancia, desglose por método y detalle de movimientos son información
-    # de dueño, no de cajero: con reducido=True se saltan por completo, no
-    # solo se ocultan cifras sueltas.
+    # Ganancia y detalle de cada movimiento son información de dueño, no de
+    # cajero: con reducido=True se saltan por completo. El desglose por
+    # método de pago sí se queda para los dos —no es más de lo que ya se ve
+    # sumado en el cuadre de caja de abajo—.
     if not reducido:
         L += [
             _csv_linea(["RESUMEN"]),
@@ -2513,18 +2518,20 @@ def reporte_del_dia(
             _csv_linea(["Abonos de clientes", bloque["num_abonos"], bloque["abonos_total"]]),
             _csv_linea(["Ganancia neta (ventas - gastos)", "", bloque["ganancia_neta"]]),
             "",
-            _csv_linea(["VENTAS POR MÉTODO DE PAGO"]),
-            _csv_linea(["Método", "Tickets", "Monto"]),
         ]
-        for m in bloque["desglose_metodos_pago"]:
+    L += [
+        _csv_linea(["VENTAS POR MÉTODO DE PAGO"]),
+        _csv_linea(["Método", "Tickets", "Monto"]),
+    ]
+    for m in bloque["desglose_metodos_pago"]:
+        L.append(_csv_linea([m["metodo"], m["cantidad"], m["total"]]))
+    L.append("")
+    if bloque["desglose_metodos_abonos"]:
+        L.append(_csv_linea(["ABONOS DE CLIENTES POR MÉTODO DE PAGO"]))
+        L.append(_csv_linea(["Método", "Abonos", "Monto"]))
+        for m in bloque["desglose_metodos_abonos"]:
             L.append(_csv_linea([m["metodo"], m["cantidad"], m["total"]]))
         L.append("")
-        if bloque["desglose_metodos_abonos"]:
-            L.append(_csv_linea(["ABONOS DE CLIENTES POR MÉTODO DE PAGO"]))
-            L.append(_csv_linea(["Método", "Abonos", "Monto"]))
-            for m in bloque["desglose_metodos_abonos"]:
-                L.append(_csv_linea([m["metodo"], m["cantidad"], m["total"]]))
-            L.append("")
     L += [
         _csv_linea(["EFECTIVO DEL DÍA"]),
         _csv_linea(["Ventas en efectivo", cc["ventas_efectivo"]]),

@@ -168,11 +168,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <script src="/static/auth.js?v=1787605997"></script>
 <script>
 // Un cajero también cierra su caja, no solo el gerente —con reporte
-// reducido, ver descargarReporte()/armarPDF()—. Igual que vender o
-// devolver, es una operación de piso: Only Enterprises no tiene caja
-// propia que cerrar.
+// reducido, ver descargarReporte()/armarPDF()—. Sin requireSucursalOperativa():
+// esta pantalla ya avisaba sola, con un mensaje normal en la tarjeta de
+// arriba, si la sesión no tiene una sucursal con caja propia (cargarCalculo);
+// agregar ese redirect aquí rompía a quien entraba a revisar el consolidado
+// desde una sesión de Only Enterprises, que antes sí podía abrir la pantalla.
 const sesion = requireAuth();
-requireSucursalOperativa();
 if(!esGerente()) document.getElementById('card-reporte-rango').style.display = 'none';
 let calc = null;
 
@@ -342,9 +343,10 @@ async function armarPDF(d){
 
   const b = d.resumen, cc = b.cuadre_caja;
 
-  // Un cajero solo ve el cuadre de caja de aquí para abajo: ganancia,
-  // desglose por método y el detalle de cada movimiento son información de
-  // dueño, no de cajero (d.reducido lo decide el servidor, no el navegador).
+  // Un cajero también ve el desglose por método de pago (no es más de lo
+  // que ya se ve sumado en el cuadre de caja de abajo); lo que sí queda solo
+  // para gerente es la ganancia y el detalle de cada movimiento uno por uno
+  // (d.reducido lo decide el servidor, no el navegador).
   if(!d.reducido){
     titulo('Resumen');
     fila('Ventas totales (' + b.num_ventas + ')', money(b.total_vendido));
@@ -353,29 +355,29 @@ async function armarPDF(d){
     if(b.num_abonos) fila('Abonos de clientes (' + b.num_abonos + ')', money(b.abonos_total));
     fila('Ganancia después de gastos', money(b.ganancia_neta), 12);
     y += 6; linea();
+  }
 
-    espacio(altoDe(b.desglose_metodos_pago.length));
-    titulo('Métodos de pago (ventas)');
-    if(!b.desglose_metodos_pago.length){
-      vacio('Sin ventas este día');
-    }else{
-      b.desglose_metodos_pago.forEach(function(m){
-        fila((NOMBRES_METODO[m.metodo] || m.metodo) + ' (' + m.cantidad + ')', money(m.total));
-      });
-    }
+  espacio(altoDe(b.desglose_metodos_pago.length));
+  titulo('Métodos de pago (ventas)');
+  if(!b.desglose_metodos_pago.length){
+    vacio('Sin ventas este día');
+  }else{
+    b.desglose_metodos_pago.forEach(function(m){
+      fila((NOMBRES_METODO[m.metodo] || m.metodo) + ' (' + m.cantidad + ')', money(m.total));
+    });
+  }
+  y += 6; linea();
+
+  // Solo si hubo abonos: antes se confundían con la caja porque "Abonos de
+  // clientes" (arriba) suma todos los métodos, pero "Abonos cobrados en
+  // efectivo" (abajo, cuadre de caja) solo cuenta los que son en efectivo.
+  if(b.desglose_metodos_abonos.length){
+    espacio(altoDe(b.desglose_metodos_abonos.length));
+    titulo('Métodos de pago (abonos de clientes)');
+    b.desglose_metodos_abonos.forEach(function(m){
+      fila((NOMBRES_METODO[m.metodo] || m.metodo) + ' (' + m.cantidad + ')', money(m.total));
+    });
     y += 6; linea();
-
-    // Solo si hubo abonos: antes se confundían con la caja porque "Abonos de
-    // clientes" (arriba) suma todos los métodos, pero "Abonos cobrados en
-    // efectivo" (abajo, cuadre de caja) solo cuenta los que son en efectivo.
-    if(b.desglose_metodos_abonos.length){
-      espacio(altoDe(b.desglose_metodos_abonos.length));
-      titulo('Métodos de pago (abonos de clientes)');
-      b.desglose_metodos_abonos.forEach(function(m){
-        fila((NOMBRES_METODO[m.metodo] || m.metodo) + ' (' + m.cantidad + ')', money(m.total));
-      });
-      y += 6; linea();
-    }
   }
 
   espacio(140);
