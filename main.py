@@ -2610,7 +2610,13 @@ def reporte_del_dia(
 
 @app.get("/corte-caja", response_class=FileResponse)
 def corte_caja_page():
-    return FileResponse("static/corte_caja.html")
+    # no-cache (no "no-store"): el navegador puede guardar una copia, pero
+    # siempre debe revalidar con el servidor antes de usarla —con ETag/
+    # Last-Modified de por medio, eso es una respuesta 304 casi instantánea
+    # si no cambió nada—. Sin esto, un cambio en este archivo (como el de
+    # hoy, que quitó un redirect que rompía la pantalla para cajero) puede
+    # tardar en verse si el navegador ya tenía la versión vieja en caché.
+    return FileResponse("static/corte_caja.html", headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/gastos", response_class=FileResponse)
