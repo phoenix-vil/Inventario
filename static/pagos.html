@@ -269,10 +269,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="field">
       <label>Método de pago</label>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <button type="button" id="btn-efectivo" class="metodo-btn activo" onclick="setMetodo('efectivo')">💵 Efectivo</button>
-        <button type="button" id="btn-tarjeta" class="metodo-btn" onclick="setMetodo('tarjeta')">💳 Tarjeta</button>
-        <button type="button" id="btn-credito" class="metodo-btn" onclick="setMetodo('credito')">📒 Crédito</button>
-        <button type="button" id="btn-transferencia" class="metodo-btn" onclick="setMetodo('transferencia')">🏦 Transferencia</button>
+        <button type="button" id="btn-efectivo" class="metodo-btn activo" onclick="setMetodo('efectivo')" onkeydown="navegarMetodo(event)">💵 Efectivo</button>
+        <button type="button" id="btn-tarjeta" class="metodo-btn" onclick="setMetodo('tarjeta')" onkeydown="navegarMetodo(event)">💳 Tarjeta</button>
+        <button type="button" id="btn-credito" class="metodo-btn" onclick="setMetodo('credito')" onkeydown="navegarMetodo(event)">📒 Crédito</button>
+        <button type="button" id="btn-transferencia" class="metodo-btn" onclick="setMetodo('transferencia')" onkeydown="navegarMetodo(event)">🏦 Transferencia</button>
       </div>
     </div>
 
@@ -823,6 +823,22 @@ function extraerMensajeError(detail, fallback){
     }).join(' — ');
   }
   return fallback;
+}
+
+const ORDEN_METODOS = ['efectivo', 'tarjeta', 'credito', 'transferencia'];
+
+// Flechas o Tab sobre uno de los 4 botones de método cambian de opción
+// igual que un clic —no solo mueven el foco, como haría Tab por sí solo—:
+// como setMetodo() ya salta al campo principal de esa opción, un solo toque
+// de flecha/Tab deja listo para escribir el dato, sin soltar el teclado.
+function navegarMetodo(e){
+  const avanza = e.key === 'ArrowRight' || e.key === 'ArrowDown' || (e.key === 'Tab' && !e.shiftKey);
+  const retrocede = e.key === 'ArrowLeft' || e.key === 'ArrowUp' || (e.key === 'Tab' && e.shiftKey);
+  if(!avanza && !retrocede) return;
+  e.preventDefault();
+  const n = ORDEN_METODOS.length;
+  const i = ORDEN_METODOS.indexOf(metodoPago);
+  setMetodo(ORDEN_METODOS[(i + (avanza ? 1 : -1) + n) % n]);
 }
 
 function setMetodo(m){
