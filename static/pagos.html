@@ -846,12 +846,20 @@ function navegarMetodoBoton(e){
 // Izquierda/derecha cambian el método desde cualquier parte del modal de
 // cobro, sin importar qué campo tenga el foco en ese momento —a diferencia
 // de arriba/abajo, no chocan con nada al escribir un número o una
-// referencia corta—. Se exceptúa el buscador de cliente (crédito): ahí sí
-// hace falta mover el cursor dentro del texto para corregir un nombre.
-// Tab solo se atrapa si el foco sigue en uno de los 4 botones, para no
-// romper el Tab normal del resto del formulario (nota, checkboxes, etc.).
+// referencia corta—. Tab solo se atrapa si el foco sigue en uno de los 4
+// botones, para no romper el Tab normal del resto del formulario.
 document.getElementById('cobro-modal').addEventListener('keydown', function(e){
-  if(e.target.id === 'c-cliente-buscar') return;
+  if(e.target.id === 'c-cliente-buscar'){
+    // Ahí sí hace falta mover el cursor dentro del texto para corregir un
+    // nombre, así que la flecha solo cambia de método cuando el cursor ya
+    // está en el borde de ese lado (o el campo está vacío, como queda
+    // recién enfocado al elegir "Crédito") —si no, quedaba atorado ahí sin
+    // poder llegar nunca a Transferencia—.
+    const cursor = e.target.selectionStart;
+    const largo = e.target.value.length;
+    if(e.key === 'ArrowLeft' && cursor > 0) return;
+    if(e.key === 'ArrowRight' && cursor < largo) return;
+  }
   if(e.key === 'ArrowRight'){ e.preventDefault(); irAMetodo(1); }
   else if(e.key === 'ArrowLeft'){ e.preventDefault(); irAMetodo(-1); }
   else if(e.key === 'Tab' && e.target.classList && e.target.classList.contains('metodo-btn')){
