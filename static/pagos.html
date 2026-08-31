@@ -150,34 +150,37 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   .ci-info{flex-basis:100%}
 }
 
-/* ─── Escritorio ancho: búsqueda/carrito y el panel de cobro lado a lado ───
-   Solo entra a partir de 1024px (una PC o el contenedor de escritorio, nunca
-   un teléfono ni la mayoría de las tabletas en vertical) — la versión móvil
-   de aquí arriba no se toca en nada. En vez de que el carrito quede angosto
-   al centro con enormes márgenes vacíos a los lados, se arma un layout de
-   dos columnas: la izquierda para buscar/ver el carrito, la derecha fija
-   como panel de cobro que no se pierde de vista al hacer scroll. */
+/* ─── Escritorio ancho: búsqueda a la izquierda, carrito completo (con
+   botones de pago debajo) a la derecha ───────────────────────────────────
+   Solo entra a partir de 1024px (una PC o el contenedor de escritorio,
+   nunca un teléfono ni la mayoría de las tabletas en vertical) — la versión
+   móvil de aquí abajo no se toca en nada. .container pasa a display:contents
+   (desaparece como caja, sin cambiar el DOM) para que sus 4 hijos entren
+   directo a la cuadrícula de .pos-layout, junto con .totales -que hoy es su
+   hermano, no su hijo-, y así poder acomodar cada pieza en su columna sin
+   tener que mover ni un solo elemento del HTML. */
 @media(min-width:1024px){
   .pos-layout{
     display:grid;
-    grid-template-columns:1fr 380px;
+    grid-template-columns:1fr 1fr;
+    grid-template-rows:auto auto auto;
     align-items:start;
-    gap:24px;
+    gap:8px 24px;
     max-width:1400px;
     margin:0 auto;
     padding:1.25rem;
   }
-  /* Ya no compite con una barra fija abajo (el panel de cobro pasó a ser
-     parte del grid, columna aparte), así que se le quita el padding enorme
-     que antes le dejaba hueco para eso, y el max-width/centrado de siempre
-     -ahora lo controla .pos-layout-. */
-  .container{max-width:none;margin:0;padding:0}
-  .resultados{max-height:320px}
-  .cart{max-height:calc(100vh - 300px)}
+  .container{display:contents}
+  .search-row{grid-column:1;grid-row:1}
+  .resultados{grid-column:1;grid-row:2;max-height:none}
+  .section-title{grid-column:2;grid-row:1}
+  .cart{grid-column:2;grid-row:2;max-height:none}
+  /* El carrito completo (título + lista + pago) queda del lado derecho, uno
+     debajo del otro; ya no flota fijo abajo como en móvil, sino que es una
+     columna más de la cuadrícula. */
   .totales{
-    position:sticky;
-    top:calc(54px + 1.25rem);
-    left:auto;right:auto;bottom:auto;
+    grid-column:2;grid-row:3;
+    position:static;
     border-radius:16px;
     border-bottom:0.5px solid var(--border);
     box-shadow:0 1px 3px rgba(0,0,0,.06);
