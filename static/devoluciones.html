@@ -105,7 +105,14 @@ button.primary:hover{opacity:.85;background:var(--text)}
 <style>
 .pantalla{display:flex;flex-direction:column;gap:16px}
 .col-izq,.col-der{display:flex;flex-direction:column;gap:16px}
-.box{background:var(--bg2);border:0.5px solid var(--border);border-radius:14px;display:flex;flex-direction:column;overflow:hidden;contain:paint}
+.box{
+  background:color-mix(in srgb, var(--bg2) 72%, transparent);
+  backdrop-filter:blur(20px) saturate(160%);
+  -webkit-backdrop-filter:blur(20px) saturate(160%);
+  border:0.5px solid var(--border);border-radius:14px;
+  box-shadow:0 1px 3px rgba(0,0,0,.05), 0 1px 2px rgba(0,0,0,.03);
+  display:flex;flex-direction:column;overflow:hidden;contain:paint
+}
 .box-header{padding:.875rem 1rem;border-bottom:0.5px solid var(--border);font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
 .box-header .contador{color:var(--text);font-weight:700}
 .box-body{padding:.625rem}
@@ -115,7 +122,10 @@ button.primary:hover{opacity:.85;background:var(--text)}
 .buscador input{flex:1;height:48px;padding:0 14px;border:0.5px solid var(--border);border-radius:10px;background:var(--bg2);color:var(--text);font-size:16px}
 .buscador button{height:48px;padding:0 22px;border:none;border-radius:10px;background:var(--text);color:var(--bg2);font-weight:600;font-size:15px;cursor:pointer}
 
-.ticket-info{padding:.625rem 1rem;background:var(--blue-bg);border-bottom:0.5px solid var(--border);border-left:3px solid var(--blue);font-size:12px;color:var(--blue);font-weight:600;display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;flex-shrink:0}
+.ticket-info{padding:.625rem 1rem;border-bottom:0.5px solid var(--border);font-size:12px;font-weight:600;display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;flex-shrink:0}
+.ticket-info.st-activa{background:var(--green-bg);color:var(--green);border-left:3px solid var(--green)}
+.ticket-info.st-parcial{background:var(--amber-bg);color:var(--amber);border-left:3px solid var(--amber)}
+.ticket-info.st-cancelada{background:var(--red-bg);color:var(--red);border-left:3px solid var(--red)}
 .badge{display:inline-block;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:700}
 .badge-activa{background:var(--green-bg);color:var(--green)}
 .badge-parcial{background:var(--amber-bg);color:var(--amber)}
@@ -124,11 +134,12 @@ button.primary:hover{opacity:.85;background:var(--text)}
 .badge-devolucion{background:var(--red-bg);color:var(--red)}
 
 /* filas de transacciones recientes */
-.tx-row{display:flex;justify-content:space-between;align-items:center;padding:.75rem .875rem;border-radius:10px;cursor:pointer}
-.tx-row:hover{background:var(--bg)}
+.tx-row{display:flex;justify-content:space-between;align-items:center;padding:.75rem .875rem;border-radius:10px;cursor:pointer;gap:10px}
+.tx-row:hover{background:color-mix(in srgb, var(--bg) 60%, transparent)}
 .tx-id{font-weight:700;font-size:14px}
 .tx-meta{font-size:12px;color:var(--text2);margin-top:2px}
-.tx-total{font-size:16px;font-weight:700;color:var(--green);white-space:nowrap}
+.tx-right{text-align:right;flex-shrink:0}
+.tx-total{font-size:15px;font-weight:700;color:var(--green);white-space:nowrap;display:block;margin-bottom:4px}
 
 /* filas de articulos disponibles para marcar */
 .art-row{display:flex;align-items:center;gap:10px;padding:.75rem .875rem;border-radius:10px}
@@ -241,7 +252,7 @@ button.primary:hover{opacity:.85;background:var(--text)}
         <div class="box-body" id="sel-contenido"><div class="vacio">Busca un ticket y marca los artículos<br>que quieras devolver.<br>Aparecerán aquí.</div></div>
       </div>
 
-      <div class="box box-resumen" id="caja-resumen" style="display:none">
+      <div class="box box-resumen" id="caja-resumen">
         <div class="resumen" id="sel-resumen"></div>
       </div>
     </div>
@@ -328,6 +339,18 @@ function disponibleDe(it){
   const yaDev = devueltoPorProducto();
   const dev = (it.devuelto != null) ? it.devuelto : (yaDev[it.producto_id] || 0);
   return (it.disponible_devolucion != null) ? it.disponible_devolucion : Math.round((it.cantidad - dev) * 1000) / 1000;
+}
+
+const ETIQUETAS_ESTADO = {activa:'Activa', parcial:'Parcial', devuelta:'Devuelta', cancelada:'Cancelada', devolucion:'Devolución'};
+function badgeHTML(estado){
+  return '<span class="badge badge-' + estado + '">' + (ETIQUETAS_ESTADO[estado] || estado) + '</span>';
+}
+// Clase de acento para la franja del ticket, agrupando devuelta/cancelada/devolucion
+// bajo el mismo color rojo que ya usan sus badges.
+function claseEstadoTicketInfo(estado){
+  if(estado === 'parcial') return 'st-parcial';
+  if(estado === 'devuelta' || estado === 'cancelada' || estado === 'devolucion') return 'st-cancelada';
+  return 'st-activa';
 }
 
 function esEscritorio(){ return window.matchMedia('(min-width:1024px)').matches; }
@@ -482,7 +505,8 @@ async function cargarUltimasTransacciones(){
     const data = await r.json();
     // Los registros de devolución/cancelación son ventas propias con venta_origen_id
     // apuntando al ticket original; no son transacciones nuevas, así que no se listan aquí.
-    ultimasCache = data.filter(function(v){ return !v.venta_origen_id; }).slice(0, 15);
+    // El estado (activa/parcial/devuelta) sí se muestra, en el ticket original.
+    ultimasCache = data.filter(function(v){ return !v.venta_origen_id; }).slice(0, 9);
     if(!ventaActual) renderListaIzquierda();
   }catch(e){}
 }
@@ -500,9 +524,10 @@ function renderUltimasTransacciones(){
   if(!ultimasCache.length){ cont.innerHTML = '<div class="vacio">Sin transacciones recientes</div>'; return; }
   cont.innerHTML = ultimasCache.map(function(v){
     const fecha = new Date(v.fecha).toLocaleString('es-MX').replace(',', '');
+    const estado = v.estado || 'activa';
     return '<div class="tx-row" onclick="clicTransaccion(' + v.id + ')">'
       + '<div><div class="tx-id">Ticket #' + v.id + '</div><div class="tx-meta">' + esc(v.operador || '') + ' · ' + fecha + '</div></div>'
-      + '<div class="tx-total">' + money(v.total) + '</div>'
+      + '<div class="tx-right"><span class="tx-total">' + money(v.total) + '</span>' + badgeHTML(estado) + '</div>'
       + '</div>';
   }).join('');
 }
@@ -517,14 +542,13 @@ function renderArticulosTicket(){
   const estado = v.estado || 'activa';
   const fecha = new Date(v.fecha).toLocaleString('es-MX').replace(',', '');
   const nombresMet = {efectivo:'Efectivo', tarjeta:'Tarjeta', credito:'Crédito', transferencia:'Transferencia'};
-  const etiquetasEstado = {activa:'Activa', parcial:'Devolución parcial', devuelta:'Devuelta / Cancelada', cancelada:'Cancelada', devolucion:'Devolución'};
   const cancelada = (estado === 'devuelta' || estado === 'cancelada' || estado === 'devolucion');
 
   document.getElementById('lista-titulo').textContent = 'Artículos del ticket #' + v.id;
   document.getElementById('lista-ticket-info').innerHTML =
-    '<div class="ticket-info"><span>' + esc(v.sucursal || '') + (v.operador ? ' · ' + esc(v.operador) : '') + ' · ' + fecha
+    '<div class="ticket-info ' + claseEstadoTicketInfo(estado) + '"><span>' + esc(v.sucursal || '') + (v.operador ? ' · ' + esc(v.operador) : '') + ' · ' + fecha
     + ' · Pago: ' + (nombresMet[v.metodo_pago] || v.metodo_pago) + '</span>'
-    + '<span class="badge badge-' + estado + '">' + (etiquetasEstado[estado] || estado) + '</span></div>';
+    + badgeHTML(estado) + '</div>';
 
   let html = '';
   (v.detalle || []).forEach(function(it){
@@ -613,10 +637,20 @@ function renderSeleccionados(){
 }
 
 function renderResumenSeleccion(){
-  const caja = document.getElementById('caja-resumen');
   const resumen = document.getElementById('sel-resumen');
-  if(!ventaActual){ caja.style.display = 'none'; return; }
-  caja.style.display = 'block';
+
+  // La caja siempre está en pantalla; sin ticket buscado se ve inactiva
+  // (montos en blanco, botones deshabilitados) en vez de desaparecer.
+  if(!ventaActual){
+    resumen.innerHTML = '<div class="total-line"><span>Total original</span><span>—</span></div>'
+      + '<div class="total-line grande"><span>A reembolsar ahora</span><span>—</span></div>'
+      + '<div class="acciones">'
+      + '<button class="btn-devolver" disabled>Devolver seleccionados</button>'
+      + '<button class="btn-cancelar-venta" disabled>Cancelar venta completa</button>'
+      + '</div>';
+    return;
+  }
+
   const estado = ventaActual.estado || 'activa';
   const cancelada = (estado === 'devuelta' || estado === 'cancelada' || estado === 'devolucion');
   const total = seleccion.reduce(function(s, i){ return s + i.precio_unitario * (parseFloat(i.cantidad) || 0); }, 0);
@@ -735,10 +769,9 @@ function extraerMensaje(detail, fallback){
 
 // ─── Ticket de devolucion / cancelacion ─────────────────────────────────
 let tkActual = null;
-let tkFueCancelacion = false;
 
 precargarLogosActivos();
-if(esEscritorio()) cargarUltimasTransacciones();
+if(esEscritorio()){ cargarUltimasTransacciones(); renderResumenSeleccion(); }
 
 function fmtPct(p){const n=Math.round((Number(p)||0)*100)/100;return (n%1===0)?String(n):n.toFixed(2).replace(/0$/,'');}
 
@@ -796,7 +829,6 @@ async function tkMostrar(idDevolucion, esCancelacion){
     const r = await authFetch('/api/ventas/' + idDevolucion);
     if(!r.ok) return;
     tkActual = await r.json();
-    tkFueCancelacion = !!esCancelacion;
     document.getElementById('tk-titulo').textContent = esCancelacion ? 'Comprobante de cancelación' : 'Comprobante de devolución';
     document.getElementById('tk-contenido').innerHTML = tkGenerarHTML(tkActual);
     document.getElementById('tk-modal').classList.add('open');
@@ -805,19 +837,16 @@ async function tkMostrar(idDevolucion, esCancelacion){
 
 function tkCerrar(){
   document.getElementById('tk-modal').classList.remove('open');
-  // Tras cancelar una venta completa no queda nada más que devolver en ese
-  // ticket: se regresa al inicio (últimas transacciones) en vez de dejar
-  // la venta ya cancelada abierta en pantalla.
-  if(tkFueCancelacion){
-    tkFueCancelacion = false;
-    ventaActual = null;
-    seleccion = [];
-    document.getElementById('num-ticket').value = '';
-    document.getElementById('num-ticket-movil').value = '';
-    document.getElementById('resultado').innerHTML = '';
-    renderListaIzquierda();
-    renderSeleccionados();
-  }
+  // "Nueva devolución": ya se hizo la devolución/cancelación de este ticket,
+  // así que se regresa al inicio de la pestaña (buscador vacío, últimas
+  // transacciones) en vez de dejar el mismo ticket abierto en pantalla.
+  ventaActual = null;
+  seleccion = [];
+  document.getElementById('num-ticket').value = '';
+  document.getElementById('num-ticket-movil').value = '';
+  document.getElementById('resultado').innerHTML = '';
+  renderListaIzquierda();
+  renderSeleccionados();
 }
 
 async function tkGenerarPDF(){
@@ -901,7 +930,7 @@ function tkImprimir(){
         <button class="tk-btn-sec" onclick="tkDescargar()">Descargar</button>
         <button class="tk-btn-sec" onclick="tkImprimir()">Imprimir</button>
       </div>
-      <button class="tk-btn-cerrar" onclick="tkCerrar()">Cerrar</button>
+      <button class="tk-btn-cerrar" onclick="tkCerrar()">Nueva devolución</button>
     </div>
   </div>
 </div>
