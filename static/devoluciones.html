@@ -507,7 +507,7 @@ async function cargarUltimasTransacciones(){
     // Los registros de devolución/cancelación son ventas propias con venta_origen_id
     // apuntando al ticket original; no son transacciones nuevas, así que no se listan aquí.
     // El estado (activa/parcial/devuelta) sí se muestra, en el ticket original.
-    ultimasCache = data.filter(function(v){ return !v.venta_origen_id; }).slice(0, 7);
+    ultimasCache = data.filter(function(v){ return !v.venta_origen_id; }).slice(0, 8);
     if(!ventaActual) renderListaIzquierda();
   }catch(e){}
 }
