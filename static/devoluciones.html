@@ -22,22 +22,22 @@
 :root{
   --bg:#f5f4f0;--bg2:#fff;--border:#e2e0d8;--text:#1a1a18;--text2:#6b6b66;
   --blue:#185fa5;--blue-bg:#e6f1fb;--green:#3b6d11;--green-bg:#eaf3de;
-  --red:#a32d2d;--red-bg:#fcebeb;--radius:10px
+  --red:#a32d2d;--red-bg:#fcebeb;--amber:#854f0b;--amber-bg:#faeeda;--radius:10px
 }
 @media(prefers-color-scheme:dark){:root{
   --bg:#1c1c1a;--bg2:#252522;--border:#3a3a36;--text:#e8e6dc;--text2:#9c9a92;
   --blue:#85b7eb;--blue-bg:#042c53;--green:#97c459;--green-bg:#173404;
-  --red:#f09595;--red-bg:#501313
+  --red:#f09595;--red-bg:#501313;--amber:#ef9f27;--amber-bg:#412402
 }}
 html.tema-oscuro{
   --bg:#1c1c1a;--bg2:#252522;--border:#3a3a36;--text:#e8e6dc;--text2:#9c9a92;
   --blue:#85b7eb;--blue-bg:#042c53;--green:#97c459;--green-bg:#173404;
-  --red:#f09595;--red-bg:#501313
+  --red:#f09595;--red-bg:#501313;--amber:#ef9f27;--amber-bg:#412402
 }
 html.tema-claro{
   --bg:#f5f4f0;--bg2:#fff;--border:#e2e0d8;--text:#1a1a18;--text2:#6b6b66;
   --blue:#185fa5;--blue-bg:#e6f1fb;--green:#3b6d11;--green-bg:#eaf3de;
-  --red:#a32d2d;--red-bg:#fcebeb;--radius:10px
+  --red:#a32d2d;--red-bg:#fcebeb;--amber:#854f0b;--amber-bg:#faeeda;--radius:10px
 }
 html.tema-oscuro .home-img{filter:invert(1)}
 html.tema-claro .home-img{filter:none}
@@ -123,15 +123,15 @@ button.primary:hover{opacity:.85;background:var(--text)}
 .buscador button{height:48px;padding:0 22px;border:none;border-radius:10px;background:var(--text);color:var(--bg2);font-weight:600;font-size:15px;cursor:pointer}
 
 .ticket-info{padding:.625rem 1rem;border-bottom:0.5px solid var(--border);font-size:12px;font-weight:600;display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;flex-shrink:0}
-.ticket-info.st-activa{background:var(--green-bg);color:var(--green);border-left:3px solid var(--green)}
-.ticket-info.st-parcial{background:var(--amber-bg);color:var(--amber);border-left:3px solid var(--amber)}
-.ticket-info.st-cancelada{background:var(--red-bg);color:var(--red);border-left:3px solid var(--red)}
+.ticket-info.st-activa{background:color-mix(in srgb, var(--green-bg) 55%, transparent);color:var(--green);border-left:3px solid color-mix(in srgb, var(--green) 65%, transparent)}
+.ticket-info.st-parcial{background:color-mix(in srgb, var(--amber-bg) 55%, transparent);color:var(--amber);border-left:3px solid color-mix(in srgb, var(--amber) 65%, transparent)}
+.ticket-info.st-cancelada{background:color-mix(in srgb, var(--red-bg) 55%, transparent);color:var(--red);border-left:3px solid color-mix(in srgb, var(--red) 65%, transparent)}
 .badge{display:inline-block;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:700}
-.badge-activa{background:var(--green-bg);color:var(--green)}
-.badge-parcial{background:var(--amber-bg);color:var(--amber)}
-.badge-cancelada{background:var(--red-bg);color:var(--red)}
-.badge-devuelta{background:var(--red-bg);color:var(--red)}
-.badge-devolucion{background:var(--red-bg);color:var(--red)}
+.badge-activa{background:color-mix(in srgb, var(--green-bg) 60%, transparent);color:var(--green)}
+.badge-parcial{background:color-mix(in srgb, var(--amber-bg) 60%, transparent);color:var(--amber)}
+.badge-cancelada{background:color-mix(in srgb, var(--red-bg) 60%, transparent);color:var(--red)}
+.badge-devuelta{background:color-mix(in srgb, var(--red-bg) 60%, transparent);color:var(--red)}
+.badge-devolucion{background:color-mix(in srgb, var(--red-bg) 60%, transparent);color:var(--red)}
 
 /* filas de transacciones recientes */
 .tx-row{display:flex;justify-content:space-between;align-items:center;padding:.75rem .875rem;border-radius:10px;cursor:pointer;gap:10px}
@@ -187,14 +187,15 @@ button.primary:hover{opacity:.85;background:var(--text)}
 </style>
 <style>
 .tk-head,.tk-foot{text-align:center;margin:8px 0}
-.tk-sub{font-size:12px;color:#000;text-align:center}
-#tk-contenido,#tk-contenido .tk-line,#tk-contenido .tk-total,#tk-contenido .tk-foot,#tk-contenido .tk-head{color:#000}
-#tk-contenido .tk-desc{color:#a32d2d}
+.tk-sub{font-size:12px;color:var(--text2);text-align:center}
 .tk-items{padding:8px 0;margin:8px 0}
 .tk-line{display:flex;justify-content:space-between;margin-bottom:3px}
 .tk-total{font-weight:700;font-size:16px;margin-top:8px;padding-top:8px}
 .tk-desc{color:var(--red)}
-#tk-contenido{background:#fff;border-radius:10px;padding:1.25rem;margin-bottom:1rem;color:#000;border:1px solid #00000014;box-shadow:0 2px 10px rgba(0,0,0,.12)}
+/* La vista en pantalla del comprobante sigue el tema de la app (claro/oscuro).
+   La versión que se descarga, comparte o imprime se genera aparte, siempre en
+   blanco y negro como un ticket de verdad — ver tkGenerarPDF() y tkImprimir(). */
+#tk-contenido{background:var(--bg2);border-radius:10px;padding:1.25rem;margin-bottom:1rem;color:var(--text);border:0.5px solid var(--border);box-shadow:0 2px 10px rgba(0,0,0,.12)}
 .tk-botones{display:flex;flex-direction:column;gap:8px;width:100%}
 .tk-botones .fila{display:flex;gap:8px;width:100%}
 .tk-btn-wa{width:100%;height:46px;border:none;border-radius:10px;background:#25D366;color:#fff;font-weight:700;font-size:15px;cursor:pointer;box-sizing:border-box;display:flex;align-items:center;justify-content:center;text-align:center}
@@ -506,7 +507,7 @@ async function cargarUltimasTransacciones(){
     // Los registros de devolución/cancelación son ventas propias con venta_origen_id
     // apuntando al ticket original; no son transacciones nuevas, así que no se listan aquí.
     // El estado (activa/parcial/devuelta) sí se muestra, en el ticket original.
-    ultimasCache = data.filter(function(v){ return !v.venta_origen_id; }).slice(0, 9);
+    ultimasCache = data.filter(function(v){ return !v.venta_origen_id; }).slice(0, 7);
     if(!ventaActual) renderListaIzquierda();
   }catch(e){}
 }
