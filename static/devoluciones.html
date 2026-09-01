@@ -106,7 +106,7 @@ button.primary:hover{opacity:.85;background:var(--text)}
 .pantalla{display:flex;flex-direction:column;gap:16px}
 .col-izq,.col-der{display:flex;flex-direction:column;gap:16px}
 .box{
-  background:color-mix(in srgb, var(--bg2) 70%, transparent);
+  background:color-mix(in srgb, var(--bg2) 55%, transparent);
   backdrop-filter:blur(16px) saturate(160%);
   -webkit-backdrop-filter:blur(16px) saturate(160%);
   border:0.5px solid var(--border);border-radius:14px;
@@ -306,6 +306,13 @@ function mostrarMsg(texto, tipo){
   el.textContent = texto;
 }
 function limpiarMsg(){ document.getElementById('msg-general').className = 'msg'; }
+
+let msgOkTimer = null;
+function mostrarMsgOk(texto){
+  mostrarMsg(texto, 'ok');
+  clearTimeout(msgOkTimer);
+  msgOkTimer = setTimeout(limpiarMsg, 10000);
+}
 
 async function buscarVenta(){
   const id = document.getElementById('num-ticket').value.trim();
@@ -731,10 +738,8 @@ async function confirmarMotivo(){
       return;
     }
     cerrarMotivo();
-    const el = document.getElementById('msg-general');
-    el.className = 'msg ok show';
-    el.textContent = (esDevolucion ? 'Devolución registrada: ' : 'Venta cancelada: ')
-      + money(data.monto_devuelto) + ' · Stock actualizado';
+    mostrarMsgOk((esDevolucion ? 'Devolución registrada: ' : 'Venta cancelada: ')
+      + money(data.monto_devuelto) + ' · Stock actualizado');
     document.getElementById('num-ticket').value = ventaActual.id;
     document.getElementById('num-ticket-movil').value = ventaActual.id;
     seleccion = [];
