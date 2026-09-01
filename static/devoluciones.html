@@ -86,6 +86,12 @@ button.primary:hover{opacity:.85;background:var(--text)}
   .topbar{padding:0 .625rem}.topbar-title{font-size:15px}.topbar-right{min-width:0}
   .container{padding:.875rem}.stat-value{font-size:16px}
 }
+@media(min-width:1024px){
+  .container{max-width:1100px}
+  .buscador{max-width:420px}
+  .venta-body{display:grid;grid-template-columns:1fr 360px;gap:32px;align-items:start}
+  .venta-side{position:sticky;top:78px}
+}
 
 </style>
 <style>
@@ -246,6 +252,8 @@ function renderVenta(){
 
   const cancelada = (estado === 'devuelta' || estado === 'cancelada' || estado === 'devolucion');
 
+  html += '<div class="venta-body"><div class="venta-items">';
+
   (v.detalle || []).forEach(function(it){
     const dev = (it.devuelto != null) ? it.devuelto : (yaDev[it.producto_id] || 0);
     const disp = (it.disponible_devolucion != null) ? it.disponible_devolucion : Math.round((it.cantidad - dev) * 1000) / 1000;
@@ -261,6 +269,8 @@ function renderVenta(){
       + (disp <= 0 || cancelada ? ' disabled' : '') + '>'
       + '</div>';
   });
+
+  html += '</div><div class="venta-side">';
 
   const neto = v.total - (v.total_devuelto || 0);
   html += '<div class="totales">';
@@ -287,7 +297,7 @@ function renderVenta(){
     html += '</div>';
   }
 
-  html += '</div>';
+  html += '</div></div></div>';
   document.getElementById('resultado').innerHTML = html;
 }
 
