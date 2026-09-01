@@ -86,6 +86,21 @@ button.primary:hover{opacity:.85;background:var(--text)}
   .topbar{padding:0 .625rem}.topbar-title{font-size:15px}.topbar-right{min-width:0}
   .container{padding:.875rem}.stat-value{font-size:16px}
 }
+
+/* ─── Vista móvil (sin cambios respecto a la versión anterior) ────────── */
+.venta-card{background:var(--bg2);border:0.5px solid var(--border);border-radius:14px;padding:1.25rem;margin-bottom:1rem}
+.venta-head{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:.875rem;padding-bottom:.875rem;border-bottom:0.5px solid var(--border)}
+.venta-id{font-size:18px;font-weight:700}
+.venta-meta{font-size:12px;color:var(--text2);margin-top:2px}
+.item-row{display:flex;align-items:center;gap:10px;padding:.75rem 0;border-bottom:0.5px solid var(--border)}
+.item-row:last-child{border-bottom:none}
+.item-info{flex:1;min-width:0}
+.item-nombre{font-size:14px;font-weight:600}
+.item-sub{font-size:12px;color:var(--text2);margin-top:2px}
+.item-cant{width:78px;height:40px;padding:0 8px;border:0.5px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:15px;text-align:center}
+.item-cant:disabled{opacity:.4}
+
+#vista-escritorio{display:none}
 </style>
 <style>
 .pantalla{display:flex;flex-direction:column;gap:16px}
@@ -151,7 +166,8 @@ button.primary:hover{opacity:.85;background:var(--text)}
 
 @media(min-width:1024px){
   .container{max-width:1200px}
-  .pantalla{display:grid;grid-template-columns:1fr 380px;gap:24px;height:calc(100vh - 54px - 2.5rem)}
+  #vista-movil{display:none}
+  #vista-escritorio{display:grid;grid-template-columns:1fr 380px;gap:24px;height:calc(100vh - 54px - 2.5rem)}
   .col-izq,.col-der{min-height:0}
   .box.box-lista,.box.box-devolver{flex:1;min-height:0}
   .box-body{overflow-y:auto}
@@ -188,7 +204,18 @@ button.primary:hover{opacity:.85;background:var(--text)}
 <div class="container">
   <div class="msg" id="msg-general"></div>
 
-  <div class="pantalla">
+  <!-- Vista móvil: sin cambios respecto a la versión anterior -->
+  <div id="vista-movil">
+    <div class="buscador" style="margin-bottom:1.25rem">
+      <input type="number" id="num-ticket-movil" placeholder="Número de ticket (ej. 95)" inputmode="numeric" onkeydown="if(event.key==='Enter')buscarVentaMovil()">
+      <button onclick="buscarVentaMovil()">Buscar</button>
+    </div>
+    <div id="resultado"></div>
+  </div>
+
+  <!-- Vista de escritorio: buscador + lista siempre visibles a la izquierda,
+       artículos marcados para devolver en una caja fija a la derecha -->
+  <div id="vista-escritorio" class="pantalla">
     <div class="col-izq">
       <div class="box box-buscar">
         <div class="box-header">Buscar transacción</div>
@@ -297,6 +324,150 @@ function disponibleDe(it){
   const yaDev = devueltoPorProducto();
   const dev = (it.devuelto != null) ? it.devuelto : (yaDev[it.producto_id] || 0);
   return (it.disponible_devolucion != null) ? it.disponible_devolucion : Math.round((it.cantidad - dev) * 1000) / 1000;
+}
+
+function esEscritorio(){ return window.matchMedia('(min-width:1024px)').matches; }
+
+// ─── Vista móvil: idéntica a la versión anterior, no se toca en este cambio ─
+async function buscarVentaMovil(){
+  const id = document.getElementById('num-ticket-movil').value.trim();
+  limpiarMsg();
+  document.getElementById('resultado').innerHTML = '';
+  ventaActual = null;
+  if(!id){ mostrarMsg('Escribe el número de ticket'); return; }
+
+  try{
+    const r = await authFetch('/api/ventas/' + id);
+    if(r.status === 404){ mostrarMsg('No existe una venta con el ticket #' + id); return; }
+    if(!r.ok){ mostrarMsg('No se pudo consultar la venta'); return; }
+    ventaActual = await r.json();
+    renderVentaMovil();
+  }catch(e){ mostrarMsg('Error de conexión'); }
+}
+
+function renderVentaMovil(){
+  const v = ventaActual;
+  const estado = v.estado || 'activa';
+  const yaDev = devueltoPorProducto();
+  const fecha = new Date(v.fecha).toLocaleString('es-MX').replace(',', '');
+  const nombresMet = {efectivo:'Efectivo', tarjeta:'Tarjeta', credito:'Crédito', transferencia:'Transferencia'};
+  const etiquetasEstado = {activa:'Activa', parcial:'Devolución parcial', devuelta:'Devuelta / Cancelada', cancelada:'Cancelada', devolucion:'Devolución'};
+
+  let html = '<div class="venta-card">';
+  html += '<div class="venta-head"><div>'
+    + '<div class="venta-id">Ticket #' + v.id + '</div>'
+    + '<div class="venta-meta">' + fecha + '</div>'
+    + '<div class="venta-meta">' + esc(v.sucursal || '') + (v.operador ? ' · ' + esc(v.operador) : '') + '</div>'
+    + '<div class="venta-meta">Pago: ' + (nombresMet[v.metodo_pago] || v.metodo_pago) + '</div>'
+    + '</div>'
+    + '<span class="badge badge-' + estado + '">' + (etiquetasEstado[estado] || estado) + '</span>'
+    + '</div>';
+
+  const cancelada = (estado === 'devuelta' || estado === 'cancelada' || estado === 'devolucion');
+
+  (v.detalle || []).forEach(function(it){
+    const dev = (it.devuelto != null) ? it.devuelto : (yaDev[it.producto_id] || 0);
+    const disp = (it.disponible_devolucion != null) ? it.disponible_devolucion : Math.round((it.cantidad - dev) * 1000) / 1000;
+    html += '<div class="item-row">'
+      + '<div class="item-info">'
+      + '<div class="item-nombre">' + esc(it.nombre) + '</div>'
+      + '<div class="item-sub">' + it.cantidad + ' x ' + money(it.precio_unitario)
+      + (dev > 0 ? ' · <span style="color:var(--amber)">' + dev + ' devuelto(s)</span>' : '')
+      + '</div></div>'
+      + '<input type="number" class="item-cant" id="dev-' + it.producto_id + '" min="0" max="' + disp + '" step="any" placeholder="0"'
+      + ' data-disp="' + disp + '" data-nombre="' + esc(it.nombre).replace(/"/g, '&quot;') + '"'
+      + ' oninput="validarCantidadMovil(this)"'
+      + (disp <= 0 || cancelada ? ' disabled' : '') + '>'
+      + '</div>';
+  });
+
+  const neto = v.total - (v.total_devuelto || 0);
+  html += '<div class="totales">';
+  html += '<div class="total-line"><span>Total original</span><span>' + money(v.total) + '</span></div>';
+  if(v.total_devuelto > 0){
+    html += '<div class="total-line" style="color:var(--red)"><span>Devuelto</span><span>-' + money(v.total_devuelto) + '</span></div>';
+  }
+  html += '<div class="total-line grande"><span>Neto</span><span>' + money(neto) + '</span></div>';
+  html += '</div>';
+
+  html += '<div class="acciones">'
+    + '<button class="btn-devolver" onclick="pedirMotivoDevolucionMovil()"' + (cancelada ? ' disabled' : '') + '>Devolver seleccionados</button>'
+    + '<button class="btn-cancelar-venta" onclick="pedirMotivoCancelacionMovil()"' + (cancelada ? ' disabled' : '') + '>Cancelar venta completa</button>'
+    + '</div>';
+
+  if((v.devoluciones || []).length){
+    html += '<div class="hist-dev"><div class="hist-dev-title">Devoluciones registradas</div>';
+    v.devoluciones.forEach(function(d){
+      const f = new Date(d.fecha).toLocaleString('es-MX').replace(',', '');
+      html += '<div class="hist-dev-item">• ' + d.cantidad + ' x ' + esc(d.nombre) + ' — ' + money(d.importe)
+        + '<br><span style="opacity:.8">' + f + ' · ' + esc(d.operador || '')
+        + (d.motivo ? ' · ' + esc(d.motivo) : '') + '</span></div>';
+    });
+    html += '</div>';
+  }
+
+  html += '</div>';
+  document.getElementById('resultado').innerHTML = html;
+}
+
+function validarCantidadMovil(el){
+  const disp = parseFloat(el.dataset.disp || '0');
+  const nombre = el.dataset.nombre || 'este artículo';
+  const val = parseFloat(el.value);
+  if(isNaN(val)) { limpiarMsg(); return; }
+  if(val < 0){ el.value = ''; return; }
+  if(val > disp){
+    el.value = disp;
+    mostrarMsg('Solo puedes devolver ' + disp + ' de "' + nombre + '" (es lo que queda del ticket)');
+  }else{
+    limpiarMsg();
+  }
+}
+
+function recolectarItemsMovil(){
+  const items = [];
+  const yaDev = devueltoPorProducto();
+  let excedido = null;
+  (ventaActual.detalle || []).forEach(function(it){
+    const el = document.getElementById('dev-' + it.producto_id);
+    if(!el || el.disabled) return;
+    const cant = parseFloat(el.value);
+    if(isNaN(cant) || cant <= 0) return;
+    const disp = Math.round((it.cantidad - (yaDev[it.producto_id] || 0)) * 1000) / 1000;
+    if(cant > disp + 0.0001){
+      excedido = {nombre: it.nombre, disp: disp, pedido: cant};
+      return;
+    }
+    items.push({producto_id: it.producto_id, cantidad: cant});
+  });
+  if(excedido){
+    mostrarMsg('No puedes devolver ' + excedido.pedido + ' de "' + excedido.nombre
+      + '": solo quedan ' + excedido.disp + ' por devolver');
+    return null;
+  }
+  return items;
+}
+
+function pedirMotivoDevolucionMovil(){
+  limpiarMsg();
+  const items = recolectarItemsMovil();
+  if(items === null) return;
+  if(!items.length){ mostrarMsg('Escribe la cantidad a devolver en al menos un artículo'); return; }
+  const total = items.reduce(function(s, i){
+    const linea = ventaActual.detalle.find(function(x){ return x.producto_id === i.producto_id; });
+    return s + (linea ? linea.precio_unitario * i.cantidad : 0);
+  }, 0);
+  accionPendiente = {tipo: 'devolucion', items: items};
+  abrirMotivo('Devolver artículos',
+    items.length + ' artículo(s) · Se reembolsarán ' + money(total));
+}
+
+function pedirMotivoCancelacionMovil(){
+  limpiarMsg();
+  const neto = ventaActual.total - (ventaActual.total_devuelto || 0);
+  accionPendiente = {tipo: 'cancelacion'};
+  abrirMotivo('Cancelar venta completa',
+    'Se devolverá todo lo pendiente del ticket #' + ventaActual.id + ' · ' + money(neto));
 }
 
 // ─── Caja izquierda: últimas transacciones, o artículos del ticket buscado ──
@@ -522,9 +693,10 @@ async function confirmarMotivo(){
     el.textContent = (esDevolucion ? 'Devolución registrada: ' : 'Venta cancelada: ')
       + money(data.monto_devuelto) + ' · Stock actualizado';
     document.getElementById('num-ticket').value = ventaActual.id;
+    document.getElementById('num-ticket-movil').value = ventaActual.id;
     seleccion = [];
     buscarVentaSilencioso();
-    cargarUltimasTransacciones();
+    if(esEscritorio()) cargarUltimasTransacciones();
     if(data.id_devolucion) tkMostrar(data.id_devolucion, !esDevolucion);
   }catch(e){
     msg.className = 'msg error show';
@@ -537,6 +709,7 @@ async function buscarVentaSilencioso(){
     const r = await authFetch('/api/ventas/' + ventaActual.id);
     if(r.ok){
       ventaActual = await r.json();
+      renderVentaMovil();
       renderListaIzquierda();
       renderSeleccionados();
     }
@@ -556,7 +729,7 @@ function extraerMensaje(detail, fallback){
 let tkActual = null;
 
 precargarLogosActivos();
-cargarUltimasTransacciones();
+if(esEscritorio()) cargarUltimasTransacciones();
 
 function fmtPct(p){const n=Math.round((Number(p)||0)*100)/100;return (n%1===0)?String(n):n.toFixed(2).replace(/0$/,'');}
 
