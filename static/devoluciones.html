@@ -105,16 +105,16 @@ button.primary:hover{opacity:.85;background:var(--text)}
 <style>
 .pantalla{display:flex;flex-direction:column;gap:16px}
 .col-izq,.col-der{display:flex;flex-direction:column;gap:16px}
+/* Mismo lenguaje visual que /pagos: el título es una etiqueta suelta arriba
+   de la caja (.section-title), no una barra con fondo dentro de ella. */
+.section-title{font-size:13px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin:0 0 0 2px;flex-shrink:0;display:flex;justify-content:space-between}
+.section-title .contador{color:var(--text)}
 .box{
   background:var(--bg2);
-  border:0.5px solid var(--border);border-radius:14px;
-  box-shadow:0 1px 3px rgba(0,0,0,.05), 0 1px 2px rgba(0,0,0,.03);
+  border:0.5px solid var(--border);border-radius:12px;
   display:flex;flex-direction:column;overflow:hidden;contain:paint
 }
-.box-header{padding:.875rem 1rem;border-bottom:0.5px solid var(--border);font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
-.box-header .contador{color:var(--text);font-weight:700}
-.box-body{padding:.625rem}
-.box-buscar .box-body{padding:1rem}
+.box-body{padding:0}
 
 .buscador{display:flex;gap:8px}
 .buscador input{flex:1;height:48px;padding:0 14px;border:0.5px solid var(--border);border-radius:10px;background:var(--bg2);color:var(--text);font-size:16px}
@@ -131,8 +131,9 @@ button.primary:hover{opacity:.85;background:var(--text)}
 .badge-devuelta{background:color-mix(in srgb, var(--red-bg) 60%, transparent);color:var(--red)}
 .badge-devolucion{background:color-mix(in srgb, var(--red-bg) 60%, transparent);color:var(--red)}
 
-/* filas de transacciones recientes */
-.tx-row{display:flex;justify-content:space-between;align-items:center;padding:.75rem .875rem;border-radius:10px;cursor:pointer;gap:10px}
+/* filas de transacciones recientes -- divididas por línea, como .cart-item en /pagos */
+.tx-row{display:flex;justify-content:space-between;align-items:center;padding:.75rem 1rem;border-bottom:0.5px solid var(--border);cursor:pointer;gap:10px}
+.tx-row:last-child{border-bottom:none}
 .tx-row:hover{background:var(--bg)}
 .tx-id{font-weight:700;font-size:14px}
 .tx-meta{font-size:12px;color:var(--text2);margin-top:2px}
@@ -140,7 +141,8 @@ button.primary:hover{opacity:.85;background:var(--text)}
 .tx-total{font-size:15px;font-weight:700;color:var(--green);white-space:nowrap;display:block;margin-bottom:4px}
 
 /* filas de articulos disponibles para marcar */
-.art-row{display:flex;align-items:center;gap:10px;padding:.75rem .875rem;border-radius:10px}
+.art-row{display:flex;align-items:center;gap:10px;padding:.75rem 1rem;border-bottom:0.5px solid var(--border)}
+.art-row:last-child{border-bottom:none}
 .art-row.agregado{background:var(--blue-bg)}
 .art-info{flex:1;min-width:0}
 .art-nombre{font-size:14px;font-weight:600}
@@ -150,8 +152,8 @@ button.primary:hover{opacity:.85;background:var(--text)}
 .btn-agregar:disabled{opacity:.5;cursor:default;background:transparent !important;color:var(--text2) !important;border-color:var(--border) !important}
 
 /* caja "para devolver" */
-.sel-row{display:flex;align-items:center;gap:8px;padding:.7rem .875rem;border-radius:10px}
-.sel-row:hover{background:var(--bg)}
+.sel-row{display:flex;align-items:center;gap:8px;padding:.75rem 1rem;border-bottom:0.5px solid var(--border)}
+.sel-row:last-child{border-bottom:none}
 .sel-info{flex:1;min-width:0}
 .sel-nombre{font-size:13px;font-weight:600}
 .sel-sub{font-size:11px;color:var(--text2);margin-top:2px}
@@ -162,12 +164,13 @@ button.primary:hover{opacity:.85;background:var(--text)}
 .vacio{text-align:center;padding:2.5rem 1.25rem;color:var(--text2);font-size:13px;line-height:1.6}
 
 .box-resumen{flex-shrink:0}
-.resumen{padding:.875rem 1rem}
-.total-line{display:flex;justify-content:space-between;margin-bottom:5px;font-size:14px}
-.total-line.grande{font-size:17px;font-weight:700;margin-top:8px}
+.resumen{padding:1rem 1.25rem}
+.total-line{display:flex;justify-content:space-between;margin-bottom:4px;font-size:14px;color:var(--text2)}
+.total-line.grande{font-size:20px;font-weight:700;margin-top:6px;color:var(--text)}
 .acciones{display:flex;gap:8px;margin-top:.875rem;flex-wrap:wrap}
-.btn-devolver{flex:1;min-width:150px;height:48px;border:none;border-radius:10px;background:var(--amber);color:#fff;font-weight:700;font-size:14px;cursor:pointer}
-.btn-cancelar-venta{flex:1;min-width:150px;height:48px;border:0.5px solid var(--red);border-radius:10px;background:var(--red-bg);color:var(--red);font-weight:700;font-size:14px;cursor:pointer}
+.acciones button{flex:1;min-width:150px;height:48px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;border:0.5px solid var(--border);background:transparent;color:var(--text)}
+.btn-devolver{background:var(--amber-bg);color:var(--amber);border-color:transparent}
+.btn-cancelar-venta{background:var(--red-bg);color:var(--red);border-color:transparent}
 .btn-devolver:disabled,.btn-cancelar-venta:disabled{opacity:.4;cursor:not-allowed}
 
 .hist-dev{margin:.625rem .875rem;padding:.875rem;background:var(--bg);border-radius:10px}
@@ -181,6 +184,11 @@ button.primary:hover{opacity:.85;background:var(--text)}
   .col-izq,.col-der{min-height:0}
   .box.box-lista,.box.box-devolver{flex:1;min-height:0}
   .box-body{flex:1;min-height:0;overflow-y:auto;contain:paint}
+  /* El buscador de escritorio usa el mismo botón "fantasma" (borde + bg2)
+     que el resto de los controles de /pagos, en vez del botón negro sólido
+     de la versión móvil. */
+  #vista-escritorio .buscador input,#vista-escritorio .buscador button{height:46px}
+  #vista-escritorio .buscador button{border:0.5px solid var(--border);background:var(--bg2);color:var(--text)}
 }
 </style>
 <style>
@@ -228,26 +236,21 @@ button.primary:hover{opacity:.85;background:var(--text)}
        artículos marcados para devolver en una caja fija a la derecha -->
   <div id="vista-escritorio" class="pantalla">
     <div class="col-izq">
-      <div class="box box-buscar">
-        <div class="box-header">Buscar transacción</div>
-        <div class="box-body">
-          <div class="buscador">
-            <input type="number" id="num-ticket" placeholder="Número de ticket (ej. 95)" inputmode="numeric" onkeydown="if(event.key==='Enter')buscarVenta()">
-            <button onclick="buscarVenta()">Buscar</button>
-          </div>
-        </div>
+      <div class="buscador">
+        <input type="number" id="num-ticket" placeholder="Número de ticket (ej. 95)" inputmode="numeric" onkeydown="if(event.key==='Enter')buscarVenta()">
+        <button onclick="buscarVenta()">Buscar</button>
       </div>
 
+      <div class="section-title" id="lista-titulo">Últimas transacciones</div>
       <div class="box box-lista">
-        <div class="box-header" id="lista-titulo">Últimas transacciones</div>
         <div id="lista-ticket-info"></div>
         <div class="box-body" id="lista-contenido"><div class="vacio">Cargando…</div></div>
       </div>
     </div>
 
     <div class="col-der">
+      <div class="section-title">Para devolver <span class="contador" id="sel-contador"></span></div>
       <div class="box box-devolver">
-        <div class="box-header">Para devolver <span class="contador" id="sel-contador"></span></div>
         <div class="box-body" id="sel-contenido"><div class="vacio">Busca un ticket y marca los artículos<br>que quieras devolver.<br>Aparecerán aquí.</div></div>
       </div>
 
