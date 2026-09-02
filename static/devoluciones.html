@@ -141,7 +141,9 @@ button.primary:hover{opacity:.85;background:var(--text)}
 .tx-id{font-weight:700;font-size:14px}
 .tx-meta{font-size:12px;color:var(--text2);margin-top:2px}
 .tx-right{text-align:right;flex-shrink:0}
-.tx-total{font-size:15px;font-weight:700;color:var(--green);white-space:nowrap;display:block;margin-bottom:4px}
+/* Mismo color que .res-price en /pagos: el acento de la tienda (--blue, que
+   auth.js remapea por sucursal), no el verde semántico. */
+.tx-total{font-size:15px;font-weight:700;color:var(--blue);white-space:nowrap;display:block;margin-bottom:4px}
 
 /* filas de articulos disponibles para marcar */
 .art-row{display:flex;align-items:center;gap:10px;padding:.75rem .875rem;border-radius:10px}
@@ -185,6 +187,12 @@ button.primary:hover{opacity:.85;background:var(--text)}
   .col-izq,.col-der{min-height:0}
   .box.box-lista,.box.box-devolver{flex:1;min-height:0}
   .box-body{flex:1;min-height:0;overflow-y:auto}
+  /* Mismos colores de texto que la barra de totales de /pagos: las líneas de
+     concepto en --text2 (.linea) y el total en --text (.linea-total). Va aquí
+     dentro y no en la regla base porque .total-line también la usa la vista
+     móvil, que no se toca. */
+  .total-line{color:var(--text2)}
+  .total-line.grande{color:var(--text)}
 }
 </style>
 <style>
@@ -669,7 +677,7 @@ function renderResumenSeleccion(){
   if(ventaActual.total_devuelto > 0){
     html += '<div class="total-line" style="color:var(--red)"><span>Ya devuelto</span><span>-' + money(ventaActual.total_devuelto) + '</span></div>';
   }
-  html += '<div class="total-line grande"><span>A reembolsar ahora</span><span style="color:var(--amber)">' + money(total) + '</span></div>';
+  html += '<div class="total-line grande"><span>A reembolsar ahora</span><span>' + money(total) + '</span></div>';
   html += '<div class="acciones">'
     + '<button class="btn-devolver" onclick="pedirMotivoDevolucion()"' + (cancelada || !seleccion.length ? ' disabled' : '') + '>Devolver seleccionados</button>'
     + '<button class="btn-cancelar-venta" onclick="pedirMotivoCancelacion()"' + (cancelada ? ' disabled' : '') + '>Cancelar venta completa</button>'
