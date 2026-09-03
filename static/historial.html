@@ -147,7 +147,7 @@ button.primary:hover{opacity:.85;background:var(--text)}
     <div class="stat"><div class="stat-label">Efectivo</div><div class="stat-value" id="s-efectivo">—</div></div>
     <div class="stat"><div class="stat-label">Tarjeta</div><div class="stat-value" id="s-tarjeta">—</div></div>
     <div class="stat"><div class="stat-label">Ticket promedio</div><div class="stat-value" id="s-prom">—</div></div>
-    <div class="stat"><div class="stat-label">💰 Abonos cobrados</div><div class="stat-value" id="s-abonos" style="color:var(--blue)">—</div></div>
+    <div class="stat"><div class="stat-label">💰 Cobros recibidos</div><div class="stat-value" id="s-abonos" style="color:var(--blue)">—</div></div>
   </div>
 
   <div class="lista" id="lista"></div>
@@ -161,7 +161,7 @@ button.primary:hover{opacity:.85;background:var(--text)}
   <!-- Detalle de los abonos cobrados en el periodo. Faltaba: renderAbonos()
        existía desde siempre, pero nunca llegó a ejecutarse porque el endpoint
        de abonos devolvía 422 por un orden de rutas equivocado. -->
-  <div class="section-title" id="abonos-titulo" style="font-size:13px;font-weight:600;color:var(--text2);margin:1.5rem 0 .75rem;text-transform:uppercase;letter-spacing:.5px;display:none">💰 Abonos cobrados</div>
+  <div class="section-title" id="abonos-titulo" style="font-size:13px;font-weight:600;color:var(--text2);margin:1.5rem 0 .75rem;text-transform:uppercase;letter-spacing:.5px;display:none">💰 Cobros de crédito y pedidos</div>
   <div class="card" id="abonos-lista" style="display:none"></div>
 </div>
 
@@ -264,10 +264,12 @@ function renderAbonos(lista){
     const esCondonado=a.metodo_pago==='condonado';
     const met=etiquetasMet[a.metodo_pago]||'💵 Efectivo';
     const autorizo=a.autorizado_por?` · Autorizó: ${esc(a.autorizado_por)}`:'';
+    const tipo={anticipo:'Anticipo',liquidacion:'Liquidación',abono:'Abono'}[a.tipo_movimiento]||'Abono';
+    const pedido=a.venta_id && a.tipo_movimiento!=='abono' ? ` de pedido #${a.venta_id}` : '';
     const ref = a.tpv_referencia || a.transferencia_referencia
       ? `<div style="font-size:11px;color:var(--text2)">Ref: ${esc(a.tpv_referencia||a.transferencia_referencia)}${a.tpv_autorizacion?' · Aut: '+esc(a.tpv_autorizacion):''}</div>` : '';
     return `<div class="hist-row" onclick="verAbono(${a.id})" style="display:flex;justify-content:space-between;padding:.75rem 1rem;border-bottom:0.5px solid var(--border);cursor:pointer">
-      <span>👤 ${esc(a.cliente_nombre)}${a.nota?' · '+esc(a.nota):''}<div style="font-size:11px;color:var(--text2)">${fecha} · ${esc(a.operador||'')}${a.sucursal?' · Suc. '+esc(a.sucursal):''} · ${met}${autorizo}</div>${ref}</span>
+      <span><b>${tipo}${pedido}</b> · ${esc(a.cliente_nombre)}${a.nota?' · '+esc(a.nota):''}<div style="font-size:11px;color:var(--text2)">${fecha} · ${esc(a.operador||'')}${a.sucursal?' · Suc. '+esc(a.sucursal):''} · ${met}${autorizo}</div>${ref}</span>
       <span style="color:${esCondonado?'var(--red)':'var(--blue)'};font-weight:600">+${money(a.monto)}</span>
     </div>`;
   }).join('');
@@ -335,7 +337,9 @@ function render(){
     const titulo = esDev
       ? `<div class="v-id" style="color:var(--red)">↩️ Devolución #${v.id}</div>`
         + (v.venta_origen_id?`<div class="v-items">del ticket #${v.venta_origen_id}</div>`:'')
-      : `<div class="v-id">Venta #${v.id}</div>`;
+      : v.es_anticipo
+        ? `<div class="v-id">Pedido #${v.id} liquidado</div>${v.fecha_pedido?`<div class="v-items">Pedido tomado el ${new Date(v.fecha_pedido).toLocaleDateString('es-MX')}</div>`:''}`
+        : `<div class="v-id">Venta #${v.id}</div>`;
     const badgeEstado = (!esDev && (v.estado==='parcial'||v.estado==='devuelta'))
       ? `<div class="v-items" style="color:var(--amber)">${v.estado==='devuelta'?'Devuelta por completo':'Con devolución parcial'}</div>`
       : '';

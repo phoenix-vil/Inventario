@@ -99,6 +99,9 @@ class Venta(Base):
     # pagando con PagoCredito.venta_id apuntándole directo a esta venta, en
     # vez de repartirse FIFO como un abono genérico. False para todo lo demás.
     es_anticipo = Column(Boolean, default=False)
+    # Los pedidos con anticipo cuentan como venta hasta recibir el último pago.
+    # Conservamos creado_en como fecha del pedido y esta como fecha contable.
+    liquidado_en = Column(DateTime, nullable=True)
     total_devuelto = Column(Float, default=0.0)
     devoluciones_json = Column(String, nullable=True)
     creado_en = Column(DateTime, default=datetime.utcnow)
@@ -227,9 +230,9 @@ class Cliente(Base):
     sucursal = Column(String, nullable=True, index=True)
     # 1, 2 o 3 para los clientes de mayoreo; nulo = precio de mostrador
     nivel_precio = Column(Integer, nullable=True)
-    # Dado de alta solo para un anticipo (El Zar del LED): se borra solo en
-    # cuanto su saldo llega a $0, a diferencia de un cliente de crédito
-    # normal, que se queda en la cartera aunque ya no deba nada.
+    # Dado de alta desde el flujo de pedidos/anticipos (El Zar del LED). Se
+    # conserva al liquidarse para poder reutilizarlo en compras posteriores,
+    # pero se presenta separado de los clientes con cuenta de crédito.
     temporal = Column(Boolean, default=False)
     creado_en = Column(DateTime, default=datetime.utcnow)
 

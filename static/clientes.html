@@ -47,6 +47,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .search-bar{margin-bottom:1.25rem}
 .search-bar input{width:100%;height:46px;padding:0 16px;border:0.5px solid var(--border);border-radius:12px;background:var(--bg2);color:var(--text);font-size:15px;font-family:inherit}
 .search-bar input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px color-mix(in srgb,var(--blue) 18%,transparent)}
+.tabs-clientes{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:1rem}
+.tabs-clientes button{height:44px;border:0.5px solid var(--border);border-radius:11px;background:var(--bg2);color:var(--text2);font-size:13px;font-weight:700;cursor:pointer}
+.tabs-clientes button.activo{background:var(--blue-bg);border-color:var(--blue);color:var(--blue)}
 
 .card{background:var(--bg2);border:0.5px solid var(--border);border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
 .grid-clientes{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start}
@@ -122,17 +125,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </div>
 
 <div class="container">
-  <button class="btn-agregar" onclick="abrirNuevoCliente()">+ Nuevo cliente</button>
+  <button class="btn-agregar" id="btn-nuevo-cliente" onclick="abrirNuevoCliente()">+ Nuevo cliente</button>
 
   <div class="stats-grid">
     <div class="stat">
-      <div class="stat-label">Cuentas por cobrar</div>
+      <div class="stat-label" id="st-total-label">Cuentas por cobrar</div>
       <div class="stat-value red" id="st-total">—</div>
     </div>
     <div class="stat">
-      <div class="stat-label">Clientes con saldo</div>
+      <div class="stat-label" id="st-num-label">Clientes con saldo</div>
       <div class="stat-value" id="st-num">—</div>
     </div>
+  </div>
+
+  <div class="tabs-clientes">
+    <button id="tab-credito" class="activo" onclick="cambiarVistaClientes('credito')">Cuenta de crédito</button>
+    <button id="tab-pedidos" onclick="cambiarVistaClientes('pedidos')">Pedidos y anticipos</button>
   </div>
 
   <div class="search-bar">
@@ -177,7 +185,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="detalle-saldo-label">Saldo pendiente</div>
       <div class="detalle-saldo-valor" id="detalle-saldo-valor">$0.00</div>
     </div>
-    <button class="btn-abono" onclick="mostrarFormAbono()">💰 Registrar abono</button>
+    <button class="btn-abono" id="btn-registrar-abono" onclick="mostrarFormAbono()">💰 Registrar abono</button>
     <button class="btn-abono" id="btn-liquidar" onclick="abrirLiquidar()" style="display:none;background:var(--bg2);color:var(--red);border:0.5px solid var(--red)">🧾 Liquidar cuenta (poner en $0)</button>
     <div id="form-abono" style="display:none;margin-bottom:1.25rem;padding:.875rem;background:var(--bg);border-radius:10px">
       <div class="field"><label>Monto del abono *</label><input type="number" id="ab-monto" min="0" step="0.01" placeholder="0.00"></div>
@@ -240,35 +248,47 @@ if(_sesionActual && _sesionActual.rol === 'gerente'){
 
 let clientesCache = [];
 let clienteActualId = null;
+let vistaClientes = 'credito';
 
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function money(n){return '$'+Number(n||0).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});}
 
 async function cargarClientes(){
   try{
-    const [rLista, rResumen] = await Promise.all([
-      authFetch('/api/clientes'),
-      authFetch('/api/clientes-resumen').catch(()=>null),
-    ]);
+    const rLista = await authFetch('/api/clientes');
     clientesCache = await rLista.json();
-    renderClientes(clientesCache);
-
-    if(rResumen && rResumen.ok){
-      const resumen = await rResumen.json();
-      document.getElementById('st-total').textContent = money(resumen.total_por_cobrar);
-      document.getElementById('st-num').textContent = resumen.num_clientes_con_saldo;
-    } else {
-      document.getElementById('st-total').style.display='none';
-      document.getElementById('st-num').style.display='none';
-    }
+    filtrarClientes();
   }catch(e){
     document.getElementById('lista-clientes').innerHTML = '<div class="card"><div class="empty">Error al cargar</div></div>';
   }
 }
 
+function cambiarVistaClientes(vista){
+  vistaClientes = vista;
+  document.getElementById('tab-credito').classList.toggle('activo', vista === 'credito');
+  document.getElementById('tab-pedidos').classList.toggle('activo', vista === 'pedidos');
+  document.getElementById('btn-nuevo-cliente').style.display = vista === 'credito' ? '' : 'none';
+  filtrarClientes();
+}
+
 function filtrarClientes(){
   const q = document.getElementById('buscar').value.toLowerCase();
-  const filtrados = clientesCache.filter(c => c.nombre.toLowerCase().includes(q));
+  const base = vistaClientes === 'credito'
+    ? clientesCache.filter(c => c.es_cliente_credito)
+    : clientesCache.filter(c => c.tiene_pedidos);
+  const filtrados = base.filter(c => c.nombre.toLowerCase().includes(q));
+
+  if(vistaClientes === 'credito'){
+    document.getElementById('st-total-label').textContent = 'Cuentas por cobrar';
+    document.getElementById('st-num-label').textContent = 'Clientes con saldo';
+    document.getElementById('st-total').textContent = money(base.reduce((s,c)=>s+(c.saldo_credito||0),0));
+    document.getElementById('st-num').textContent = base.filter(c=>c.saldo_credito>0.01).length;
+  }else{
+    document.getElementById('st-total-label').textContent = 'Saldo pendiente en pedidos';
+    document.getElementById('st-num-label').textContent = 'Pedidos por liquidar';
+    document.getElementById('st-total').textContent = money(base.reduce((s,c)=>s+(c.saldo_pedidos||0),0));
+    document.getElementById('st-num').textContent = base.reduce((s,c)=>s+(c.pedidos_pendientes||0),0);
+  }
   renderClientes(filtrados);
 }
 
@@ -305,10 +325,13 @@ function errorTelefono(digitos){
 // a la izquierda y saldo a la derecha en la misma línea, así que el saldo va
 // debajo, junto al teléfono.
 function filaCliente(c){
-  const saldoHtml = c.saldo>0
-    ? `<span class="cliente-saldo debe">${money(c.saldo)}</span>`
-    : `<span class="cliente-saldo sin-deuda">Sin saldo</span>`;
-  const sub = c.telefono ? esc(formatearTel(c.telefono)) : (c.nivel_precio ? 'Precio '+c.nivel_precio : '');
+  const saldo = vistaClientes === 'credito' ? c.saldo_credito : c.saldo_pedidos;
+  const saldoHtml = saldo>0
+    ? `<span class="cliente-saldo debe">${money(saldo)}</span>`
+    : `<span class="cliente-saldo sin-deuda">${vistaClientes === 'credito' ? 'Sin saldo' : 'Liquidado'}</span>`;
+  const sub = vistaClientes === 'pedidos'
+    ? `${c.pedidos_pendientes||0} pendiente(s) · ${c.pedidos_liquidados||0} liquidado(s)`
+    : (c.telefono ? esc(formatearTel(c.telefono)) : (c.nivel_precio ? 'Precio '+c.nivel_precio : ''));
   return `<div class="cliente-row" onclick="abrirDetalle(${c.id})">
     <div class="cliente-nombre">${esc(c.nombre)}</div>
     <div class="cliente-row-sub">
@@ -332,17 +355,16 @@ function columnaClientes(titulo, clase, lista, vacio){
 function renderClientes(lista){
   const cont = document.getElementById('lista-clientes');
   if(!lista.length){
-    cont.innerHTML = '<div class="card"><div class="empty">Sin clientes registrados</div></div>';
+    cont.innerHTML = `<div class="card"><div class="empty">${vistaClientes === 'credito' ? 'Sin clientes de crédito' : 'Sin clientes con pedidos'}</div></div>`;
     return;
   }
-  // A la izquierda los que deben (más saldo pendiente primero), a la derecha
-  // los que no tienen deuda (alfabético, ya vienen así del backend).
-  const deben = lista.filter(c => c.saldo > 0).sort((a,b) => b.saldo - a.saldo);
-  const sinDeuda = lista.filter(c => !(c.saldo > 0));
+  const saldo = c => vistaClientes === 'credito' ? c.saldo_credito : c.saldo_pedidos;
+  const deben = lista.filter(c => vistaClientes === 'credito' ? saldo(c)>0 : c.pedidos_pendientes>0).sort((a,b) => saldo(b)-saldo(a));
+  const sinDeuda = lista.filter(c => vistaClientes === 'credito' ? !(saldo(c)>0) : c.pedidos_pendientes===0);
 
   cont.innerHTML = '<div class="grid-clientes">'
-    + columnaClientes('Deben', 'deben', deben, 'Nadie debe')
-    + columnaClientes('Sin deuda', '', sinDeuda, 'Todos tienen deuda')
+    + columnaClientes(vistaClientes === 'credito' ? 'Deben' : 'Pendientes', 'deben', deben, 'Ninguno')
+    + columnaClientes(vistaClientes === 'credito' ? 'Sin deuda' : 'Liquidados', '', sinDeuda, 'Ninguno')
     + '</div>';
 }
 
@@ -598,26 +620,34 @@ async function abrirDetalle(id){
     const r = await authFetch('/api/clientes/'+id);
     const c = await r.json();
     document.getElementById('detalle-nombre').textContent = '👤 ' + c.nombre;
-    saldoActual = c.saldo;
+    const viendoPedidos = vistaClientes === 'pedidos';
+    saldoActual = viendoPedidos ? c.saldo_pedidos : c.saldo_credito;
     clienteActualNombre = c.nombre;
-    document.getElementById('btn-liquidar').style.display = c.saldo>0 ? 'block' : 'none';
+    document.getElementById('btn-registrar-abono').style.display = viendoPedidos ? 'none' : 'block';
+    document.getElementById('btn-liquidar').style.display = !viendoPedidos && saldoActual>0 ? 'block' : 'none';
+    document.getElementById('btn-eliminar-cliente').style.display = !viendoPedidos && _sesionActual && _sesionActual.rol === 'gerente' ? 'inline-block' : 'none';
 
     const saldoCont = document.getElementById('detalle-saldo-cont');
-    saldoCont.className = 'detalle-saldo' + (c.saldo<=0 ? ' sin-deuda' : '');
-    document.getElementById('detalle-saldo-valor').textContent = money(c.saldo);
+    saldoCont.className = 'detalle-saldo' + (saldoActual<=0 ? ' sin-deuda' : '');
+    saldoCont.querySelector('.detalle-saldo-label').textContent = viendoPedidos ? 'Saldo pendiente en pedidos' : 'Saldo pendiente';
+    document.getElementById('detalle-saldo-valor').textContent = money(saldoActual);
 
-    const anticipos = c.anticipos || [];
+    const pedidos = c.pedidos || [];
     const antTitulo = document.getElementById('detalle-anticipos-titulo');
     const antCont = document.getElementById('detalle-anticipos');
-    antTitulo.style.display = anticipos.length ? 'block' : 'none';
-    antCont.innerHTML = anticipos.map(a=>{
+    antTitulo.textContent = '🔖 Pedidos y anticipos';
+    antTitulo.style.display = pedidos.length ? 'block' : 'none';
+    antCont.innerHTML = pedidos.map(a=>{
       const fecha = new Date(a.fecha).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'});
-      return `<div class="hist-row"><span>${esc(a.descripcion)}<div class="hist-fecha">${fecha} · Total ${money(a.total)} · Pagado ${money(a.pagado)}</div></span><span style="color:var(--amber);font-weight:700">Saldo ${money(a.saldo)}</span></div>`;
+      const liquidacion = a.liquidado_en ? ` · Liquidado ${new Date(a.liquidado_en).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'})}` : '';
+      const pendiente = a.estado === 'pendiente';
+      return `<div class="hist-row"><span>${esc(a.descripcion)}<div class="hist-fecha">Pedido ${fecha}${liquidacion} · Total ${money(a.total)} · Pagado ${money(a.pagado)}</div></span><span style="color:${pendiente?'var(--amber)':'var(--green)'};font-weight:700">${pendiente?'Saldo '+money(a.saldo):'Liquidado ✓'}</span></div>`;
     }).join('');
 
     const ventasCont = document.getElementById('detalle-ventas');
-    ventasCont.innerHTML = c.ventas.length
-      ? c.ventas.map(v=>{
+    const ventasCredito = (c.ventas || []).filter(v=>!v.es_anticipo);
+    ventasCont.innerHTML = ventasCredito.length
+      ? ventasCredito.map(v=>{
           const fecha = new Date(v.fecha).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'});
           const saldoV = (v.saldo!=null) ? v.saldo : v.total;
           const detalle = saldoV>0
@@ -634,7 +664,9 @@ async function abrirDetalle(id){
           const esCondonado = p.metodo_pago==='condonado';
           const metodoTxt = {efectivo:'Efectivo',tarjeta:'Tarjeta',transferencia:'Transferencia',condonado:'🧾 Condonado'}[p.metodo_pago] || p.metodo_pago;
           const autorizo = p.autorizado_por ? ` · Autorizó: ${esc(p.autorizado_por)}` : '';
-          return `<div class="hist-row"><span>${p.nota?esc(p.nota):'Abono'}<div class="hist-fecha">${fecha} · ${esc(p.operador||'')} · ${metodoTxt}${autorizo}</div></span><span style="color:${esCondonado?'var(--red)':'var(--green)'}">+${money(p.monto)}</span></div>`;
+          const tipo = {anticipo:'Anticipo',liquidacion:'Liquidación',abono:'Abono'}[p.tipo_movimiento] || 'Abono';
+          const referencia = p.venta_id && p.tipo_movimiento !== 'abono' ? ` de pedido #${p.venta_id}` : '';
+          return `<div class="hist-row"><span>${tipo}${referencia}${p.nota?' · '+esc(p.nota):''}<div class="hist-fecha">${fecha} · ${esc(p.operador||'')} · ${metodoTxt}${autorizo}</div></span><span style="color:${esCondonado?'var(--red)':'var(--green)'}">+${money(p.monto)}</span></div>`;
         }).join('')
       : '<div style="font-size:12px;color:var(--text2);padding:6px 0">Sin pagos registrados</div>';
   }catch(e){
