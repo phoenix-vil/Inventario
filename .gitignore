@@ -26,3 +26,8 @@ serper_log.csv
 
 # Instalador de escritorio Windows: se genera con ~/windows-build/compilar.sh
 *.exe
+
+# ─── Artefactos locales de QA ───
+static/_test_*.html
+static/mockup_*.html
+static/descargas/

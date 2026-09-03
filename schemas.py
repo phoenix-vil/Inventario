@@ -90,6 +90,10 @@ class RegistrarVenta(BaseModel):
     tpv_terminal: Optional[str] = None
     transferencia_referencia: Optional[str] = None
     cliente_id: Optional[int] = None
+    # El pedido completo (El Zar del LED) se registra como venta a crédito
+    # por el total acordado; el anticipo que se cobra hoy se registra aparte
+    # como un PagoCredito ligado a esta venta (ver /api/clientes/{id}/pagos).
+    es_anticipo: bool = False
 
 
 class ItemCotizacion(BaseModel):
@@ -193,6 +197,10 @@ class CrearCliente(BaseModel):
     nota: Optional[str] = Field(None, max_length=500)
     limite_credito: Optional[float] = Field(None, ge=0)
     nivel_precio: Optional[int] = Field(None, ge=1, le=3)  # mayoreo: 1, 2 o 3
+    # Cliente dado de alta solo para un anticipo (El Zar del LED): a
+    # diferencia de un cliente de crédito normal, se borra solo en cuanto ya
+    # no debe nada -no tiene sentido dejarlo en la cartera para siempre-.
+    temporal: bool = False
 
 
 class CrearPagoCredito(BaseModel):
@@ -203,6 +211,7 @@ class CrearPagoCredito(BaseModel):
     tpv_autorizacion: Optional[str] = None
     tpv_terminal: Optional[str] = None
     transferencia_referencia: Optional[str] = None
+    venta_id: Optional[int] = None
 
 
 class LiquidarCuenta(BaseModel):

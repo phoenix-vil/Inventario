@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException, Query, Header, Body
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse, Response
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, func
+from sqlalchemy import and_, or_, func
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
@@ -848,6 +848,12 @@ def registrar_venta(data: RegistrarVenta, sesion: Sesion = Depends(requerir_sesi
     ahorro_total = round(ahorro_productos + ahorro_descuento_extra, 2)
     metodo = data.metodo_pago if data.metodo_pago in ("efectivo", "tarjeta", "credito", "transferencia") else "efectivo"
 
+    # Los pedidos en dos pagos son exclusivos de El Zar del LED. La interfaz
+    # ya oculta esos botones en las demás tiendas, pero la API también debe
+    # impedir que se creen manipulando la petición desde el navegador.
+    if data.es_anticipo and "El Zar del LED" not in texto_a_tiendas(sesion.tienda):
+        raise HTTPException(status_code=403, detail="Los anticipos solo están disponibles en El Zar del LED")
+
     cliente = None
     if metodo == "credito":
         if not data.cliente_id:
@@ -894,6 +900,7 @@ def registrar_venta(data: RegistrarVenta, sesion: Sesion = Depends(requerir_sesi
         detalle_json=json.dumps(detalle, ensure_ascii=False),
         pago_con=pago_con,
         cambio=cambio,
+        es_anticipo=data.es_anticipo if metodo == "credito" else False,
     )
     db.add(venta)
     db.commit()
@@ -912,6 +919,7 @@ def registrar_venta(data: RegistrarVenta, sesion: Sesion = Depends(requerir_sesi
         "metodo_pago": metodo,
         "cliente_id": venta.cliente_id,
         "cliente_nombre": cliente.nombre if cliente else None,
+        "es_anticipo": venta.es_anticipo,
         "tpv_referencia": venta.tpv_referencia,
         "tpv_autorizacion": venta.tpv_autorizacion,
         "tpv_terminal": venta.tpv_terminal,
@@ -925,6 +933,32 @@ def registrar_venta(data: RegistrarVenta, sesion: Sesion = Depends(requerir_sesi
 
 
 # ─── Historial de ventas ───────────────────────────────────────────────────
+def _fecha_contable_venta(v: Venta):
+    """Fecha en que una operación cuenta como venta.
+
+    Una venta normal cuenta al registrarse. Un pedido con anticipo cuenta hasta
+    quedar totalmente liquidado; creado_en sigue indicando cuándo se pidió."""
+    return v.liquidado_en if v.es_anticipo else v.creado_en
+
+
+def _acotar_ventas_contabilizadas(query, desde=None, hasta=None):
+    """Excluye pedidos pendientes y filtra cada venta por su fecha contable."""
+    normal = or_(Venta.es_anticipo == False, Venta.es_anticipo.is_(None))
+    pedido_liquidado = and_(Venta.es_anticipo == True, Venta.liquidado_en.is_not(None))
+    query = query.filter(or_(normal, pedido_liquidado))
+    if desde:
+        query = query.filter(or_(
+            and_(normal, Venta.creado_en >= desde),
+            and_(Venta.es_anticipo == True, Venta.liquidado_en >= desde),
+        ))
+    if hasta:
+        query = query.filter(or_(
+            and_(normal, Venta.creado_en <= hasta),
+            and_(Venta.es_anticipo == True, Venta.liquidado_en <= hasta),
+        ))
+    return query
+
+
 @app.get("/api/ventas")
 def listar_ventas(
     desde: Optional[str] = Query(None, description="YYYY-MM-DD o ISO datetime"),
@@ -937,12 +971,13 @@ def listar_ventas(
     db: Session = Depends(get_db),
 ):
     query = db.query(Venta)
+    d = None
+    h = None
     if desde:
         try:
             d = datetime.fromisoformat(desde.replace("Z", "+00:00"))
             if d.tzinfo:
                 d = d.astimezone(timezone.utc).replace(tzinfo=None)
-            query = query.filter(Venta.creado_en >= d)
         except ValueError:
             pass
     if hasta:
@@ -950,9 +985,9 @@ def listar_ventas(
             h = datetime.fromisoformat(hasta.replace("Z", "+00:00"))
             if h.tzinfo:
                 h = h.astimezone(timezone.utc).replace(tzinfo=None)
-            query = query.filter(Venta.creado_en <= h)
         except ValueError:
             pass
+    query = _acotar_ventas_contabilizadas(query, d, h)
     if operador:
         query = query.filter(Venta.operador == operador)
     if metodo_pago in ("efectivo", "tarjeta", "credito", "transferencia"):
@@ -962,11 +997,14 @@ def listar_ventas(
     restriccion = sucursal_restriccion(sesion)
     if restriccion is not None:
         query = query.filter(Venta.sucursal == restriccion)
-    ventas = query.order_by(Venta.creado_en.desc()).limit(limit).all()
+    ventas = sorted(query.all(), key=_fecha_contable_venta, reverse=True)[:limit]
     return [
         {
             "id": v.id,
-            "fecha": v.creado_en.isoformat() + "Z",
+            "fecha": _fecha_contable_venta(v).isoformat() + "Z",
+            "fecha_pedido": v.creado_en.isoformat() + "Z" if v.es_anticipo else None,
+            "fecha_liquidacion": v.liquidado_en.isoformat() + "Z" if v.liquidado_en else None,
+            "es_anticipo": bool(v.es_anticipo),
             "subtotal": v.subtotal,
             "descuento_extra_pct": v.descuento_extra_pct,
             "total": v.total,
@@ -999,12 +1037,13 @@ def resumen_ventas(
     db: Session = Depends(get_db),
 ):
     query = db.query(Venta)
+    d = None
+    h = None
     if desde:
         try:
             d = datetime.fromisoformat(desde.replace("Z", "+00:00"))
             if d.tzinfo:
                 d = d.astimezone(timezone.utc).replace(tzinfo=None)
-            query = query.filter(Venta.creado_en >= d)
         except ValueError:
             pass
     if hasta:
@@ -1012,9 +1051,9 @@ def resumen_ventas(
             h = datetime.fromisoformat(hasta.replace("Z", "+00:00"))
             if h.tzinfo:
                 h = h.astimezone(timezone.utc).replace(tzinfo=None)
-            query = query.filter(Venta.creado_en <= h)
         except ValueError:
             pass
+    query = _acotar_ventas_contabilizadas(query, d, h)
     if operador:
         query = query.filter(Venta.operador == operador)
     if metodo_pago in ("efectivo", "tarjeta", "credito", "transferencia"):
@@ -1039,7 +1078,7 @@ def resumen_ventas(
         por_operador[op]["total"] += v.total
         if v.metodo_pago == "tarjeta":
             por_operador[op]["tarjeta"] += v.total
-        else:
+        elif (v.metodo_pago or "efectivo") == "efectivo":
             por_operador[op]["efectivo"] += v.total
     desglose = sorted(
         [{"operador": d["operador"], "num_ventas": d["num_ventas"],
@@ -1615,12 +1654,14 @@ def _cliente_de(db: Session, cliente_id: Optional[int]) -> Optional[Cliente]:
     return db.query(Cliente).filter(Cliente.id == cliente_id).first() if cliente_id else None
 
 
-def calcular_precio_final(p: Producto, cliente: Optional[Cliente] = None) -> float:
+def calcular_precio_final(p: Producto, cliente: Optional[Cliente] = None, nivel_override: Optional[int] = None) -> float:
     """Precio que se le cobra a este cliente por este producto.
 
     Un precio de mayoreo pactado manda sobre la promoción del momento: si el
-    cliente tiene nivel y el producto lo trae capturado, ese es el precio."""
-    de_mayoreo = precio_para_cliente(p, cliente)
+    cliente tiene nivel y el producto lo trae capturado, ese es el precio.
+    nivel_override manda sobre todo: es elegir el precio a mano para esta
+    venta (El Zar del LED), sin tocar el nivel guardado del cliente."""
+    de_mayoreo = precio_por_nivel(p, nivel_override) if nivel_override else precio_para_cliente(p, cliente)
     if de_mayoreo is not None:
         return de_mayoreo
     if p.descuento_pct and p.descuento_pct > 0:
@@ -1758,15 +1799,22 @@ def pos_mas_vendidos(
 def precios_para_cliente(data: dict = Body(...), sesion: Sesion = Depends(requerir_sesion), db: Session = Depends(get_db)):
     """Precios que le tocan a un cliente para los productos que ya están en el
     carrito. Se usa al elegir o quitar el cliente a media venta, para no tener
-    que volver a capturar todo."""
+    que volver a capturar todo.
+
+    nivel_override (El Zar del LED): elegir el precio 1/2/3 a mano para esta
+    venta nada más, sin importar (ni tocar) el nivel guardado del cliente."""
     cliente = _cliente_de(db, data.get("cliente_id"))
+    nivel_override = data.get("nivel_override")
+    if nivel_override not in (1, 2, 3):
+        nivel_override = None
     ids = [i for i in (data.get("producto_ids") or []) if isinstance(i, int)]
+    nivel_mostrado = nivel_override or (cliente.nivel_precio if cliente else None)
     if not ids:
-        return {"nivel_precio": cliente.nivel_precio if cliente else None, "precios": {}}
+        return {"nivel_precio": nivel_mostrado, "precios": {}}
     productos = db.query(Producto).filter(Producto.id.in_(ids)).all()
     return {
-        "nivel_precio": cliente.nivel_precio if cliente else None,
-        "precios": {str(p.id): calcular_precio_final(p, cliente) for p in productos},
+        "nivel_precio": nivel_mostrado,
+        "precios": {str(p.id): calcular_precio_final(p, cliente, nivel_override) for p in productos},
     }
 
 
@@ -1863,11 +1911,8 @@ def _costo_por_producto_dash(db, ids):
 
 
 def _calcular_periodo_dash(db, desde_dt, hasta_dt, restriccion=None):
-    q = db.query(Venta)
-    if desde_dt:
-        q = q.filter(Venta.creado_en >= desde_dt)
-    if hasta_dt:
-        q = q.filter(Venta.creado_en < hasta_dt)
+    limite = hasta_dt - timedelta(microseconds=1) if hasta_dt else None
+    q = _acotar_ventas_contabilizadas(db.query(Venta), desde_dt, limite)
     if restriccion is not None:
         q = q.filter(Venta.sucursal == restriccion)
     ventas = q.all()
@@ -1974,7 +2019,7 @@ def dashboard_serie_diaria(
 ):
     ahora = datetime.utcnow()
     desde = (ahora - timedelta(days=dias - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
-    ventas_q = db.query(Venta).filter(Venta.creado_en >= desde)
+    ventas_q = _acotar_ventas_contabilizadas(db.query(Venta), desde)
     restriccion = sucursal_restriccion(sesion)
     if restriccion is not None:
         ventas_q = ventas_q.filter(Venta.sucursal == restriccion)
@@ -1992,7 +2037,7 @@ def dashboard_serie_diaria(
         dias_map[fecha] = {"total": 0.0, "ganancia": 0.0, "num_ventas": 0}
 
     for v in ventas:
-        fecha = v.creado_en.strftime("%Y-%m-%d")
+        fecha = _fecha_contable_venta(v).strftime("%Y-%m-%d")
         if fecha not in dias_map:
             continue
         costo_venta = sum(
@@ -2023,9 +2068,7 @@ def dashboard_top_productos(
     db: Session = Depends(get_db),
 ):
     d = _rango_utc_dash(desde)
-    q = db.query(Venta)
-    if d:
-        q = q.filter(Venta.creado_en >= d)
+    q = _acotar_ventas_contabilizadas(db.query(Venta), d)
     restriccion = sucursal_restriccion(sesion)
     if restriccion is not None:
         q = q.filter(Venta.sucursal == restriccion)
@@ -2479,7 +2522,8 @@ def reporte_del_dia(
         q = q.filter(campo >= desde, campo < hasta_dt)
         return q
 
-    ventas_q = acotar(db.query(Venta), Venta.creado_en)
+    ventas_q = _acotar_ventas_contabilizadas(
+        db.query(Venta), desde, hasta_dt - timedelta(microseconds=1))
     gastos_q = acotar(db.query(Gasto), Gasto.fecha)
     abonos_q = acotar(db.query(PagoCredito), PagoCredito.creado_en)
     cortes_q = acotar(db.query(CorteCaja), CorteCaja.creado_en)
@@ -2489,7 +2533,7 @@ def reporte_del_dia(
         abonos_q = abonos_q.filter(PagoCredito.sucursal == restriccion)
         cortes_q = cortes_q.filter(CorteCaja.sucursal == restriccion)
 
-    ventas = ventas_q.order_by(Venta.creado_en).all()
+    ventas = sorted(ventas_q.all(), key=_fecha_contable_venta)
     gastos = gastos_q.order_by(Gasto.fecha).all()
     abonos = abonos_q.order_by(PagoCredito.creado_en).all()
     cortes = cortes_q.order_by(CorteCaja.creado_en).all()
@@ -2555,10 +2599,11 @@ def reporte_del_dia(
         # None (no []) a propósito: en el PDF/CSV distingue "no te toca verlo"
         # de "no hubo ninguno este día", que se verían idénticos con [].
         "ventas": None if reducido else [{
-            "hora": hora(v.creado_en), "folio": v.id, "sucursal": v.sucursal,
+            "hora": hora(_fecha_contable_venta(v)), "folio": v.id, "sucursal": v.sucursal,
             "operador": v.operador, "metodo": v.metodo_pago or "efectivo",
             "cliente": nombres_cliente.get(v.cliente_id, ""), "estado": v.estado or "activa",
             "devuelto": v.total_devuelto or 0, "total": v.total,
+            "es_anticipo": bool(v.es_anticipo),
         } for v in ventas],
         "gastos": None if reducido else [{
             "hora": hora(g.fecha), "sucursal": g.sucursal, "concepto": g.concepto,
@@ -2706,16 +2751,23 @@ def gastos_page():
 
 
 # ─── Clientes y ventas a credito ────────────────────────────────────────────
+def precio_por_nivel(p: Producto, nivel: Optional[int]) -> Optional[float]:
+    """Precio de mayoreo para un nivel 1/2/3 directo, sin pasar por un cliente
+    -para cuando se elige el precio a mano al cobrar (El Zar del LED), sin
+    que dependa de (ni cambie) el nivel guardado del cliente."""
+    precio = {1: p.precio_1, 2: p.precio_2, 3: p.precio_3}.get(nivel)
+    return precio if precio and precio > 0 else None
+
+
 def precio_para_cliente(p: Producto, cliente: Optional[Cliente]) -> Optional[float]:
     """Precio de mayoreo que le toca a un cliente, o None si no aplica.
 
     Solo cuenta si el cliente trae nivel y el producto tiene capturado ese
     nivel; en cualquier otro caso se cobra el precio de siempre. Así las tiendas
     que no usan niveles no cambian de comportamiento."""
-    if cliente is None or not cliente.nivel_precio:
+    if cliente is None:
         return None
-    precio = {1: p.precio_1, 2: p.precio_2, 3: p.precio_3}.get(cliente.nivel_precio)
-    return precio if precio and precio > 0 else None
+    return precio_por_nivel(p, cliente.nivel_precio)
 
 
 
@@ -2782,6 +2834,25 @@ def _saldo_cliente(db, cliente_id):
     return round(suma_ventas - suma_pagos, 2)
 
 
+def _resumen_cuentas_cliente(db, cliente_id):
+    """Separa la cuenta corriente de los pedidos con anticipo."""
+    ventas = db.query(Venta).filter(
+        Venta.cliente_id == cliente_id, Venta.metodo_pago == "credito").all()
+    pagos = db.query(PagoCredito).filter(PagoCredito.cliente_id == cliente_id).all()
+    asignacion = _saldo_por_venta_credito(ventas, pagos)
+    pedidos = [v for v in ventas if v.es_anticipo]
+    saldo_pedidos = round(sum(asignacion[v.id]["saldo"] for v in pedidos), 2)
+    saldo_credito = round(sum(
+        asignacion[v.id]["saldo"] for v in ventas if not v.es_anticipo), 2)
+    return {
+        "saldo": round(saldo_pedidos + saldo_credito, 2),
+        "saldo_credito": saldo_credito,
+        "saldo_pedidos": saldo_pedidos,
+        "pedidos_pendientes": sum(1 for v in pedidos if asignacion[v.id]["saldo"] > 0.005),
+        "pedidos_liquidados": sum(1 for v in pedidos if asignacion[v.id]["saldo"] <= 0.005),
+    }
+
+
 @app.post("/api/clientes", status_code=201)
 def crear_cliente(data: CrearCliente, sesion: Sesion = Depends(requerir_sesion), db: Session = Depends(get_db)):
     if data.nivel_precio is not None and data.nivel_precio not in (1, 2, 3):
@@ -2794,12 +2865,13 @@ def crear_cliente(data: CrearCliente, sesion: Sesion = Depends(requerir_sesion),
         # Cada sucursal lleva su propia cartera; queda con la de quien lo da de alta
         sucursal=sesion.sucursal,
         nivel_precio=data.nivel_precio,
+        temporal=data.temporal,
     )
     db.add(c)
     db.commit()
     db.refresh(c)
     return {"id": c.id, "nombre": c.nombre, "telefono": c.telefono, "limite_credito": c.limite_credito,
-            "sucursal": c.sucursal, "nivel_precio": c.nivel_precio, "saldo": 0.0}
+            "sucursal": c.sucursal, "nivel_precio": c.nivel_precio, "temporal": c.temporal, "saldo": 0.0}
 
 
 @app.get("/api/clientes")
@@ -2808,31 +2880,83 @@ def listar_clientes(q: Optional[str] = Query(None), sesion: Sesion = Depends(req
     if q:
         query = query.filter(Cliente.nombre.ilike(f"%{q}%"))
     clientes = query.order_by(Cliente.nombre).all()
-    return [{
-        "id": c.id,
-        "nombre": c.nombre,
-        "telefono": c.telefono,
-        "limite_credito": c.limite_credito,
-        "sucursal": c.sucursal,
-        "nivel_precio": c.nivel_precio,
-        "saldo": _saldo_cliente(db, c.id),
-    } for c in clientes]
+    resultado = []
+    for c in clientes:
+        cuentas = _resumen_cuentas_cliente(db, c.id)
+        resultado.append({
+            "id": c.id,
+            "nombre": c.nombre,
+            "telefono": c.telefono,
+            "limite_credito": c.limite_credito,
+            "sucursal": c.sucursal,
+            "nivel_precio": c.nivel_precio,
+            "temporal": bool(c.temporal),
+            "es_cliente_credito": not bool(c.temporal),
+            "tiene_pedidos": cuentas["pedidos_pendientes"] + cuentas["pedidos_liquidados"] > 0,
+            **cuentas,
+        })
+    return resultado
 
 
-def _asignar_pagos_fifo(ventas, total_pagos):
-    """Aplica los pagos a las ventas mas antiguas primero (FIFO)."""
+def _descripcion_venta(v):
+    """Nombre corto para mostrar un pedido en la caja de anticipos: el
+    artículo si es uno solo, o un resumen si son varios."""
+    try:
+        items = json.loads(v.detalle_json)
+    except (TypeError, ValueError):
+        return f"Venta #{v.id}"
+    if not items:
+        return f"Venta #{v.id}"
+    if len(items) == 1:
+        return items[0].get("nombre") or f"Venta #{v.id}"
+    return f"{items[0].get('nombre', 'Artículo')} y {len(items) - 1} más"
+
+
+def _saldo_por_venta_credito(ventas, pagos):
+    """Saldo pendiente de cada venta a crédito de un mismo cliente.
+
+    Los pagos con venta_id (el anticipo o la liquidación de un pedido
+    concreto, ej. El Zar del LED) aplican directo a ESA venta. El resto -sin
+    venta_id, como siempre fue el abono genérico- se reparte FIFO entre las
+    ventas más antiguas que les vaya quedando saldo. Compatible con pagos
+    viejos, que nunca traen venta_id: se comportan exactamente igual que antes."""
+    ids_ventas = {v.id for v in ventas}
+    pagado_directo = {}
+    total_sin_asignar = 0.0
+    for p in pagos:
+        if p.venta_id is not None and p.venta_id in ids_ventas:
+            pagado_directo[p.venta_id] = pagado_directo.get(p.venta_id, 0.0) + p.monto
+        else:
+            total_sin_asignar += p.monto
+
     ventas_orden_asc = sorted(ventas, key=lambda v: v.creado_en)
-    restante = total_pagos
+    restante = total_sin_asignar
     resultado = {}
     for v in ventas_orden_asc:
-        if restante >= v.total:
-            pagado = v.total
-            restante = round(restante - v.total, 2)
+        directo = round(pagado_directo.get(v.id, 0.0), 2)
+        saldo_tras_directo = max(0.0, round(v.total - directo, 2))
+        if restante >= saldo_tras_directo:
+            fifo = saldo_tras_directo
+            restante = round(restante - saldo_tras_directo, 2)
         else:
-            pagado = restante
+            fifo = max(0.0, restante)
             restante = 0.0
-        resultado[v.id] = {"pagado": round(pagado, 2), "saldo": round(v.total - pagado, 2)}
+        pagado_total = round(directo + fifo, 2)
+        resultado[v.id] = {"pagado": pagado_total, "saldo": round(v.total - pagado_total, 2)}
     return resultado
+
+
+def _tipos_pago_pedido(pagos, ventas_pedido_ids):
+    """Distingue el primer cobro (anticipo) de los posteriores (liquidación)."""
+    tipos = {}
+    vistos = set()
+    for p in sorted(pagos, key=lambda x: x.creado_en):
+        if p.venta_id in ventas_pedido_ids:
+            tipos[p.id] = "liquidacion" if p.venta_id in vistos else "anticipo"
+            vistos.add(p.venta_id)
+        else:
+            tipos[p.id] = "abono"
+    return tipos
 
 
 # Declarado ANTES que /api/clientes/{cliente_id}: FastAPI resuelve las rutas en
@@ -2864,6 +2988,13 @@ def abonos_periodo(
     if cliente_ids:
         rows = db.query(Cliente.id, Cliente.nombre).filter(Cliente.id.in_(cliente_ids)).all()
         clientes_map = {r[0]: r[1] for r in rows}
+    venta_ids = {p.venta_id for p in pagos if p.venta_id is not None}
+    ventas_map = {}
+    if venta_ids:
+        ventas_map = {v.id: v for v in db.query(Venta).filter(Venta.id.in_(venta_ids)).all()}
+    pedidos_ids = {vid for vid, v in ventas_map.items() if v.es_anticipo}
+    pagos_pedidos = db.query(PagoCredito).filter(PagoCredito.venta_id.in_(pedidos_ids)).all() if pedidos_ids else []
+    tipos_pago = _tipos_pago_pedido(pagos_pedidos, pedidos_ids)
 
     return {
         "total": total,
@@ -2882,6 +3013,9 @@ def abonos_periodo(
             "tpv_terminal": p.tpv_terminal,
             "transferencia_referencia": p.transferencia_referencia,
             "autorizado_por": p.autorizado_por,
+            "venta_id": p.venta_id,
+            "tipo_movimiento": tipos_pago.get(p.id, "abono"),
+            "descripcion_pedido": _descripcion_venta(ventas_map[p.venta_id]) if p.venta_id in pedidos_ids else None,
         } for p in pagos],
     }
 
@@ -2893,8 +3027,28 @@ def detalle_cliente(cliente_id: int, sesion: Sesion = Depends(requerir_sesion), 
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
     ventas = db.query(Venta).filter(Venta.cliente_id == cliente_id, Venta.metodo_pago == "credito").order_by(Venta.creado_en.desc()).all()
     pagos = db.query(PagoCredito).filter(PagoCredito.cliente_id == cliente_id).order_by(PagoCredito.creado_en.desc()).all()
-    total_pagos = sum(p.monto for p in pagos)
-    asignacion = _asignar_pagos_fifo(ventas, total_pagos)
+    asignacion = _saldo_por_venta_credito(ventas, pagos)
+    pedidos_ventas = [v for v in ventas if v.es_anticipo]
+    tipos_pago = _tipos_pago_pedido(pagos, {v.id for v in pedidos_ventas})
+    saldo_pedidos = round(sum(asignacion[v.id]["saldo"] for v in pedidos_ventas), 2)
+    saldo_credito = round(sum(
+        asignacion[v.id]["saldo"] for v in ventas if not v.es_anticipo), 2)
+
+    # Todos los pedidos se conservan en Clientes; anticipos mantiene solo los
+    # pendientes porque también alimenta el selector "Liquidar anticipo".
+    pedidos = [{
+        "venta_id": v.id,
+        "descripcion": _descripcion_venta(v),
+        "total": v.total,
+        "pagado": asignacion[v.id]["pagado"],
+        "saldo": asignacion[v.id]["saldo"],
+        "fecha": v.creado_en.isoformat() + "Z",
+        "liquidado_en": v.liquidado_en.isoformat() + "Z" if v.liquidado_en else None,
+        "estado": "liquidado" if asignacion[v.id]["saldo"] <= 0.005 else "pendiente",
+        "sucursal": v.sucursal,
+    } for v in pedidos_ventas]
+    anticipos = [p for p in pedidos if p["estado"] == "pendiente"]
+
     return {
         "id": c.id,
         "nombre": c.nombre,
@@ -2903,18 +3057,24 @@ def detalle_cliente(cliente_id: int, sesion: Sesion = Depends(requerir_sesion), 
         "limite_credito": c.limite_credito,
         "sucursal": c.sucursal,
         "nivel_precio": c.nivel_precio,
-        "saldo": _saldo_cliente(db, cliente_id),
+        "temporal": bool(c.temporal),
+        "saldo": round(saldo_credito + saldo_pedidos, 2),
+        "saldo_credito": saldo_credito,
+        "saldo_pedidos": saldo_pedidos,
         "ventas": [{
             "id": v.id, "total": v.total, "fecha": v.creado_en.isoformat() + "Z",
-            "operador": v.operador, "sucursal": v.sucursal,
+            "operador": v.operador, "sucursal": v.sucursal, "es_anticipo": v.es_anticipo,
             "pagado": asignacion[v.id]["pagado"], "saldo": asignacion[v.id]["saldo"],
         } for v in ventas],
+        "anticipos": anticipos,
+        "pedidos": pedidos,
         "pagos": [{
             "id": p.id, "monto": p.monto, "metodo_pago": p.metodo_pago,
             "fecha": p.creado_en.isoformat() + "Z", "operador": p.operador, "nota": p.nota,
             "tpv_referencia": p.tpv_referencia, "tpv_autorizacion": p.tpv_autorizacion,
             "tpv_terminal": p.tpv_terminal, "transferencia_referencia": p.transferencia_referencia,
-            "autorizado_por": p.autorizado_por,
+            "autorizado_por": p.autorizado_por, "venta_id": p.venta_id,
+            "tipo_movimiento": tipos_pago.get(p.id, "abono"),
         } for p in pagos],
     }
 
@@ -2954,6 +3114,19 @@ def registrar_pago_credito(cliente_id: int, data: CrearPagoCredito, sesion: Sesi
     metodo = data.metodo_pago if data.metodo_pago in ("efectivo", "tarjeta", "transferencia") else "efectivo"
     if metodo == "tarjeta" and (not data.tpv_referencia or not data.tpv_autorizacion):
         raise HTTPException(status_code=400, detail="Ingresa la referencia y autorización de la TPV")
+
+    venta_ref = None
+    saldo_venta = None
+    if data.venta_id is not None:
+        venta_ref = db.query(Venta).filter(Venta.id == data.venta_id).first()
+        if not venta_ref or venta_ref.cliente_id != cliente_id or venta_ref.metodo_pago != "credito":
+            raise HTTPException(status_code=404, detail="Esa venta a crédito no es de este cliente")
+        ventas_cli = db.query(Venta).filter(Venta.cliente_id == cliente_id, Venta.metodo_pago == "credito").all()
+        pagos_cli = db.query(PagoCredito).filter(PagoCredito.cliente_id == cliente_id).all()
+        saldo_venta = _saldo_por_venta_credito(ventas_cli, pagos_cli)[data.venta_id]["saldo"]
+        if data.monto > saldo_venta + 0.01:
+            raise HTTPException(status_code=400, detail=f"El monto ({data.monto}) es mayor al saldo pendiente de esa venta ({saldo_venta})")
+
     p = PagoCredito(
         cliente_id=cliente_id,
         monto=data.monto,
@@ -2965,14 +3138,22 @@ def registrar_pago_credito(cliente_id: int, data: CrearPagoCredito, sesion: Sesi
         tpv_autorizacion=data.tpv_autorizacion if metodo == "tarjeta" else None,
         tpv_terminal=data.tpv_terminal if metodo == "tarjeta" else None,
         transferencia_referencia=data.transferencia_referencia if metodo == "transferencia" else None,
+        venta_id=data.venta_id,
     )
     db.add(p)
+    if venta_ref and venta_ref.es_anticipo and data.monto >= saldo_venta - 0.01:
+        venta_ref.liquidado_en = datetime.utcnow()
     db.commit()
     db.refresh(p)
+
+    saldo_restante = _saldo_cliente(db, cliente_id)
+    cliente_nombre = c.nombre
+
     return {
         "id": p.id,
-        "saldo_restante": _saldo_cliente(db, cliente_id),
-        "cliente_nombre": c.nombre,
+        "saldo_restante": saldo_restante,
+        "cliente_nombre": cliente_nombre,
+        "cliente_eliminado": False,
         "monto": p.monto,
         "metodo_pago": p.metodo_pago,
         "operador": p.operador,
@@ -2982,6 +3163,7 @@ def registrar_pago_credito(cliente_id: int, data: CrearPagoCredito, sesion: Sesi
         "tpv_autorizacion": p.tpv_autorizacion,
         "tpv_terminal": p.tpv_terminal,
         "transferencia_referencia": p.transferencia_referencia,
+        "venta_id": p.venta_id,
         "fecha": p.creado_en.isoformat() + "Z",
     }
 
@@ -3104,11 +3286,7 @@ def reporte_completo(
     d, h = _rango_utc_gastos(desde, hasta)
     restriccion = sucursal_restriccion(sesion)
 
-    ventas_q = db.query(Venta)
-    if d:
-        ventas_q = ventas_q.filter(Venta.creado_en >= d)
-    if h:
-        ventas_q = ventas_q.filter(Venta.creado_en <= h)
+    ventas_q = _acotar_ventas_contabilizadas(db.query(Venta), d, h)
     if restriccion is not None:
         ventas_q = ventas_q.filter(Venta.sucursal == restriccion)
     ventas = ventas_q.all()
@@ -3152,18 +3330,31 @@ def reporte_completo(
             bloque["tiendas"] = tiendas_de.get(nombre, [])
             por_sucursal.append(bloque)
 
+    # Para explicar el total de pagos de cada cliente, distinguimos los
+    # movimientos ligados a pedidos: primer cobro = anticipo; posteriores =
+    # liquidación. Se consultan también los cobros anteriores al periodo para
+    # clasificar correctamente una liquidación hecha hoy.
+    venta_ids_pagos = {p.venta_id for p in abonos_lista if p.venta_id is not None}
+    pedidos_map = {}
+    if venta_ids_pagos:
+        pedidos_map = {
+            v.id: v for v in db.query(Venta).filter(
+                Venta.id.in_(venta_ids_pagos), Venta.es_anticipo == True).all()
+        }
+    pagos_pedidos_todos = (
+        db.query(PagoCredito).filter(PagoCredito.venta_id.in_(pedidos_map)).all()
+        if pedidos_map else []
+    )
+    tipos_pago_pedido = _tipos_pago_pedido(pagos_pedidos_todos, set(pedidos_map))
+
     clientes = clientes_visibles_query(db, sesion).all()
     detalle_clientes = []
     for c in clientes:
         saldo = _saldo_cliente(db, c.id)
         ventas_credito_periodo = [v for v in ventas if v.cliente_id == c.id and v.metodo_pago == "credito"]
         monto_ventas_credito = round(sum(v.total for v in ventas_credito_periodo), 2)
-        pagos_q = db.query(PagoCredito).filter(PagoCredito.cliente_id == c.id)
-        if d:
-            pagos_q = pagos_q.filter(PagoCredito.creado_en >= d)
-        if h:
-            pagos_q = pagos_q.filter(PagoCredito.creado_en <= h)
-        monto_pagos_periodo = round(sum(p.monto for p in pagos_q.all()), 2)
+        pagos_cliente_periodo = [p for p in abonos_lista if p.cliente_id == c.id]
+        monto_pagos_periodo = round(sum(p.monto for p in pagos_cliente_periodo), 2)
 
         if saldo > 0 or monto_ventas_credito > 0 or monto_pagos_periodo > 0:
             # Un cliente puede comprar en más de una sucursal (todas comparten
@@ -3177,6 +3368,13 @@ def reporte_completo(
                 "ventas_credito_periodo": monto_ventas_credito,
                 "pagos_periodo": monto_pagos_periodo,
                 "sucursales": sucursales_compra,
+                "movimientos_pedidos": [{
+                    "tipo": tipos_pago_pedido[p.id],
+                    "pedido_id": p.venta_id,
+                    "monto": p.monto,
+                    "fecha": p.creado_en.isoformat() + "Z",
+                } for p in sorted(pagos_cliente_periodo, key=lambda x: x.creado_en)
+                  if p.id in tipos_pago_pedido],
             })
     detalle_clientes = sorted(detalle_clientes, key=lambda x: x["saldo_actual"], reverse=True)
 

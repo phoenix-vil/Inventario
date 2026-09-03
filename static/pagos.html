@@ -251,6 +251,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   </div>
 
   <div class="panel-carrito">
+    <!-- Solo El Zar del LED: elegir el cliente ANTES de vender fija su
+         precio (1/2/3, guardado en su ficha) para toda la venta, sin
+         importar cómo se pague al final -efectivo, tarjeta, crédito o
+         anticipo-. Antes el precio solo se aplicaba de verdad si el método
+         terminaba siendo Crédito; con cualquier otro método no había forma
+         de decir "este es el cliente Nivel 3" y el precio no se respetaba. -->
+    <div id="selector-cliente-venta" style="display:none;margin-bottom:.75rem;padding:.75rem .875rem;border:0.5px solid var(--border);border-radius:10px;background:var(--bg2);display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:pointer" onclick="abrirSelectorClienteVenta()">
+      <span id="txt-cliente-venta" style="font-size:14px;font-weight:600">👤 Público general</span>
+      <span style="font-size:12px;color:var(--blue);font-weight:600">Cambiar</span>
+    </div>
     <div class="section-title">Carrito</div>
     <div class="cart" id="cart"></div>
 
@@ -264,9 +274,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
           <button class="btn-desc" onclick="abrirDescuento()" style="flex:1;height:48px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;border:0.5px solid var(--border)">% Descuento</button>
           <button onclick="abrirCustomVenta()" style="flex:1;height:48px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;border:0.5px solid var(--blue-bg);background:var(--blue-bg);color:var(--blue)">+ Personalizado</button>
         </div>
+        <!-- Solo para El Zar del LED: un pedido en 2 partes. "Anticipo" pide
+             carrito (es el total acordado del pedido); "Liquidar anticipo"
+             no lo necesita (el precio ya se fijó al cobrar el anticipo). -->
+        <div id="acciones-anticipo" style="display:none;gap:8px;margin-bottom:8px">
+          <button id="btn-anticipo" onclick="abrirFlujoAnticipo()" disabled style="flex:1;height:40px;border:0.5px solid var(--amber);border-radius:10px;background:var(--amber-bg);color:var(--amber);font-size:14px;font-weight:600;cursor:pointer">🔖 Anticipo</button>
+          <button id="btn-liquidar-anticipo" onclick="abrirLiquidarAnticipo()" style="flex:1;height:40px;border:0.5px solid var(--amber);border-radius:10px;background:var(--amber-bg);color:var(--amber);font-size:14px;font-weight:600;cursor:pointer">🧾 Liquidar anticipo</button>
+        </div>
         <div class="acciones">
           <button onclick="dejarEnEspera()" style="width:100%;height:40px;margin-bottom:8px;border:0.5px solid var(--border);border-radius:10px;background:transparent;color:var(--text);font-size:14px;cursor:pointer">⏸ Dejar en espera</button>
-          <button class="btn-cobrar" id="btn-cobrar" onclick="abrirCobro()" disabled>Cobrar</button>
+          <button class="btn-cobrar" id="btn-cobrar" onclick="alCobrar()" disabled>Cobrar</button>
         </div>
       </div>
     </div>
@@ -383,7 +400,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <button type="button" onclick="mostrarNuevoCliente()" style="background:none;border:none;color:var(--blue);font-size:13px;cursor:pointer;padding:4px 0;text-decoration:underline">+ Crear cliente nuevo</button>
       <div id="c-cliente-nuevo" style="display:none;margin-top:8px;padding:.875rem;background:var(--bg);border-radius:10px">
         <div class="field"><label>Nombre *</label><input type="text" id="c-nuevo-nombre" placeholder="Nombre del cliente"></div>
-        <div class="field"><label>Teléfono (opcional)</label><input type="tel" inputmode="numeric" autocomplete="tel" id="c-nuevo-telefono" placeholder="10 dígitos, ej. 5527671391" oninput="limitarTelPOS(this)"></div>
+        <div class="field"><label>Teléfono *</label><input type="tel" inputmode="numeric" autocomplete="tel" id="c-nuevo-telefono" placeholder="10 dígitos, ej. 5527671391" oninput="limitarTelPOS(this)"></div>
+        <div class="field"><label>Límite de crédito (opcional)</label><input type="number" id="c-nuevo-limite" min="0" step="0.01" placeholder="Ej: 5000"></div>
+        <div class="field" id="c-nuevo-campo-nivel" style="display:none">
+          <label>Nivel de precio (opcional)</label>
+          <select id="c-nuevo-nivel">
+            <option value="">Precio de mostrador</option>
+            <option value="1">Nivel 1</option>
+            <option value="2">Nivel 2</option>
+            <option value="3">Nivel 3</option>
+          </select>
+        </div>
+        <div class="field"><label>Nota (opcional)</label><input type="text" id="c-nuevo-nota" placeholder="Ej: referencia, dirección, etc."></div>
         <button type="button" onclick="crearClienteRapido()" style="width:100%;height:40px;border:none;border-radius:8px;background:var(--blue);color:#fff;font-weight:600;cursor:pointer">Crear y seleccionar</button>
       </div>
     </div>
@@ -392,6 +420,150 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="modal-footer">
       <button onclick="cerrarCobro()">Cancelar</button>
       <button class="primary" id="btn-confirmar-cobro" onclick="confirmarCobro()">Confirmar venta</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal selector de cliente de la venta (solo El Zar del LED): se elige
+     ANTES de cobrar -normalmente antes de armar el carrito-, así el precio
+     de su ficha (si tiene nivel) se respeta sin importar cómo se pague. -->
+<div class="overlay" id="selector-cliente-modal">
+  <div class="modal">
+    <h2>Cliente de esta venta</h2>
+    <button type="button" onclick="quitarClienteVenta()" style="width:100%;height:44px;border:0.5px solid var(--border);border-radius:10px;background:transparent;color:var(--text);font-weight:600;cursor:pointer;margin-bottom:14px">👤 Público general (precio normal)</button>
+    <div class="field">
+      <label>Buscar cliente</label>
+      <input type="text" id="scv-buscar" placeholder="Buscar cliente por nombre..." autocomplete="off" oninput="buscarClienteVenta()">
+      <div id="scv-resultados" style="margin-top:6px"></div>
+    </div>
+    <button type="button" onclick="mostrarNuevoClienteVenta()" style="background:none;border:none;color:var(--blue);font-size:13px;cursor:pointer;padding:4px 0;text-decoration:underline">+ Crear cliente nuevo</button>
+    <div id="scv-cliente-nuevo" style="display:none;margin-top:8px;padding:.875rem;background:var(--bg);border-radius:10px">
+      <div class="field"><label>Nombre *</label><input type="text" id="scv-nuevo-nombre" placeholder="Nombre del cliente"></div>
+      <div class="field"><label>Teléfono *</label><input type="tel" inputmode="numeric" autocomplete="tel" id="scv-nuevo-telefono" placeholder="10 dígitos, ej. 5527671391" oninput="limitarTelPOS(this)"></div>
+      <div class="field"><label>Nivel de precio (opcional)</label>
+        <select id="scv-nuevo-nivel">
+          <option value="">Precio de mostrador</option>
+          <option value="1">Nivel 1</option>
+          <option value="2">Nivel 2</option>
+          <option value="3">Nivel 3</option>
+        </select>
+      </div>
+      <button type="button" onclick="crearClienteVentaRapido()" style="width:100%;height:40px;border:none;border-radius:8px;background:var(--blue);color:#fff;font-weight:600;cursor:pointer">Crear y seleccionar</button>
+    </div>
+    <div class="msg" id="scv-msg"></div>
+    <div class="modal-footer">
+      <button onclick="cerrarSelectorClienteVenta()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal anticipo (solo El Zar del LED): se abre directo desde el botón
+     "🔖 Anticipo" junto al carrito. El precio ya se fijó al elegir el
+     cliente arriba del carrito -esto solo pregunta cuánto se cobra hoy-. -->
+<div class="overlay" id="anticipo-modal">
+  <div class="modal">
+    <h2>🔖 Anticipo</h2>
+    <div id="tc-sec-anticipo">
+      <div class="field">
+        <label>Cliente *</label>
+        <input type="text" id="tc-cliente-buscar" placeholder="Buscar cliente por nombre..." autocomplete="off" oninput="buscarClienteAnticipo()">
+        <div id="tc-cliente-resultados" style="margin-top:6px"></div>
+        <div id="tc-cliente-seleccionado" style="display:none;margin-top:8px;padding:.625rem .875rem;background:var(--blue-bg);border-radius:8px;font-size:13px;color:var(--blue);font-weight:600"></div>
+      </div>
+      <button type="button" onclick="mostrarNuevoClienteAnticipo()" style="background:none;border:none;color:var(--blue);font-size:13px;cursor:pointer;padding:4px 0;text-decoration:underline">+ Crear cliente nuevo</button>
+      <div id="tc-cliente-nuevo" style="display:none;margin-top:8px;margin-bottom:8px;padding:.875rem;background:var(--bg);border-radius:10px">
+        <div class="field"><label>Nombre *</label><input type="text" id="tc-nuevo-nombre" placeholder="Nombre del cliente"></div>
+        <div class="field"><label>Teléfono *</label><input type="tel" inputmode="numeric" autocomplete="tel" id="tc-nuevo-telefono" placeholder="10 dígitos, ej. 5527671391" oninput="limitarTelPOS(this)"></div>
+        <div class="hint" style="font-size:12px;color:var(--text2);margin-bottom:8px">Este cliente es solo para este pedido: se borra solo en cuanto quede liquidado.</div>
+        <button type="button" onclick="crearClienteAnticipoRapido()" style="width:100%;height:40px;border:none;border-radius:8px;background:var(--blue);color:#fff;font-weight:600;cursor:pointer">Crear y seleccionar</button>
+      </div>
+      <div class="field"><label>Monto del anticipo a cobrar hoy *</label><input type="number" id="tc-monto-anticipo" min="0" step="0.01" placeholder="0.00"></div>
+    </div>
+    <div class="msg" id="tc-msg"></div>
+    <div class="modal-footer">
+      <button onclick="cerrarFlujoAnticipo()">Cancelar</button>
+      <button class="primary" onclick="continuarAnticipo()">Continuar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal cobro del anticipo: efectivo/tarjeta/transferencia por el monto del anticipo -->
+<div class="overlay" id="cobro-anticipo-modal">
+  <div class="modal">
+    <h2>Cobrar anticipo</h2>
+    <div id="an-resumen"></div>
+    <div class="field">
+      <label>Método de pago del anticipo</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <button type="button" id="an-btn-efectivo" class="metodo-btn activo" onclick="setMetodoAnticipo('efectivo')">💵 Efectivo</button>
+        <button type="button" id="an-btn-tarjeta" class="metodo-btn" onclick="setMetodoAnticipo('tarjeta')">💳 Tarjeta</button>
+        <button type="button" id="an-btn-transferencia" class="metodo-btn" onclick="setMetodoAnticipo('transferencia')">🏦 Transferencia</button>
+      </div>
+    </div>
+    <div id="an-sec-tarjeta" style="display:none">
+      <div class="field"><label>Terminal (TPV)</label><input id="an-tpv-term" placeholder="Ej: Clip, BBVA, etc." autocomplete="off"></div>
+      <div class="field"><label>Referencia / No. de operación *</label><input id="an-tpv-ref" placeholder="Ej: 001234" autocomplete="off"></div>
+      <div class="field"><label>Código de autorización *</label><input id="an-tpv-aut" placeholder="Ej: 456789" autocomplete="off"></div>
+    </div>
+    <div id="an-sec-transferencia" style="display:none">
+      <div class="field"><label>Referencia / Folio (opcional)</label><input id="an-transf-ref" placeholder="Ej: 998877" autocomplete="off"></div>
+    </div>
+    <div class="msg" id="an-msg"></div>
+    <div class="modal-footer">
+      <button onclick="volverATipoCobro()">← Atrás</button>
+      <button class="primary" id="btn-confirmar-anticipo" onclick="confirmarCobroAnticipo()">Confirmar anticipo</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal liquidar anticipo: sin carrito, cobra el saldo de un pedido ya iniciado -->
+<div class="overlay" id="liquidar-anticipo-modal">
+  <div class="modal">
+    <h2>🧾 Liquidar anticipo</h2>
+    <div class="field">
+      <label>Cliente *</label>
+      <input type="text" id="li-cliente-buscar" placeholder="Buscar cliente por nombre..." autocomplete="off" oninput="buscarClienteLiquidar()">
+      <div id="li-cliente-resultados" style="margin-top:6px"></div>
+      <div id="li-cliente-seleccionado" style="display:none;margin-top:8px;padding:.625rem .875rem;background:var(--blue-bg);border-radius:8px;font-size:13px;color:var(--blue);font-weight:600"></div>
+    </div>
+    <div id="li-sec-anticipos" style="display:none">
+      <label style="display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bottom:5px">Anticipos pendientes</label>
+      <div id="li-lista-anticipos"></div>
+    </div>
+    <div id="li-sec-pago" style="display:none">
+      <div id="li-resumen-pago"></div>
+      <div class="field">
+        <label>Método de pago</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <button type="button" id="li-btn-efectivo" class="metodo-btn activo" onclick="setMetodoLiquidar('efectivo')">💵 Efectivo</button>
+          <button type="button" id="li-btn-tarjeta" class="metodo-btn" onclick="setMetodoLiquidar('tarjeta')">💳 Tarjeta</button>
+          <button type="button" id="li-btn-transferencia" class="metodo-btn" onclick="setMetodoLiquidar('transferencia')">🏦 Transferencia</button>
+        </div>
+      </div>
+      <div id="li-sec-tarjeta" style="display:none">
+        <div class="field"><label>Terminal (TPV)</label><input id="li-tpv-term" placeholder="Ej: Clip, BBVA, etc." autocomplete="off"></div>
+        <div class="field"><label>Referencia / No. de operación *</label><input id="li-tpv-ref" placeholder="Ej: 001234" autocomplete="off"></div>
+        <div class="field"><label>Código de autorización *</label><input id="li-tpv-aut" placeholder="Ej: 456789" autocomplete="off"></div>
+      </div>
+      <div id="li-sec-transferencia" style="display:none">
+        <div class="field"><label>Referencia / Folio (opcional)</label><input id="li-transf-ref" placeholder="Ej: 998877" autocomplete="off"></div>
+      </div>
+    </div>
+    <div class="msg" id="li-msg"></div>
+    <div class="modal-footer">
+      <button onclick="cerrarLiquidarAnticipo()">Cerrar</button>
+      <button class="primary" id="btn-confirmar-liquidacion" onclick="confirmarLiquidacion()">Confirmar liquidación</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirmación con el estilo de la app; evita el alert nativo del navegador. -->
+<div class="overlay" id="liquidacion-exitosa-modal">
+  <div class="modal">
+    <h2>✅ Anticipo liquidado</h2>
+    <p id="liquidacion-exitosa-detalle" style="font-size:14px;color:var(--text2);line-height:1.5"></p>
+    <div class="modal-footer">
+      <button class="primary" onclick="cerrarLiquidacionExitosa()">Aceptar</button>
     </div>
   </div>
 </div>
@@ -420,6 +592,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <script>
 const sesionPOS = requireAuth();
 requireSucursalOperativa();
+// Temporal: todavía no existe un conteo físico confiable. Mientras sea false,
+// Punto de Venta no muestra ni limita por existencias. Al terminar el
+// inventario físico basta cambiarla a true para recuperar todas las reglas.
+const CONTROL_STOCK_POS_ACTIVO = false;
+// El Zar del LED es la única tienda con precios por nivel elegidos a mano y
+// ventas en dos partes (anticipo + liquidación): todo lo de esta sección
+// solo se muestra ahí, nunca en las demás sucursales.
+const esZarDelLed = !!(sesionPOS && Array.isArray(sesionPOS.tienda) && sesionPOS.tienda.includes('El Zar del LED'));
+// Cliente elegido para TODA la venta (El Zar del LED): fija su precio de
+// ficha (si tiene nivel) desde antes de armar el carrito, así se respeta sin
+// importar con qué método se termine pagando. null = público general.
+let clienteVentaActual = null;
+if(esZarDelLed){
+  document.getElementById('acciones-anticipo').style.display = 'flex';
+  document.getElementById('selector-cliente-venta').style.display = 'flex';
+}
 let carrito = [];
 
 // Revisar si viene un producto desde Consulta de Precios
@@ -486,7 +674,9 @@ async function ejecutarBusqueda(){
   if(!q){ mostrarMasVendidos(); return; }
   document.getElementById('resultados-titulo').style.display='none';
   try{
-    const r = await authFetch('/api/pos/buscar?q='+encodeURIComponent(q));
+    let url = '/api/pos/buscar?q='+encodeURIComponent(q);
+    if(clienteVentaActual) url += '&cliente_id='+clienteVentaActual.id;
+    const r = await authFetch(url);
     const items = await r.json();
     renderResultados(items);
   }catch(e){}
@@ -530,7 +720,7 @@ function renderResultados(items){
     <div class="res-item" onclick="agregarPorIndice(${i})">
       <div>
         <div class="res-name">${esc(p.nombre)}</div>
-        <div class="res-meta">${esc(p.categoria)} · stock: ${p.vendido_por_peso?p.stock.toFixed(2)+' kg':p.stock}${p.clave?' · Clave: '+esc(p.clave):''}</div>
+        <div class="res-meta">${esc(p.categoria)}${CONTROL_STOCK_POS_ACTIVO?' · Stock: '+(p.vendido_por_peso?p.stock.toFixed(2)+' kg':p.stock):''}${p.clave?' · Clave: '+esc(p.clave):''}</div>
       </div>
       <div class="res-price">${money(p.precio_final)}${p.vendido_por_peso?'/kg':''}</div>
     </div>`).join('');
@@ -545,20 +735,23 @@ function agregarPorIndice(i){
 let pesoPendiente = null;
 
 function agregar(p){
-  // Restriccion de stock agotado desactivada: se permite agregar aunque stock sea 0
   if(p.vendido_por_peso){
     pesoPendiente = p;
     document.getElementById('peso-titulo').textContent = p.nombre;
-    document.getElementById('peso-label').textContent = `Peso en kg (disponible: ${p.stock.toFixed(2)} kg)`;
-    document.getElementById('peso-input').value='';
-    document.getElementById('peso-input').max=p.stock;
+    document.getElementById('peso-label').textContent = CONTROL_STOCK_POS_ACTIVO
+      ? `Peso en kg (disponible: ${p.stock.toFixed(2)} kg)`
+      : 'Peso en kg';
+    const pesoInput = document.getElementById('peso-input');
+    pesoInput.value='';
+    if(CONTROL_STOCK_POS_ACTIVO) pesoInput.max=p.stock;
+    else pesoInput.removeAttribute('max');
     document.getElementById('peso-modal').classList.add('open');
-    setTimeout(()=>document.getElementById('peso-input').focus(),60);
+    setTimeout(()=>pesoInput.focus(),60);
     return;
   }
   const ex = carrito.find(c=>c.id===p.id);
   if(ex){
-    if(ex.cantidad+1>p.stock){
+    if(CONTROL_STOCK_POS_ACTIVO && ex.cantidad+1>p.stock){
       alert(`⚠️ Solo hay ${p.stock} unidades de "${p.nombre}" en stock.`);
       return;
     }
@@ -567,13 +760,14 @@ function agregar(p){
   else{carrito.push({id:p.id,nombre:p.nombre,precio:p.precio_final,precioOriginal:p.precio_venta,cantidad:1,vendido_por_peso:false,unidad:p.unidad,stock:p.stock});}
   limpiarBusqueda();
   renderCarrito();
+  if(clienteVentaActual) aplicarPreciosCliente(clienteVentaActual.id);
 }
 
 function confirmarPeso(){
   const kg = parseFloat(document.getElementById('peso-input').value);
   if(isNaN(kg)||kg<=0){return;}
   const p = pesoPendiente;
-  if(kg>p.stock){
+  if(CONTROL_STOCK_POS_ACTIVO && kg>p.stock){
     alert(`⚠️ Solo hay ${p.stock.toFixed(2)} kg de "${p.nombre}" en stock.`);
     return;
   }
@@ -581,6 +775,7 @@ function confirmarPeso(){
   cerrarPeso();
   limpiarBusqueda();
   renderCarrito();
+  if(clienteVentaActual) aplicarPreciosCliente(clienteVentaActual.id);
 }
 function cerrarPeso(){document.getElementById('peso-modal').classList.remove('open');pesoPendiente=null;}
 
@@ -615,7 +810,7 @@ function cambiarCantidadManual(id, input){
     val = Math.round(val);
     if(val<=0)val=1;
   }
-  if(c.stock!=null && val>c.stock){
+  if(CONTROL_STOCK_POS_ACTIVO && c.stock!=null && val>c.stock){
     const disp = c.vendido_por_peso?c.stock.toFixed(3)+' kg':c.stock;
     alert(`⚠️ Solo hay ${disp} disponibles. Se ajustó al máximo.`);
     val = c.stock;
@@ -790,6 +985,7 @@ function renderCarrito(){
     actualizarTotales();
     actualizarBadgePendientes();
     document.getElementById('btn-cobrar').disabled=true;
+    document.getElementById('btn-anticipo').disabled=true;
     return;
   }
   cont.innerHTML = carrito.map(c=>{
@@ -821,6 +1017,7 @@ function renderCarrito(){
   actualizarTotales();
   actualizarBadgePendientes();
   document.getElementById('btn-cobrar').disabled=false;
+  document.getElementById('btn-anticipo').disabled=false;
 }
 
 let _customVentaIdCounter = -1;
@@ -1089,6 +1286,8 @@ async function aplicarPreciosCliente(clienteId){
 
 function mostrarNuevoCliente(){
   document.getElementById('c-cliente-nuevo').style.display='block';
+  // El nivel de precio solo tiene caso donde se vende con niveles de mayoreo.
+  document.getElementById('c-nuevo-campo-nivel').style.display = (sesionPOS && sesionPOS.usa_niveles_precio) ? 'block' : 'none';
   document.getElementById('c-nuevo-nombre').focus();
 }
 
@@ -1100,13 +1299,18 @@ async function crearClienteRapido(){
   const nombre = document.getElementById('c-nuevo-nombre').value.trim();
   if(!nombre){ alert('Escribe el nombre del cliente'); return; }
   const digitosTel = (document.getElementById('c-nuevo-telefono').value||'').replace(/\D/g,'').slice(0,10);
-  if(digitosTel && digitosTel.length !== 10){ alert('El teléfono debe tener 10 dígitos (escribiste '+digitosTel.length+')'); return; }
-  if(digitosTel && (digitosTel[0]==='0' || digitosTel[0]==='1')){ alert('El teléfono no puede empezar con 0 ni con 1'); return; }
-  const telefono = digitosTel || null;
+  if(digitosTel.length !== 10){ alert('Escribe el teléfono a 10 dígitos: para un cliente de crédito hace falta poder contactarlo'); return; }
+  if(digitosTel[0]==='0' || digitosTel[0]==='1'){ alert('El teléfono no puede empezar con 0 ni con 1'); return; }
+  const telefono = digitosTel;
+  const limiteRaw = document.getElementById('c-nuevo-limite').value.trim();
+  const limite_credito = limiteRaw ? parseFloat(limiteRaw) : null;
+  const nivelRaw = document.getElementById('c-nuevo-nivel').value;
+  const nivel_precio = nivelRaw ? parseInt(nivelRaw, 10) : null;
+  const nota = document.getElementById('c-nuevo-nota').value.trim() || null;
   try{
     const r = await authFetch('/api/clientes', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({nombre, telefono})
+      body: JSON.stringify({nombre, telefono, limite_credito, nivel_precio, nota})
     });
     const data = await r.json();
     if(!r.ok){ alert(extraerMensajeError(data.detail, 'No se pudo crear el cliente')); return; }
@@ -1114,6 +1318,9 @@ async function crearClienteRapido(){
     document.getElementById('c-cliente-nuevo').style.display='none';
     document.getElementById('c-nuevo-nombre').value='';
     document.getElementById('c-nuevo-telefono').value='';
+    document.getElementById('c-nuevo-limite').value='';
+    document.getElementById('c-nuevo-nivel').value='';
+    document.getElementById('c-nuevo-nota').value='';
   }catch(e){ alert('Error de conexión'); }
 }
 
@@ -1133,6 +1340,13 @@ function renderResumenCobro(){
   document.getElementById('cobro-resumen').innerHTML=html;
 }
 
+// El Zar del LED pasa primero por "Tipo de cobro" (precio 1/2/3 + completo o
+// anticipo); las demás tiendas van directo al cobro de siempre.
+function alCobrar(){
+  if(!carrito.length)return;
+  abrirCobro();
+}
+
 function abrirCobro(){
   if(!carrito.length)return;
   renderResumenCobro();
@@ -1145,6 +1359,11 @@ function abrirCobro(){
   document.getElementById('c-cliente-resultados').innerHTML='';
   document.getElementById('c-cliente-seleccionado').style.display='none';
   document.getElementById('c-cliente-nuevo').style.display='none';
+  document.getElementById('c-nuevo-nombre').value='';
+  document.getElementById('c-nuevo-telefono').value='';
+  document.getElementById('c-nuevo-limite').value='';
+  document.getElementById('c-nuevo-nivel').value='';
+  document.getElementById('c-nuevo-nota').value='';
   clienteSeleccionado = null;
   document.getElementById('cobro-msg').className='msg';
   // El modal se muestra ANTES de fijar el método: setMetodo() enfoca el
@@ -1154,6 +1373,396 @@ function abrirCobro(){
   setMetodo('efectivo');
 }
 function cerrarCobro(){document.getElementById('cobro-modal').classList.remove('open');}
+
+// ─── El Zar del LED: flujo de anticipo ──────────────────────────────────────
+// Arranca en lo que ya esté elegido arriba del carrito (clienteVentaActual):
+// si ya se dijo quién es el cliente, no debería preguntarlo otra vez.
+let clienteAnticipo = null;
+
+// ─── Cliente de la venta (El Zar del LED): se elige antes de vender ────────
+function abrirSelectorClienteVenta(){
+  document.getElementById('scv-buscar').value='';
+  document.getElementById('scv-resultados').innerHTML='';
+  document.getElementById('scv-cliente-nuevo').style.display='none';
+  document.getElementById('scv-nuevo-nombre').value='';
+  document.getElementById('scv-nuevo-telefono').value='';
+  document.getElementById('scv-nuevo-nivel').value='';
+  document.getElementById('scv-msg').className='msg';
+  document.getElementById('selector-cliente-modal').classList.add('open');
+}
+function cerrarSelectorClienteVenta(){document.getElementById('selector-cliente-modal').classList.remove('open');}
+
+async function buscarClienteVenta(){
+  const q = document.getElementById('scv-buscar').value.trim();
+  const cont = document.getElementById('scv-resultados');
+  if(!q){ cont.innerHTML=''; return; }
+  try{
+    const r = await authFetch('/api/clientes?q='+encodeURIComponent(q));
+    const clientes = await r.json();
+    if(!clientes.length){
+      cont.innerHTML = `<div onclick='usarNombreComoNuevoClienteVenta("${esc(q).replace(/"/g,'&quot;')}")' style="padding:8px 10px;border:0.5px dashed var(--blue);border-radius:8px;cursor:pointer;font-size:13px;color:var(--blue)">+ Crear cliente nuevo: "${esc(q)}"</div>`;
+      return;
+    }
+    cont.innerHTML = clientes.slice(0,6).map(c=>{
+      const nivelTxt = c.nivel_precio ? ` · Nivel ${c.nivel_precio}` : '';
+      return `<div onclick='seleccionarClienteVenta(${c.id},"${esc(c.nombre).replace(/"/g,'&quot;')}",${c.nivel_precio||'null'})' style="padding:8px 10px;border:0.5px solid var(--border);border-radius:8px;margin-bottom:4px;cursor:pointer;font-size:13px"><strong>${esc(c.nombre)}</strong>${nivelTxt}</div>`;
+    }).join('');
+  }catch(e){}
+}
+
+async function seleccionarClienteVenta(id, nombre, nivel){
+  clienteVentaActual = {id, nombre, nivel_precio: nivel};
+  actualizarEtiquetaClienteVenta();
+  cerrarSelectorClienteVenta();
+  await aplicarPreciosCliente(id);
+}
+
+function quitarClienteVenta(){
+  clienteVentaActual = null;
+  actualizarEtiquetaClienteVenta();
+  cerrarSelectorClienteVenta();
+  aplicarPreciosCliente(null);
+}
+
+function actualizarEtiquetaClienteVenta(){
+  const txt = document.getElementById('txt-cliente-venta');
+  if(clienteVentaActual){
+    const nivelTxt = clienteVentaActual.nivel_precio ? ` · Nivel ${clienteVentaActual.nivel_precio}` : ' · precio normal';
+    txt.textContent = '👤 ' + clienteVentaActual.nombre + nivelTxt;
+  }else{
+    txt.textContent = '👤 Público general';
+  }
+}
+
+function mostrarNuevoClienteVenta(){
+  document.getElementById('scv-cliente-nuevo').style.display='block';
+  document.getElementById('scv-nuevo-nombre').focus();
+}
+function usarNombreComoNuevoClienteVenta(nombre){
+  document.getElementById('scv-buscar').value='';
+  document.getElementById('scv-resultados').innerHTML='';
+  mostrarNuevoClienteVenta();
+  document.getElementById('scv-nuevo-nombre').value=nombre;
+  document.getElementById('scv-nuevo-telefono').focus();
+}
+async function crearClienteVentaRapido(){
+  const nombre = document.getElementById('scv-nuevo-nombre').value.trim();
+  const msg = document.getElementById('scv-msg');
+  if(!nombre){ msg.className='msg error show'; msg.textContent='Escribe el nombre del cliente'; return; }
+  const digitosTel = (document.getElementById('scv-nuevo-telefono').value||'').replace(/\D/g,'').slice(0,10);
+  if(digitosTel.length !== 10){ msg.className='msg error show'; msg.textContent='Escribe el teléfono a 10 dígitos'; return; }
+  if(digitosTel[0]==='0' || digitosTel[0]==='1'){ msg.className='msg error show'; msg.textContent='El teléfono no puede empezar con 0 ni con 1'; return; }
+  const nivelRaw = document.getElementById('scv-nuevo-nivel').value;
+  const nivel_precio = nivelRaw ? parseInt(nivelRaw,10) : null;
+  try{
+    const r = await authFetch('/api/clientes', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({nombre, telefono:digitosTel, nivel_precio})
+    });
+    const data = await r.json();
+    if(!r.ok){ msg.className='msg error show'; msg.textContent=extraerMensajeError(data.detail,'No se pudo crear el cliente'); return; }
+    await seleccionarClienteVenta(data.id, data.nombre, data.nivel_precio);
+  }catch(e){ msg.className='msg error show'; msg.textContent='Error de conexión'; }
+}
+
+function abrirFlujoAnticipo(){
+  if(!carrito.length)return;
+  clienteAnticipo = clienteVentaActual;
+  document.getElementById('tc-cliente-buscar').value='';
+  document.getElementById('tc-cliente-resultados').innerHTML='';
+  if(clienteVentaActual){
+    const sel = document.getElementById('tc-cliente-seleccionado');
+    sel.style.display='block';
+    sel.textContent = '👤 ' + clienteVentaActual.nombre;
+  }else{
+    document.getElementById('tc-cliente-seleccionado').style.display='none';
+  }
+  document.getElementById('tc-cliente-nuevo').style.display='none';
+  document.getElementById('tc-nuevo-nombre').value='';
+  document.getElementById('tc-nuevo-telefono').value='';
+  document.getElementById('tc-monto-anticipo').value='';
+  document.getElementById('tc-msg').className='msg';
+  document.getElementById('anticipo-modal').classList.add('open');
+}
+function cerrarFlujoAnticipo(){document.getElementById('anticipo-modal').classList.remove('open');}
+
+function mostrarNuevoClienteAnticipo(){
+  document.getElementById('tc-cliente-nuevo').style.display='block';
+  document.getElementById('tc-nuevo-nombre').focus();
+}
+async function crearClienteAnticipoRapido(){
+  const nombre = document.getElementById('tc-nuevo-nombre').value.trim();
+  const msg = document.getElementById('tc-msg');
+  if(!nombre){ msg.className='msg error show'; msg.textContent='Escribe el nombre del cliente'; return; }
+  const digitosTel = (document.getElementById('tc-nuevo-telefono').value||'').replace(/\D/g,'').slice(0,10);
+  if(digitosTel.length !== 10){ msg.className='msg error show'; msg.textContent='Escribe el teléfono a 10 dígitos: para un anticipo hace falta poder contactar al cliente'; return; }
+  if(digitosTel[0]==='0' || digitosTel[0]==='1'){ msg.className='msg error show'; msg.textContent='El teléfono no puede empezar con 0 ni con 1'; return; }
+  try{
+    const r = await authFetch('/api/clientes', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({nombre, telefono: digitosTel||null, temporal:true})
+    });
+    const data = await r.json();
+    if(!r.ok){ msg.className='msg error show'; msg.textContent=extraerMensajeError(data.detail,'No se pudo crear el cliente'); return; }
+    seleccionarClienteAnticipo(data.id, data.nombre);
+    document.getElementById('tc-cliente-nuevo').style.display='none';
+    msg.className='msg';
+  }catch(e){ msg.className='msg error show'; msg.textContent='Error de conexión'; }
+}
+
+async function buscarClienteAnticipo(){
+  const q = document.getElementById('tc-cliente-buscar').value.trim();
+  const cont = document.getElementById('tc-cliente-resultados');
+  if(!q){ cont.innerHTML=''; return; }
+  try{
+    const r = await authFetch('/api/clientes?q='+encodeURIComponent(q));
+    const clientes = await r.json();
+    // Sin coincidencia: en vez de un callejón sin salida ("Sin resultados" y
+    // ya), se ofrece de una vez crearlo con ese mismo nombre -es lo normal
+    // en El Zar del LED, casi siempre es un cliente nuevo pidiendo su lámpara-.
+    if(!clientes.length){
+      cont.innerHTML = `<div onclick='usarNombreComoNuevoAnticipo("${esc(q).replace(/"/g,'&quot;')}")' style="padding:8px 10px;border:0.5px dashed var(--blue);border-radius:8px;cursor:pointer;font-size:13px;color:var(--blue)">+ Crear cliente nuevo: "${esc(q)}"</div>`;
+      return;
+    }
+    cont.innerHTML = clientes.slice(0,6).map(c=>`<div onclick='seleccionarClienteAnticipo(${c.id},"${esc(c.nombre).replace(/"/g,'&quot;')}")' style="padding:8px 10px;border:0.5px solid var(--border);border-radius:8px;margin-bottom:4px;cursor:pointer;font-size:13px"><strong>${esc(c.nombre)}</strong></div>`).join('');
+  }catch(e){}
+}
+function usarNombreComoNuevoAnticipo(nombre){
+  document.getElementById('tc-cliente-buscar').value='';
+  document.getElementById('tc-cliente-resultados').innerHTML='';
+  mostrarNuevoClienteAnticipo();
+  document.getElementById('tc-nuevo-nombre').value=nombre;
+  document.getElementById('tc-nuevo-telefono').focus();
+}
+function seleccionarClienteAnticipo(id, nombre){
+  clienteAnticipo = {id, nombre};
+  document.getElementById('tc-cliente-buscar').value='';
+  document.getElementById('tc-cliente-resultados').innerHTML='';
+  const sel = document.getElementById('tc-cliente-seleccionado');
+  sel.style.display='block';
+  sel.textContent = '👤 ' + nombre;
+}
+
+function continuarAnticipo(){
+  const msg = document.getElementById('tc-msg');
+  if(!clienteAnticipo){ msg.className='msg error show'; msg.textContent='Selecciona el cliente'; return; }
+  const monto = parseFloat(document.getElementById('tc-monto-anticipo').value);
+  const total = calcSubtotal()*(1-descuentoExtra/100);
+  if(isNaN(monto)||monto<=0){ msg.className='msg error show'; msg.textContent='Monto de anticipo inválido'; return; }
+  if(monto>total){ msg.className='msg error show'; msg.textContent=`El anticipo (${money(monto)}) no puede ser mayor al total del pedido (${money(total)})`; return; }
+  cerrarFlujoAnticipo();
+  abrirCobroAnticipo(monto, total);
+}
+
+// ─── Cobro del anticipo (efectivo/tarjeta/transferencia por el monto del anticipo) ───
+let anticipoMontoActual = 0, anticipoTotalActual = 0, metodoAnticipo = 'efectivo';
+function abrirCobroAnticipo(monto, total){
+  anticipoMontoActual = monto;
+  anticipoTotalActual = total;
+  document.getElementById('an-resumen').innerHTML =
+    `<div class="tk-line"><span>Total del pedido</span><span>${money(total)}</span></div>`+
+    `<div class="tk-line tk-total"><span>Anticipo a cobrar hoy</span><span>${money(monto)}</span></div>`+
+    `<div class="tk-line" style="color:var(--text2)"><span>Cliente</span><span>${esc(clienteAnticipo.nombre)}</span></div>`+
+    `<div class="tk-line" style="color:var(--amber)"><span>Saldo pendiente</span><span>${money(total-monto)}</span></div>`;
+  document.getElementById('an-tpv-ref').value='';
+  document.getElementById('an-tpv-aut').value='';
+  document.getElementById('an-tpv-term').value='';
+  document.getElementById('an-transf-ref').value='';
+  document.getElementById('an-msg').className='msg';
+  setMetodoAnticipo('efectivo');
+  document.getElementById('cobro-anticipo-modal').classList.add('open');
+}
+function cerrarCobroAnticipo(){document.getElementById('cobro-anticipo-modal').classList.remove('open');}
+function volverATipoCobro(){cerrarCobroAnticipo();abrirTipoCobro();}
+
+function setMetodoAnticipo(m){
+  metodoAnticipo = m;
+  document.getElementById('an-btn-efectivo').classList.toggle('activo', m==='efectivo');
+  document.getElementById('an-btn-tarjeta').classList.toggle('activo', m==='tarjeta');
+  document.getElementById('an-btn-transferencia').classList.toggle('activo', m==='transferencia');
+  document.getElementById('an-sec-tarjeta').style.display = m==='tarjeta'?'block':'none';
+  document.getElementById('an-sec-transferencia').style.display = m==='transferencia'?'block':'none';
+}
+
+async function confirmarCobroAnticipo(){
+  const btn = document.getElementById('btn-confirmar-anticipo');
+  if(btn.disabled) return;
+  btn.disabled = true;
+  const msg = document.getElementById('an-msg');
+  try{
+    const body = {tpv_referencia:null, tpv_autorizacion:null, tpv_terminal:null, transferencia_referencia:null};
+    if(metodoAnticipo==='tarjeta'){
+      const ref=document.getElementById('an-tpv-ref').value.trim();
+      const aut=document.getElementById('an-tpv-aut').value.trim();
+      if(!ref||!aut){ msg.className='msg error show'; msg.textContent='Ingresa la referencia y autorización de la TPV'; return; }
+      body.tpv_referencia=ref; body.tpv_autorizacion=aut;
+      body.tpv_terminal=document.getElementById('an-tpv-term').value.trim()||null;
+    }else if(metodoAnticipo==='transferencia'){
+      body.transferencia_referencia=document.getElementById('an-transf-ref').value.trim()||null;
+    }
+
+    // 1) El pedido completo, como venta a crédito por el total acordado.
+    const items=carrito.map(c=>({
+      producto_id: c.personalizado ? null : c.id,
+      nombre: c.personalizado ? c.nombre : null,
+      cantidad: c.cantidad,
+      precio_unitario: c.precio,
+      precio_original: c.precioOriginal||null,
+    }));
+    const rVenta = await authFetch('/api/pos/venta',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      items, descuento_extra_pct:descuentoExtra, metodo_pago:'credito', cliente_id:clienteAnticipo.id, es_anticipo:true,
+    })});
+    const venta = await rVenta.json();
+    if(!rVenta.ok){ msg.className='msg error show'; msg.textContent=extraerMensajeError(venta.detail,'No se pudo registrar el pedido'); return; }
+
+    // 2) El anticipo que se cobra hoy, ligado a esa venta.
+    const rPago = await authFetch('/api/clientes/'+clienteAnticipo.id+'/pagos', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      monto:anticipoMontoActual, metodo_pago:metodoAnticipo, venta_id:venta.id,
+      tpv_referencia:body.tpv_referencia, tpv_autorizacion:body.tpv_autorizacion, tpv_terminal:body.tpv_terminal,
+      transferencia_referencia:body.transferencia_referencia,
+    })});
+    const pago = await rPago.json();
+    if(!rPago.ok){
+      msg.className='msg error show';
+      msg.textContent='El pedido #'+venta.id+' quedó registrado, pero el anticipo no se pudo cobrar: '+extraerMensajeError(pago.detail,'error desconocido')+'. Regístralo desde Clientes.';
+      return;
+    }
+
+    cerrarCobroAnticipo();
+    carrito=[];descuentoExtra=0;autorizadoPor=null;
+    if(esZarDelLed){ clienteVentaActual=null; actualizarEtiquetaClienteVenta(); }
+    renderCarrito();
+    if(metodoAnticipo==='efectivo') abrirCajonDinero();
+    venta.anticipo_cobrado = anticipoMontoActual;
+    venta.anticipo_saldo = round2(anticipoTotalActual - anticipoMontoActual);
+    mostrarTicket(venta);
+  }catch(e){
+    msg.className='msg error show'; msg.textContent='Error de conexión';
+  }finally{
+    btn.disabled=false;
+  }
+}
+function round2(n){return Math.round(n*100)/100;}
+
+// ─── Liquidar anticipo (sin carrito: solo cobra el saldo de un pedido) ─────
+let clienteLiquidar = null, anticipoALiquidar = null, metodoLiquidar = 'efectivo';
+function abrirLiquidarAnticipo(){
+  clienteLiquidar = null; anticipoALiquidar = null;
+  document.getElementById('li-cliente-buscar').value='';
+  document.getElementById('li-cliente-resultados').innerHTML='';
+  document.getElementById('li-cliente-seleccionado').style.display='none';
+  document.getElementById('li-lista-anticipos').innerHTML='';
+  document.getElementById('li-sec-anticipos').style.display='none';
+  document.getElementById('li-sec-pago').style.display='none';
+  document.getElementById('li-msg').className='msg';
+  document.getElementById('liquidar-anticipo-modal').classList.add('open');
+}
+function cerrarLiquidarAnticipo(){document.getElementById('liquidar-anticipo-modal').classList.remove('open');}
+function mostrarLiquidacionExitosa(anticipo){
+  document.getElementById('liquidacion-exitosa-detalle').textContent =
+    'Se liquidó ' + anticipo.descripcion + ' por ' + money(anticipo.saldo) + '.';
+  document.getElementById('liquidacion-exitosa-modal').classList.add('open');
+}
+function cerrarLiquidacionExitosa(){document.getElementById('liquidacion-exitosa-modal').classList.remove('open');}
+
+async function buscarClienteLiquidar(){
+  const q = document.getElementById('li-cliente-buscar').value.trim();
+  const cont = document.getElementById('li-cliente-resultados');
+  if(!q){ cont.innerHTML=''; return; }
+  try{
+    const r = await authFetch('/api/clientes?q='+encodeURIComponent(q));
+    const clientes = await r.json();
+    if(!clientes.length){ cont.innerHTML='<div style="font-size:12px;color:var(--text2);padding:6px 0">Sin resultados</div>'; return; }
+    cont.innerHTML = clientes.slice(0,6).map(c=>`<div onclick='seleccionarClienteLiquidar(${c.id},"${esc(c.nombre).replace(/"/g,'&quot;')}")' style="padding:8px 10px;border:0.5px solid var(--border);border-radius:8px;margin-bottom:4px;cursor:pointer;font-size:13px"><strong>${esc(c.nombre)}</strong></div>`).join('');
+  }catch(e){}
+}
+
+async function seleccionarClienteLiquidar(id, nombre){
+  clienteLiquidar = {id, nombre};
+  anticipoALiquidar = null;
+  document.getElementById('li-cliente-buscar').value='';
+  document.getElementById('li-cliente-resultados').innerHTML='';
+  const sel = document.getElementById('li-cliente-seleccionado');
+  sel.style.display='block';
+  sel.textContent = '👤 ' + nombre;
+  document.getElementById('li-sec-pago').style.display='none';
+
+  const cont = document.getElementById('li-lista-anticipos');
+  const secAnt = document.getElementById('li-sec-anticipos');
+  secAnt.style.display='block';
+  cont.innerHTML = '<div style="font-size:12px;color:var(--text2);padding:6px 0">Buscando...</div>';
+  try{
+    const r = await authFetch('/api/clientes/'+id);
+    const c = await r.json();
+    const anticipos = c.anticipos||[];
+    if(!anticipos.length){
+      cont.innerHTML = '<div style="font-size:12px;color:var(--text2);padding:6px 0">Este cliente no tiene anticipos pendientes.</div>';
+      return;
+    }
+    cont.innerHTML = anticipos.map(a=>`
+      <div onclick='elegirAnticipoLiquidar(this,${a.venta_id},${a.saldo},"${esc(a.descripcion).replace(/"/g,'&quot;')}")' class="metodo-btn" style="width:100%;text-align:left;height:auto;padding:10px 12px;margin-bottom:6px;display:block">
+        <div style="font-weight:600;font-size:14px">${esc(a.descripcion)}</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:2px">Total ${money(a.total)} · Pagado ${money(a.pagado)}</div>
+        <div style="font-weight:700;color:var(--amber);margin-top:4px">Saldo: ${money(a.saldo)}</div>
+      </div>`).join('');
+  }catch(e){
+    cont.innerHTML = '<div style="font-size:12px;color:var(--red);padding:6px 0">Error al buscar anticipos</div>';
+  }
+}
+
+function elegirAnticipoLiquidar(el, ventaId, saldo, descripcion){
+  anticipoALiquidar = {ventaId, saldo, descripcion};
+  document.querySelectorAll('#li-lista-anticipos .metodo-btn').forEach(x=>x.classList.remove('activo'));
+  el.classList.add('activo');
+  document.getElementById('li-sec-pago').style.display='block';
+  document.getElementById('li-resumen-pago').innerHTML =
+    `<div class="tk-line"><span>${esc(descripcion)}</span><span></span></div>`+
+    `<div class="tk-line tk-total"><span>Saldo a liquidar</span><span>${money(saldo)}</span></div>`;
+  document.getElementById('li-tpv-ref').value='';
+  document.getElementById('li-tpv-aut').value='';
+  document.getElementById('li-tpv-term').value='';
+  document.getElementById('li-transf-ref').value='';
+  setMetodoLiquidar('efectivo');
+}
+
+function setMetodoLiquidar(m){
+  metodoLiquidar = m;
+  document.getElementById('li-btn-efectivo').classList.toggle('activo', m==='efectivo');
+  document.getElementById('li-btn-tarjeta').classList.toggle('activo', m==='tarjeta');
+  document.getElementById('li-btn-transferencia').classList.toggle('activo', m==='transferencia');
+  document.getElementById('li-sec-tarjeta').style.display = m==='tarjeta'?'block':'none';
+  document.getElementById('li-sec-transferencia').style.display = m==='transferencia'?'block':'none';
+}
+
+async function confirmarLiquidacion(){
+  const btn = document.getElementById('btn-confirmar-liquidacion');
+  if(btn.disabled) return;
+  btn.disabled = true;
+  const msg = document.getElementById('li-msg');
+  try{
+    if(!anticipoALiquidar){ msg.className='msg error show'; msg.textContent='Elige qué anticipo liquidar'; return; }
+    const body = {monto:anticipoALiquidar.saldo, metodo_pago:metodoLiquidar, venta_id:anticipoALiquidar.ventaId};
+    if(metodoLiquidar==='tarjeta'){
+      const ref=document.getElementById('li-tpv-ref').value.trim();
+      const aut=document.getElementById('li-tpv-aut').value.trim();
+      if(!ref||!aut){ msg.className='msg error show'; msg.textContent='Ingresa la referencia y autorización de la TPV'; return; }
+      body.tpv_referencia=ref; body.tpv_autorizacion=aut;
+      body.tpv_terminal=document.getElementById('li-tpv-term').value.trim()||null;
+    }else if(metodoLiquidar==='transferencia'){
+      body.transferencia_referencia=document.getElementById('li-transf-ref').value.trim()||null;
+    }
+    const r = await authFetch('/api/clientes/'+clienteLiquidar.id+'/pagos', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const data = await r.json();
+    if(!r.ok){ msg.className='msg error show'; msg.textContent=extraerMensajeError(data.detail,'Error al liquidar'); return; }
+    cerrarLiquidarAnticipo();
+    if(metodoLiquidar==='efectivo') abrirCajonDinero();
+    mostrarLiquidacionExitosa(anticipoALiquidar);
+  }catch(e){
+    msg.className='msg error show'; msg.textContent='Error de conexión';
+  }finally{
+    btn.disabled=false;
+  }
+}
 
 function calcCambio(){
   const subtotal=calcSubtotal();
@@ -1321,6 +1930,7 @@ async function confirmarCobro(){
     if(!r.ok){msg.className='msg error show';msg.textContent=extraerMensajeError(data.detail, 'Error al registrar venta');return;}
     cerrarCobro();
     carrito=[];descuentoExtra=0;autorizadoPor=null;
+    if(esZarDelLed){ clienteVentaActual=null; actualizarEtiquetaClienteVenta(); }
     renderCarrito();
     if(data.metodo_pago==='efectivo') abrirCajonDinero();
     mostrarTicket(data);
@@ -1438,7 +2048,12 @@ function generarTicketHTML(v){
     html+=`<div class="tk-line tk-ahorro"><span>🎉 Ahorraste</span><span>${money(ahorroTk)}</span></div>`;
   }
   html+=`<div class="tk-line tk-total"><span>TOTAL</span><span>${money(v.total)}</span></div>`+RAYA;
-  if(v.metodo_pago==='credito'){
+  if(v.metodo_pago==='credito' && v.anticipo_cobrado!=null){
+    html+=`<div class="tk-line" style="color:var(--amber)"><span>Pago</span><span>ANTICIPO</span></div>`;
+    if(v.cliente_nombre)html+=`<div class="tk-line"><span>Cliente</span><span>${esc(v.cliente_nombre)}</span></div>`;
+    html+=`<div class="tk-line"><span>Anticipo cobrado hoy</span><span>${money(v.anticipo_cobrado)}</span></div>`;
+    html+=`<div class="tk-line" style="color:var(--amber)"><span>Saldo pendiente</span><span>${money(v.anticipo_saldo)}</span></div>`;
+  }else if(v.metodo_pago==='credito'){
     html+=`<div class="tk-line" style="color:var(--amber)"><span>Pago</span><span>A CRÉDITO</span></div>`;
     if(v.cliente_nombre)html+=`<div class="tk-line"><span>Cliente</span><span>${esc(v.cliente_nombre)}</span></div>`;
   }else if(v.metodo_pago==='tarjeta'){
@@ -1484,11 +2099,22 @@ function ticketTextoPlano(v){
     txt+=`🎉 Ahorraste: ${money(ahorroTxt)}\n`;
   }
   txt+=`💰 TOTAL: ${money(v.total)}\n`;
-  if(v.metodo_pago==='tarjeta'){
+  if(v.metodo_pago==='credito' && v.anticipo_cobrado!=null){
+    txt+=`🔖 Anticipo`;
+    if(v.cliente_nombre)txt+=` — ${v.cliente_nombre}`;
+    txt+=`\nCobrado hoy: ${money(v.anticipo_cobrado)}\nSaldo pendiente: ${money(v.anticipo_saldo)}\n`;
+  }else if(v.metodo_pago==='credito'){
+    txt+=`📒 Pago: A crédito`;
+    if(v.cliente_nombre)txt+=` (${v.cliente_nombre})`;
+    txt+=`\n`;
+  }else if(v.metodo_pago==='tarjeta'){
     txt+=`💳 Pago: Tarjeta`;
     if(v.tpv_terminal)txt+=` (${v.tpv_terminal})`;
     txt+=`\n`;
     if(v.tpv_referencia)txt+=`Ref: ${v.tpv_referencia}\n`;
+  }else if(v.metodo_pago==='transferencia'){
+    txt+=`🏦 Pago: Transferencia\n`;
+    if(v.transferencia_referencia)txt+=`Ref: ${v.transferencia_referencia}\n`;
   }else if(v.pago_con){
     txt+=`💵 Pagó: ${money(v.pago_con)} | Cambio: ${money(v.cambio||0)}\n`;
   }
