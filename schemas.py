@@ -8,6 +8,7 @@ class ProductoBase(BaseModel):
     categoria: str = Field(..., min_length=1, max_length=100)
     marca: Optional[str] = Field(None, max_length=100)
     codigo_barras: Optional[str] = Field(None, max_length=64)
+    clave: Optional[str] = Field(None, max_length=64)
     precio_venta: float = Field(..., gt=0)
     precio_costo: float = Field(default=0.0, ge=0)
     precio_1: Optional[float] = Field(None, ge=0)  # niveles de mayoreo; nulo = no aplica
@@ -33,6 +34,7 @@ class ProductoUpdate(BaseModel):
     categoria: Optional[str] = Field(None, min_length=1, max_length=100)
     marca: Optional[str] = Field(None, max_length=100)
     codigo_barras: Optional[str] = Field(None, max_length=64)
+    clave: Optional[str] = Field(None, max_length=64)
     precio_venta: Optional[float] = Field(None, gt=0)
     precio_costo: Optional[float] = Field(None, ge=0)
     stock: Optional[float] = Field(None)

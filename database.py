@@ -21,6 +21,11 @@ class Producto(Base):
     categoria = Column(String, nullable=False)
     marca = Column(String, nullable=True)
     codigo_barras = Column(String, nullable=True, unique=True, index=True)
+    # Clave interna del producto (ej. la que ya traían de SICAR u otro POS
+    # anterior). Distinta de codigo_barras: no es necesariamente un EAN
+    # escaneable, es solo el identificador corto con el que el negocio ya
+    # está acostumbrado a buscar sus productos.
+    clave = Column(String, nullable=True, unique=True, index=True)
     precio_venta = Column(Float, nullable=False)
     precio_costo = Column(Float, default=0.0)
     # Precios por nivel para clientes de mayoreo (El Zar). Nulo = no capturado,
@@ -126,6 +131,12 @@ class Sucursal(Base):
     # Si esta sucursal vende con niveles de precio (mayoreo): muestra el campo
     # en los clientes y aplica su precio en el punto de venta.
     usa_niveles_precio = Column(Boolean, default=False)
+    # Los productos sin tienda clasificada normalmente se ven en todas las
+    # sucursales (es el catálogo general compartido entre Only Reef/Garden/
+    # Reptile/Pets). Una sucursal de un negocio sin relación con las demás
+    # (ej. El Zar del LED) no debe heredar ese catálogo: con esto en True,
+    # solo ve los productos de su(s) propia(s) tienda(s).
+    catalogo_exclusivo = Column(Boolean, default=False)
     creado_en = Column(DateTime, default=datetime.utcnow)
 
 
@@ -148,6 +159,9 @@ class Sesion(Base):
     rol = Column(String, nullable=False)
     sucursal = Column(String, nullable=True)
     tienda = Column(String, nullable=True)  # tienda activa, resuelta desde la sucursal al iniciar sesión
+    # Copiado de Sucursal.catalogo_exclusivo al iniciar sesión, igual que
+    # "tienda": así aplicar_filtro_tienda no necesita otra consulta.
+    catalogo_exclusivo = Column(Boolean, default=False)
     creado_en = Column(DateTime, default=datetime.utcnow)
 
 

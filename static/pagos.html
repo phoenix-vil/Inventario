@@ -189,6 +189,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   .totales{
     flex-shrink:0;
     position:static;
+    margin-top:16px;
     border-radius:16px;
     border-bottom:0.5px solid var(--border);
     box-shadow:0 1px 3px rgba(0,0,0,.06);
@@ -479,8 +480,16 @@ async function ejecutarBusqueda(){
 // se agregan al carrito igual, con un clic—. Se pide una sola vez por
 // visita a la pantalla: no cambia mientras se sigue vendiendo, así que no
 // vale la pena consultarlo de nuevo cada vez que se borra el buscador.
+// Solo en escritorio (>=1024px, mismo corte que el layout de dos columnas):
+// en el celular esa columna es la misma pantalla del carrito, y esta lista
+// se sentía como que estorbaba en vez de ayudar.
 let masVendidosCache = null;
 async function mostrarMasVendidos(){
+  if(window.innerWidth < 1024){
+    document.getElementById('resultados-titulo').style.display='none';
+    document.getElementById('resultados').innerHTML='';
+    return;
+  }
   const titulo = document.getElementById('resultados-titulo');
   titulo.textContent = '🔥 Más vendidos';
   titulo.style.display = 'block';
@@ -503,7 +512,7 @@ function renderResultados(items){
     <div class="res-item" onclick="agregarPorIndice(${i})">
       <div>
         <div class="res-name">${esc(p.nombre)}</div>
-        <div class="res-meta">${esc(p.categoria)} · stock: ${p.vendido_por_peso?p.stock.toFixed(2)+' kg':p.stock}</div>
+        <div class="res-meta">${esc(p.categoria)} · stock: ${p.vendido_por_peso?p.stock.toFixed(2)+' kg':p.stock}${p.clave?' · Clave: '+esc(p.clave):''}</div>
       </div>
       <div class="res-price">${money(p.precio_final)}${p.vendido_por_peso?'/kg':''}</div>
     </div>`).join('');

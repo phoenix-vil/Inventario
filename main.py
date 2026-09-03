@@ -126,11 +126,13 @@ def login(data: Login, db: Session = Depends(get_db)):
             )
 
     token = generar_token()
-    db.add(Sesion(token=token, usuario=u.usuario, rol=u.rol, sucursal=data.sucursal, tienda=tienda_texto))
+    db.add(Sesion(token=token, usuario=u.usuario, rol=u.rol, sucursal=data.sucursal, tienda=tienda_texto,
+                  catalogo_exclusivo=bool(suc.catalogo_exclusivo) if suc else False))
     db.commit()
     return {"token": token, "usuario": u.usuario, "rol": u.rol, "sucursal": data.sucursal,
             "tienda": texto_a_tiendas(tienda_texto),
-            "usa_niveles_precio": bool(suc.usa_niveles_precio) if suc else False}
+            "usa_niveles_precio": bool(suc.usa_niveles_precio) if suc else False,
+            "catalogo_exclusivo": bool(suc.catalogo_exclusivo) if suc else False}
 
 
 @app.post("/api/logout")
@@ -149,7 +151,8 @@ def info_sesion(authorization: Optional[str] = Header(None), db: Session = Depen
         raise HTTPException(status_code=401, detail="Sin sesión")
     suc = db.query(Sucursal).filter(Sucursal.nombre == s.sucursal).first() if s.sucursal else None
     return {"usuario": s.usuario, "rol": s.rol, "sucursal": s.sucursal, "tienda": texto_a_tiendas(s.tienda),
-            "usa_niveles_precio": bool(suc.usa_niveles_precio) if suc else False}
+            "usa_niveles_precio": bool(suc.usa_niveles_precio) if suc else False,
+            "catalogo_exclusivo": bool(suc.catalogo_exclusivo) if suc else False}
 
 
 # ─── Sucursales ─────────────────────────────────────────────────────────────
@@ -191,10 +194,17 @@ def validar_tiendas(lista: Optional[List[str]], db: Session):
 def aplicar_filtro_tienda(query, sesion: Optional[Sesion]):
     """Restringe un query de Producto a la(s) tienda(s) activa(s) de la sesión.
     Sin sesión, o sesión sin tienda activa (ej. Only Enterprises) -> sin restricción.
-    Los productos sin tienda clasificada (None) siempre son visibles."""
+    Los productos sin tienda clasificada (None) normalmente siempre son
+    visibles -es el catálogo general compartido entre Only Reef/Garden/
+    Reptile/Pets-, salvo que la sucursal sea de catálogo exclusivo (un
+    negocio sin relación con las demás, ej. El Zar del LED): ahí solo se ven
+    los productos de su(s) propia(s) tienda(s)."""
     if sesion and sesion.tienda:
         tiendas_activas = texto_a_tiendas(sesion.tienda)
-        query = query.filter(or_(Producto.tienda.is_(None), Producto.tienda.in_(tiendas_activas)))
+        if sesion.catalogo_exclusivo:
+            query = query.filter(Producto.tienda.in_(tiendas_activas))
+        else:
+            query = query.filter(or_(Producto.tienda.is_(None), Producto.tienda.in_(tiendas_activas)))
     return query
 
 
@@ -438,14 +448,19 @@ def tiendas_clasificar_page():
 
 # ─── Resumen / dashboard ───────────────────────────────────────────────────
 @app.get("/api/resumen")
-def resumen(db: Session = Depends(get_db)):
-    total = db.query(func.count(Producto.id)).scalar()
-    valor = db.query(func.sum(Producto.precio_venta * Producto.stock)).scalar() or 0
-    stock_bajo = db.query(func.count(Producto.id)).filter(
+def resumen(sesion: Optional[Sesion] = Depends(sesion_opcional), db: Session = Depends(get_db)):
+    # Mismo alcance que /api/productos: sin esto, el resumen contaba TODO el
+    # catálogo sin importar la sesión, así que una sucursal de catálogo
+    # exclusivo (El Zar del LED) veía el total de todo el negocio arriba y
+    # solo lo suyo en la lista de abajo -contradictorio-.
+    base = aplicar_filtro_tienda(db.query(Producto), sesion)
+    total = base.count()
+    valor = base.with_entities(func.sum(Producto.precio_venta * Producto.stock)).scalar() or 0
+    stock_bajo = base.filter(
         Producto.stock > 0, Producto.stock <= Producto.stock_minimo
-    ).scalar()
-    agotados = db.query(func.count(Producto.id)).filter(Producto.stock == 0).scalar()
-    categorias = db.query(func.count(Producto.categoria.distinct())).scalar()
+    ).count()
+    agotados = base.filter(Producto.stock == 0).count()
+    categorias = base.with_entities(func.count(Producto.categoria.distinct())).scalar()
     return {
         "total_productos": total,
         "valor_inventario": round(valor, 2),
@@ -474,6 +489,7 @@ def listar(
             or_(
                 Producto.nombre.ilike(f"%{q}%"),
                 Producto.categoria.ilike(f"%{q}%"),
+                Producto.clave.ilike(f"%{q}%"),
             )
         )
     if categoria:
@@ -511,7 +527,7 @@ def crear(data: ProductoCreate, sesion: Sesion = Depends(requerir_gerente), db: 
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Ya existe un producto con ese código de barras")
+        raise HTTPException(status_code=409, detail="Ya existe un producto con ese código de barras o esa clave")
     db.refresh(p)
     return p
 
@@ -530,7 +546,7 @@ def editar(id: int, data: ProductoUpdate, sesion: Sesion = Depends(requerir_gere
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Ya existe un producto con ese código de barras")
+        raise HTTPException(status_code=409, detail="Ya existe un producto con ese código de barras o esa clave")
     db.refresh(p)
     return p
 
@@ -573,15 +589,19 @@ def eliminar(id: int, sesion: Sesion = Depends(requerir_gerente), db: Session = 
 
 # ─── Categorías disponibles ────────────────────────────────────────────────
 @app.get("/api/categorias")
-def categorias(db: Session = Depends(get_db)):
-    rows = db.query(Producto.categoria).distinct().order_by(Producto.categoria).all()
+def categorias(sesion: Optional[Sesion] = Depends(sesion_opcional), db: Session = Depends(get_db)):
+    query = aplicar_filtro_tienda(db.query(Producto.categoria).distinct(), sesion)
+    rows = query.order_by(Producto.categoria).all()
     return [r[0] for r in rows]
 
 
 # ─── Marcas disponibles ────────────────────────────────────────────────────
 @app.get("/api/marcas")
-def marcas(db: Session = Depends(get_db)):
-    rows = db.query(Producto.marca).filter(Producto.marca != None).distinct().order_by(Producto.marca).all()
+def marcas(sesion: Optional[Sesion] = Depends(sesion_opcional), db: Session = Depends(get_db)):
+    query = aplicar_filtro_tienda(
+        db.query(Producto.marca).filter(Producto.marca != None).distinct(), sesion
+    )
+    rows = query.order_by(Producto.marca).all()
     return [r[0] for r in rows if r[0]]
 
 
@@ -744,6 +764,7 @@ def lista_precios(q: Optional[str] = Query(None), categoria: Optional[str] = Que
             "descuento_pct": p.descuento_pct if descuento_activo else 0,
             "unidad": p.unidad,
             "codigo_barras": p.codigo_barras,
+            "clave": p.clave,
             "vendido_por_peso": bool(p.vendido_por_peso),
             "precio_gramo": round(precio_final / 1000, 4) if p.vendido_por_peso else None,
             "imagen_url": p.imagen_url,
@@ -1117,6 +1138,7 @@ def inventario_por_sucursal(sesion: Sesion = Depends(requerir_enterprise), db: S
             "categoria": p.categoria,
             "marca": p.marca,
             "codigo_barras": p.codigo_barras,
+            "clave": p.clave,
             "unidad": p.unidad,
             "vendido_por_peso": bool(p.vendido_por_peso),
             "stock_global": p.stock,
@@ -1196,6 +1218,7 @@ def buscar_en_sucursales(
             "categoria": p.categoria,
             "marca": p.marca,
             "codigo_barras": p.codigo_barras,
+            "clave": p.clave,
             "unidad": p.unidad,
             "vendido_por_peso": bool(p.vendido_por_peso),
             "stock_global": p.stock,
@@ -1633,6 +1656,7 @@ def pos_producto(
         "unidad": p.unidad,
         "vendido_por_peso": bool(p.vendido_por_peso),
         "codigo_barras": p.codigo_barras,
+        "clave": p.clave,
     }
 
 
@@ -1647,6 +1671,7 @@ def pos_buscar(
         or_(
             Producto.nombre.ilike(f"%{q}%"),
             Producto.codigo_barras == q,
+            Producto.clave.ilike(f"%{q}%"),
         )
     )
     # Antes el límite era 20: con nombres largos y varias variantes del mismo
@@ -1669,6 +1694,7 @@ def pos_buscar(
             "unidad": p.unidad,
             "vendido_por_peso": bool(p.vendido_por_peso),
             "codigo_barras": p.codigo_barras,
+            "clave": p.clave,
         })
     return resultado
 
@@ -1723,6 +1749,7 @@ def pos_mas_vendidos(
             "unidad": p.unidad,
             "vendido_por_peso": bool(p.vendido_por_peso),
             "codigo_barras": p.codigo_barras,
+            "clave": p.clave,
         })
     return resultado
 

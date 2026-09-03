@@ -169,7 +169,7 @@ button.danger:hover{background:var(--red-bg)}
       <!-- Aquí y no en la barra de arriba: ahí las etiquetas se ocultan en
            móvil y estas dos quedaban como emojis sueltos, imposibles de
            adivinar. -->
-      <button onclick="abrirBuscarSucursales()" title="Ver si hay existencias en otra sucursal">🏪 Buscar en otra sucursal</button>
+      <button id="btn-buscar-suc" onclick="abrirBuscarSucursales()" title="Ver si hay existencias en otra sucursal">🏪 Buscar en otra sucursal</button>
       <button id="btn-enviar-suc" style="display:none" onclick="abrirEnviarSucursal()" title="Enviar producto a otra sucursal">📤 Enviar a otra sucursal</button>
     </div>
     <div style="overflow-x:auto">
@@ -204,6 +204,9 @@ button.danger:hover{background:var(--red-bg)}
         <input id="f-codigo" placeholder="Escanea o escribe el código">
         <button type="button" onclick="abrirEscaner('form')">📷</button>
       </div>
+    </div>
+    <div class="field"><label>Clave</label>
+      <input id="f-clave" placeholder="Clave interna (ej. la que ya traían de SICAR u otro sistema)">
     </div>
     <div class="field" style="margin-bottom:14px">
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;color:var(--text)">
@@ -483,6 +486,7 @@ function abrirModal(id = null) {
     document.getElementById('f-cat').value = p.categoria;
     document.getElementById('f-marca').value = p.marca || '';
     document.getElementById('f-codigo').value = p.codigo_barras || '';
+    document.getElementById('f-clave').value = p.clave || '';
     document.getElementById('f-precio').value = p.precio_venta;
     document.getElementById('f-precio1').value = p.precio_1 == null ? '' : p.precio_1;
     document.getElementById('f-precio2').value = p.precio_2 == null ? '' : p.precio_2;
@@ -502,6 +506,7 @@ function abrirModal(id = null) {
     document.getElementById('f-cat').value = '';
     document.getElementById('f-marca').value = '';
     document.getElementById('f-codigo').value = '';
+    document.getElementById('f-clave').value = '';
     document.getElementById('f-precio').value = '';
     document.getElementById('f-costo').value = '';
     document.getElementById('f-stock').value = '0';
@@ -548,6 +553,7 @@ async function guardar() {
   const categoria = document.getElementById('f-cat').value.trim();
   const marca = document.getElementById('f-marca').value.trim() || null;
   const codigo_barras = document.getElementById('f-codigo').value.trim() || null;
+  const clave = document.getElementById('f-clave').value.trim() || null;
   const precio_venta = parseFloat(document.getElementById('f-precio').value);
   const precio_costo = parseFloat(document.getElementById('f-costo').value) || 0;
   const stock = parseFloat(document.getElementById('f-stock').value) || 0;
@@ -564,7 +570,7 @@ async function guardar() {
   if (!nombre || !categoria || isNaN(precio_venta)) {
     toast('Completa los campos obligatorios (*)', true); return;
   }
-  const body = JSON.stringify({ nombre, categoria, marca, codigo_barras, precio_venta, precio_costo, precio_1, precio_2, precio_3, stock, stock_minimo, unidad, vendido_por_peso, descuento_pct, descuento_hasta, imagen_url });
+  const body = JSON.stringify({ nombre, categoria, marca, codigo_barras, clave, precio_venta, precio_costo, precio_1, precio_2, precio_3, stock, stock_minimo, unidad, vendido_por_peso, descuento_pct, descuento_hasta, imagen_url });
   try {
     if (editandoId) {
       await fetchJSON(`/api/productos/${editandoId}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body });
@@ -625,7 +631,7 @@ async function buscarEnSucursales() {
         : `<span style="display:inline-block;background:var(--bg);color:var(--text2);border-radius:20px;padding:3px 10px;font-size:12px;margin:2px 0">Sin existencias asignadas · global: ${cant(p.stock_global)}</span>`;
       return `<div style="padding:.75rem 0;border-bottom:0.5px solid var(--border)">
         <div style="font-weight:600;font-size:14px">${esc(p.nombre)}</div>
-        <div style="font-size:11px;color:var(--text2);margin-bottom:6px">${esc(p.categoria)}${p.marca ? ' · ' + esc(p.marca) : ''}${p.codigo_barras ? ' · ' + esc(p.codigo_barras) : ''}</div>
+        <div style="font-size:11px;color:var(--text2);margin-bottom:6px">${esc(p.categoria)}${p.marca ? ' · ' + esc(p.marca) : ''}${p.codigo_barras ? ' · ' + esc(p.codigo_barras) : ''}${p.clave ? ' · Clave: ' + esc(p.clave) : ''}</div>
         <div>${tags}</div>
       </div>`;
     }).join('');
@@ -642,6 +648,12 @@ let envProducto = null;
 
 (function mostrarBotonEnviar() {
   const s = getSesion();
+  // Catálogo exclusivo (ej. El Zar del LED): es la única sucursal que vende
+  // su tienda, así que no hay "otra sucursal" con la que buscar o trasladar.
+  if (s && s.catalogo_exclusivo) {
+    document.getElementById('btn-buscar-suc').style.display = 'none';
+    return;
+  }
   if (s && !sesionVeTodo()) document.getElementById('btn-enviar-suc').style.display = '';
 })();
 
