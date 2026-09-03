@@ -173,8 +173,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     gap:8px 56px;
     max-width:1400px;
     margin:0 auto;
-    padding:1.25rem;
-    height:calc(100vh - 54px - 2.5rem);
+    padding:.75rem 1.25rem;
+    height:calc(100vh - 54px - 1.5rem);
   }
   .container{display:contents}
   .panel-buscar,.panel-carrito{display:flex;flex-direction:column;min-height:0;height:100%}
@@ -182,7 +182,23 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
      nota más la separación que solo con aire en blanco. */
   .panel-carrito{border-left:0.5px solid var(--border);padding-left:28px}
   .search-row,.section-title,#resultados-titulo{flex-shrink:0}
-  .resultados,.cart{flex:1;min-height:0;max-height:none;overflow-y:auto}
+  /* Un poco menos de aire entre el buscador y la caja de resultados: le
+     regresa esa altura a la caja, para que quepan los 10 más vendidos sin
+     scroll interno. */
+  .search-row{margin-bottom:.5rem}
+  .cart{flex:1;min-height:0;max-height:none;overflow-y:auto}
+  /* Misma caja que usan "Últimas transacciones"/"Para devolver" en
+     /devoluciones (mismo fondo, borde y radio): antes esta lista quedaba
+     suelta, sin encuadre, mientras que en /devoluciones todo va en cajas. */
+  .caja-resultados{
+    background:var(--bg2);
+    border:0.5px solid var(--border);
+    border-radius:12px;
+    display:flex;flex-direction:column;
+    flex:1;min-height:0;overflow:hidden;
+  }
+  #resultados-titulo{padding:.875rem 1rem;margin:0;border-bottom:0.5px solid var(--border)}
+  .resultados{flex:1;min-height:0;max-height:none;overflow-y:auto;padding:.625rem}
   /* El carrito completo (título + lista + pago) queda del lado derecho, uno
      debajo del otro; ya no flota fijo abajo como en móvil, sino el último
      renglón fijo (no se encoge) de esa columna. */
@@ -228,8 +244,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <input type="search" id="buscar" placeholder="Buscar producto por nombre…" oninput="buscar()" autocomplete="off">
       <button onclick="abrirEscaner()" title="Escanear">📷</button>
     </div>
-    <div class="section-title" id="resultados-titulo" style="display:none"></div>
-    <div class="resultados" id="resultados"></div>
+    <div class="caja-resultados">
+      <div class="section-title" id="resultados-titulo" style="display:none"></div>
+      <div class="resultados" id="resultados"></div>
+    </div>
   </div>
 
   <div class="panel-carrito">
@@ -495,7 +513,7 @@ async function mostrarMasVendidos(){
   titulo.style.display = 'block';
   if(masVendidosCache){ renderResultados(masVendidosCache); return; }
   try{
-    const r = await authFetch('/api/pos/mas-vendidos');
+    const r = await authFetch('/api/pos/mas-vendidos?limit=10');
     masVendidosCache = await r.json();
     // Si ya se escribió algo mientras esto cargaba, no lo pise
     if(!document.getElementById('buscar').value.trim()) renderResultados(masVendidosCache);
