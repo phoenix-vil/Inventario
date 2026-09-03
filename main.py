@@ -848,6 +848,12 @@ def registrar_venta(data: RegistrarVenta, sesion: Sesion = Depends(requerir_sesi
     ahorro_total = round(ahorro_productos + ahorro_descuento_extra, 2)
     metodo = data.metodo_pago if data.metodo_pago in ("efectivo", "tarjeta", "credito", "transferencia") else "efectivo"
 
+    # Los pedidos en dos pagos son exclusivos de El Zar del LED. La interfaz
+    # ya oculta esos botones en las demás tiendas, pero la API también debe
+    # impedir que se creen manipulando la petición desde el navegador.
+    if data.es_anticipo and "El Zar del LED" not in texto_a_tiendas(sesion.tienda):
+        raise HTTPException(status_code=403, detail="Los anticipos solo están disponibles en El Zar del LED")
+
     cliente = None
     if metodo == "credito":
         if not data.cliente_id:

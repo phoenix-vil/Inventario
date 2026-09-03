@@ -138,7 +138,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
   </div>
 
-  <div class="tabs-clientes">
+  <div class="tabs-clientes" id="tabs-clientes">
     <button id="tab-credito" class="activo" onclick="cambiarVistaClientes('credito')">Cuenta de crédito</button>
     <button id="tab-pedidos" onclick="cambiarVistaClientes('pedidos')">Pedidos y anticipos</button>
   </div>
@@ -235,9 +235,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 const _sesion = requireAuth();
 // El tipo de precio solo tiene sentido donde se venden niveles de mayoreo
 const usaNiveles = !!(_sesion && _sesion.usa_niveles_precio);
+const esZarDelLed = !!(_sesion && Array.isArray(_sesion.tienda) && _sesion.tienda.includes('El Zar del LED'));
 if(usaNiveles){
   const campo = document.getElementById('campo-nivel');
   if(campo) campo.style.display = '';
+}
+if(!esZarDelLed){
+  // Pedidos y anticipos pertenecen exclusivamente al flujo de El Zar.
+  document.getElementById('tabs-clientes').style.display = 'none';
 }
 
 const _sesionActual = getSesion();
