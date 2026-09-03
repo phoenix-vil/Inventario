@@ -3330,18 +3330,31 @@ def reporte_completo(
             bloque["tiendas"] = tiendas_de.get(nombre, [])
             por_sucursal.append(bloque)
 
+    # Para explicar el total de pagos de cada cliente, distinguimos los
+    # movimientos ligados a pedidos: primer cobro = anticipo; posteriores =
+    # liquidación. Se consultan también los cobros anteriores al periodo para
+    # clasificar correctamente una liquidación hecha hoy.
+    venta_ids_pagos = {p.venta_id for p in abonos_lista if p.venta_id is not None}
+    pedidos_map = {}
+    if venta_ids_pagos:
+        pedidos_map = {
+            v.id: v for v in db.query(Venta).filter(
+                Venta.id.in_(venta_ids_pagos), Venta.es_anticipo == True).all()
+        }
+    pagos_pedidos_todos = (
+        db.query(PagoCredito).filter(PagoCredito.venta_id.in_(pedidos_map)).all()
+        if pedidos_map else []
+    )
+    tipos_pago_pedido = _tipos_pago_pedido(pagos_pedidos_todos, set(pedidos_map))
+
     clientes = clientes_visibles_query(db, sesion).all()
     detalle_clientes = []
     for c in clientes:
         saldo = _saldo_cliente(db, c.id)
         ventas_credito_periodo = [v for v in ventas if v.cliente_id == c.id and v.metodo_pago == "credito"]
         monto_ventas_credito = round(sum(v.total for v in ventas_credito_periodo), 2)
-        pagos_q = db.query(PagoCredito).filter(PagoCredito.cliente_id == c.id)
-        if d:
-            pagos_q = pagos_q.filter(PagoCredito.creado_en >= d)
-        if h:
-            pagos_q = pagos_q.filter(PagoCredito.creado_en <= h)
-        monto_pagos_periodo = round(sum(p.monto for p in pagos_q.all()), 2)
+        pagos_cliente_periodo = [p for p in abonos_lista if p.cliente_id == c.id]
+        monto_pagos_periodo = round(sum(p.monto for p in pagos_cliente_periodo), 2)
 
         if saldo > 0 or monto_ventas_credito > 0 or monto_pagos_periodo > 0:
             # Un cliente puede comprar en más de una sucursal (todas comparten
@@ -3355,6 +3368,13 @@ def reporte_completo(
                 "ventas_credito_periodo": monto_ventas_credito,
                 "pagos_periodo": monto_pagos_periodo,
                 "sucursales": sucursales_compra,
+                "movimientos_pedidos": [{
+                    "tipo": tipos_pago_pedido[p.id],
+                    "pedido_id": p.venta_id,
+                    "monto": p.monto,
+                    "fecha": p.creado_en.isoformat() + "Z",
+                } for p in sorted(pagos_cliente_periodo, key=lambda x: x.creado_en)
+                  if p.id in tipos_pago_pedido],
             })
     detalle_clientes = sorted(detalle_clientes, key=lambda x: x["saldo_actual"], reverse=True)
 

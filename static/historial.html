@@ -978,6 +978,16 @@ async function generarReportePDF(desdeISO, hastaISO, etiquetaPeriodo){
         doc.setTextColor(0);
         y += 12;
       }
+      (c.movimientos_pedidos || []).forEach(function(m){
+        if(y > 780){ doc.addPage(); y = 50; }
+        const tipo = m.tipo === 'anticipo' ? 'Anticipo' : 'Liquidacion';
+        const fecha = new Date(m.fecha).toLocaleDateString('es-MX',{day:'2-digit',month:'short'});
+        doc.setFont('courier','normal'); doc.setFontSize(8); doc.setTextColor(90,90,85);
+        doc.text('  ' + tipo + ' pedido #' + m.pedido_id + ' · ' + fecha, c1, y);
+        doc.text(money(m.monto), c3, y, {align:'right'});
+        doc.setTextColor(0);
+        y += 12;
+      });
     });
   }
 
