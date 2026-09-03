@@ -203,6 +203,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <button onclick="confirmarAbono()" style="width:100%;height:42px;border:none;border-radius:8px;background:var(--green);color:#fff;font-weight:600;cursor:pointer">Confirmar abono</button>
       <div class="msg" id="abono-msg"></div>
     </div>
+    <!-- Solo aparece si el cliente tiene pedidos con anticipo pendientes
+         (El Zar del LED); en las demás tiendas nunca se genera este tipo de
+         venta, así que la sección queda oculta. -->
+    <div class="hist-section-title" id="detalle-anticipos-titulo" style="display:none;color:var(--amber)">🔖 Anticipos pendientes</div>
+    <div id="detalle-anticipos"></div>
     <div class="hist-section-title">Ventas a crédito</div>
     <div id="detalle-ventas"></div>
     <div class="hist-section-title">Pagos realizados</div>
@@ -600,6 +605,15 @@ async function abrirDetalle(id){
     const saldoCont = document.getElementById('detalle-saldo-cont');
     saldoCont.className = 'detalle-saldo' + (c.saldo<=0 ? ' sin-deuda' : '');
     document.getElementById('detalle-saldo-valor').textContent = money(c.saldo);
+
+    const anticipos = c.anticipos || [];
+    const antTitulo = document.getElementById('detalle-anticipos-titulo');
+    const antCont = document.getElementById('detalle-anticipos');
+    antTitulo.style.display = anticipos.length ? 'block' : 'none';
+    antCont.innerHTML = anticipos.map(a=>{
+      const fecha = new Date(a.fecha).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'});
+      return `<div class="hist-row"><span>${esc(a.descripcion)}<div class="hist-fecha">${fecha} · Total ${money(a.total)} · Pagado ${money(a.pagado)}</div></span><span style="color:var(--amber);font-weight:700">Saldo ${money(a.saldo)}</span></div>`;
+    }).join('');
 
     const ventasCont = document.getElementById('detalle-ventas');
     ventasCont.innerHTML = c.ventas.length

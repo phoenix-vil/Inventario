@@ -94,6 +94,11 @@ class Venta(Base):
     cliente_id = Column(Integer, nullable=True)
     estado = Column(String, default="activa")  # activa | parcial | cancelada | devolucion
     venta_origen_id = Column(Integer, nullable=True)  # si es devolucion, la venta que la origino
+    # Venta a crédito creada desde el flujo de anticipo (El Zar del LED): el
+    # pedido completo se registra aquí con su precio total acordado, y se va
+    # pagando con PagoCredito.venta_id apuntándole directo a esta venta, en
+    # vez de repartirse FIFO como un abono genérico. False para todo lo demás.
+    es_anticipo = Column(Boolean, default=False)
     total_devuelto = Column(Float, default=0.0)
     devoluciones_json = Column(String, nullable=True)
     creado_en = Column(DateTime, default=datetime.utcnow)
@@ -222,6 +227,10 @@ class Cliente(Base):
     sucursal = Column(String, nullable=True, index=True)
     # 1, 2 o 3 para los clientes de mayoreo; nulo = precio de mostrador
     nivel_precio = Column(Integer, nullable=True)
+    # Dado de alta solo para un anticipo (El Zar del LED): se borra solo en
+    # cuanto su saldo llega a $0, a diferencia de un cliente de crédito
+    # normal, que se queda en la cartera aunque ya no deba nada.
+    temporal = Column(Boolean, default=False)
     creado_en = Column(DateTime, default=datetime.utcnow)
 
 
@@ -235,6 +244,11 @@ class PagoCredito(Base):
     operador = Column(String, nullable=True)
     sucursal = Column(String, nullable=True)
     nota = Column(String, nullable=True)
+    # Si se da, este pago aplica a ESA venta a crédito específica (ej. el
+    # anticipo o la liquidación de un pedido concreto), no al saldo general
+    # del cliente. Nulo = como antes: se reparte FIFO entre las ventas a
+    # crédito más antiguas (ver _saldo_por_venta_credito).
+    venta_id = Column(Integer, nullable=True, index=True)
     tpv_referencia = Column(String, nullable=True)
     tpv_autorizacion = Column(String, nullable=True)
     tpv_terminal = Column(String, nullable=True)
