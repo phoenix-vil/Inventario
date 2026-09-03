@@ -136,7 +136,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   </div>
 
   <div class="search-bar">
-    <input type="search" id="buscar" placeholder="Buscar cliente por nombre..." oninput="filtrarClientes()">
+    <input type="search" id="buscar" name="busqueda-clientes" placeholder="Buscar cliente por nombre..." autocomplete="off" oninput="filtrarClientes()">
   </div>
 
   <div id="lista-clientes">
@@ -711,8 +711,11 @@ async function confirmarAbono(){
 }
 
 // ─── Liquidar cuenta (condonar saldo, requiere autorización) ───────────────
+let busquedaAntesLiquidar = '';
+
 function abrirLiquidar(){
   if(saldoActual<=0) return;
+  busquedaAntesLiquidar = document.getElementById('buscar').value;
   document.getElementById('liq-cliente-nombre').textContent = clienteActualNombre;
   document.getElementById('liq-saldo').textContent = money(saldoActual);
   document.getElementById('liq-password').value = '';
@@ -723,6 +726,11 @@ function abrirLiquidar(){
 
 function cerrarLiquidar(){
   document.getElementById('modal-liquidar').classList.remove('open');
+  const buscar = document.getElementById('buscar');
+  if(buscar.value !== busquedaAntesLiquidar){
+    buscar.value = busquedaAntesLiquidar;
+    filtrarClientes();
+  }
 }
 
 async function confirmarLiquidar(){
@@ -759,21 +767,21 @@ cargarClientes();
 
 <!-- Modal liquidar cuenta (condonar saldo, requiere autorización) -->
 <div class="overlay" id="modal-liquidar">
-  <div class="modal">
+  <form class="modal" autocomplete="off" onsubmit="event.preventDefault(); confirmarLiquidar()">
     <h2>🧾 Liquidar cuenta</h2>
     <p style="font-size:13px;color:var(--text2);margin-bottom:12px">
       Esto pone en $0 el saldo de <b id="liq-cliente-nombre"></b> (<span id="liq-saldo"></span>) sin cobrarlo.
       Requiere autorización de Daniel Mondragon.
     </p>
-    <div class="field"><label>Usuario gerente</label><input id="liq-usuario" value="Daniel Mondragon" autocomplete="off"></div>
-    <div class="field"><label>Contraseña</label><input type="password" id="liq-password" autocomplete="off"></div>
-    <div class="field"><label>Motivo (opcional)</label><input type="text" id="liq-nota" placeholder="Ej: cuenta incobrable"></div>
+    <div class="field"><label for="liq-usuario">Usuario gerente</label><input id="liq-usuario" name="usuario-liquidacion" value="Daniel Mondragon" autocomplete="username"></div>
+    <div class="field"><label for="liq-password">Contraseña</label><input type="password" id="liq-password" name="password-liquidacion" autocomplete="current-password"></div>
+    <div class="field"><label for="liq-nota">Motivo (opcional)</label><input type="text" id="liq-nota" name="motivo-liquidacion" autocomplete="off" placeholder="Ej: cuenta incobrable"></div>
     <div class="msg" id="liquidar-msg"></div>
     <div class="modal-footer">
-      <button onclick="cerrarLiquidar()">Cancelar</button>
-      <button class="primary" onclick="confirmarLiquidar()" style="background:var(--red)">Liquidar</button>
+      <button type="button" onclick="cerrarLiquidar()">Cancelar</button>
+      <button type="submit" class="primary" style="background:var(--red)">Liquidar</button>
     </div>
-  </div>
+  </form>
 </div>
 
 <!-- Modal de recibo de abono -->
