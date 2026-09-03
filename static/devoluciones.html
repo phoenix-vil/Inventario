@@ -151,6 +151,11 @@ button.primary:hover{opacity:.85;background:var(--text)}
 .art-info{flex:1;min-width:0}
 .art-nombre{font-size:14px;font-weight:600}
 .art-sub{font-size:12px;color:var(--text2);margin-top:2px}
+/* Vuelve a la lista de últimas transacciones desde el detalle de un ticket.
+   text-transform/letter-spacing se reinician porque .box-header va en
+   mayúsculas y el botón se leería "← VOLVER". */
+.btn-volver{height:30px;padding:0 12px;border:0.5px solid var(--border);border-radius:8px;background:transparent;color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;text-transform:none;letter-spacing:0}
+.btn-volver:hover{background:var(--bg);color:var(--text)}
 .btn-agregar{height:36px;padding:0 14px;border:0.5px solid var(--border);border-radius:8px;background:transparent;color:var(--text);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0}
 .btn-agregar:hover{background:var(--blue-bg);border-color:var(--blue);color:var(--blue)}
 .btn-agregar:disabled{opacity:.5;cursor:default;background:transparent !important;color:var(--text2) !important;border-color:var(--border) !important}
@@ -534,6 +539,19 @@ function renderListaIzquierda(){
   renderArticulosTicket();
 }
 
+// Vuelve al paso anterior: buscador vacío y la lista de últimas transacciones,
+// por si se buscó un ticket equivocado o ya se terminó con él.
+function volverALista(){
+  ventaActual = null;
+  seleccion = [];
+  limpiarMsg();
+  document.getElementById('num-ticket').value = '';
+  document.getElementById('num-ticket-movil').value = '';
+  document.getElementById('resultado').innerHTML = '';
+  renderListaIzquierda();
+  renderSeleccionados();
+}
+
 function renderUltimasTransacciones(){
   document.getElementById('lista-titulo').textContent = 'Últimas transacciones';
   document.getElementById('lista-ticket-info').innerHTML = '';
@@ -562,7 +580,9 @@ function renderArticulosTicket(){
   const nombresMet = {efectivo:'Efectivo', tarjeta:'Tarjeta', credito:'Crédito', transferencia:'Transferencia'};
   const cancelada = (estado === 'devuelta' || estado === 'cancelada' || estado === 'devolucion');
 
-  document.getElementById('lista-titulo').textContent = 'Artículos del ticket #' + v.id;
+  document.getElementById('lista-titulo').innerHTML =
+    '<span>Artículos del ticket #' + v.id + '</span>'
+    + '<button class="btn-volver" onclick="volverALista()">← Volver</button>';
   document.getElementById('lista-ticket-info').innerHTML =
     '<div class="ticket-info ' + claseEstadoTicketInfo(estado) + '"><span>' + esc(v.sucursal || '') + (v.operador ? ' · ' + esc(v.operador) : '') + ' · ' + fecha
     + ' · Pago: ' + (nombresMet[v.metodo_pago] || v.metodo_pago) + '</span>'
@@ -854,15 +874,9 @@ async function tkMostrar(idDevolucion, esCancelacion){
 function tkCerrar(){
   document.getElementById('tk-modal').classList.remove('open');
   // "Nueva devolución": ya se hizo la devolución/cancelación de este ticket,
-  // así que se regresa al inicio de la pestaña (buscador vacío, últimas
-  // transacciones) en vez de dejar el mismo ticket abierto en pantalla.
-  ventaActual = null;
-  seleccion = [];
-  document.getElementById('num-ticket').value = '';
-  document.getElementById('num-ticket-movil').value = '';
-  document.getElementById('resultado').innerHTML = '';
-  renderListaIzquierda();
-  renderSeleccionados();
+  // así que se regresa al inicio de la pestaña en vez de dejar el mismo
+  // ticket abierto en pantalla.
+  volverALista();
 }
 
 async function tkGenerarPDF(){
