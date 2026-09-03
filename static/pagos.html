@@ -581,6 +581,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <script>
 const sesionPOS = requireAuth();
 requireSucursalOperativa();
+// Temporal: todavía no existe un conteo físico confiable. Mientras sea false,
+// Punto de Venta no muestra ni limita por existencias. Al terminar el
+// inventario físico basta cambiarla a true para recuperar todas las reglas.
+const CONTROL_STOCK_POS_ACTIVO = false;
 // El Zar del LED es la única tienda con precios por nivel elegidos a mano y
 // ventas en dos partes (anticipo + liquidación): todo lo de esta sección
 // solo se muestra ahí, nunca en las demás sucursales.
@@ -705,7 +709,7 @@ function renderResultados(items){
     <div class="res-item" onclick="agregarPorIndice(${i})">
       <div>
         <div class="res-name">${esc(p.nombre)}</div>
-        <div class="res-meta">${esc(p.categoria)} · stock: ${p.vendido_por_peso?p.stock.toFixed(2)+' kg':p.stock}${p.clave?' · Clave: '+esc(p.clave):''}</div>
+        <div class="res-meta">${esc(p.categoria)}${CONTROL_STOCK_POS_ACTIVO?' · Stock: '+(p.vendido_por_peso?p.stock.toFixed(2)+' kg':p.stock):''}${p.clave?' · Clave: '+esc(p.clave):''}</div>
       </div>
       <div class="res-price">${money(p.precio_final)}${p.vendido_por_peso?'/kg':''}</div>
     </div>`).join('');
@@ -720,20 +724,23 @@ function agregarPorIndice(i){
 let pesoPendiente = null;
 
 function agregar(p){
-  // Restriccion de stock agotado desactivada: se permite agregar aunque stock sea 0
   if(p.vendido_por_peso){
     pesoPendiente = p;
     document.getElementById('peso-titulo').textContent = p.nombre;
-    document.getElementById('peso-label').textContent = `Peso en kg (disponible: ${p.stock.toFixed(2)} kg)`;
-    document.getElementById('peso-input').value='';
-    document.getElementById('peso-input').max=p.stock;
+    document.getElementById('peso-label').textContent = CONTROL_STOCK_POS_ACTIVO
+      ? `Peso en kg (disponible: ${p.stock.toFixed(2)} kg)`
+      : 'Peso en kg';
+    const pesoInput = document.getElementById('peso-input');
+    pesoInput.value='';
+    if(CONTROL_STOCK_POS_ACTIVO) pesoInput.max=p.stock;
+    else pesoInput.removeAttribute('max');
     document.getElementById('peso-modal').classList.add('open');
-    setTimeout(()=>document.getElementById('peso-input').focus(),60);
+    setTimeout(()=>pesoInput.focus(),60);
     return;
   }
   const ex = carrito.find(c=>c.id===p.id);
   if(ex){
-    if(ex.cantidad+1>p.stock){
+    if(CONTROL_STOCK_POS_ACTIVO && ex.cantidad+1>p.stock){
       alert(`⚠️ Solo hay ${p.stock} unidades de "${p.nombre}" en stock.`);
       return;
     }
@@ -749,7 +756,7 @@ function confirmarPeso(){
   const kg = parseFloat(document.getElementById('peso-input').value);
   if(isNaN(kg)||kg<=0){return;}
   const p = pesoPendiente;
-  if(kg>p.stock){
+  if(CONTROL_STOCK_POS_ACTIVO && kg>p.stock){
     alert(`⚠️ Solo hay ${p.stock.toFixed(2)} kg de "${p.nombre}" en stock.`);
     return;
   }
@@ -792,7 +799,7 @@ function cambiarCantidadManual(id, input){
     val = Math.round(val);
     if(val<=0)val=1;
   }
-  if(c.stock!=null && val>c.stock){
+  if(CONTROL_STOCK_POS_ACTIVO && c.stock!=null && val>c.stock){
     const disp = c.vendido_por_peso?c.stock.toFixed(3)+' kg':c.stock;
     alert(`⚠️ Solo hay ${disp} disponibles. Se ajustó al máximo.`);
     val = c.stock;
