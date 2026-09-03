@@ -557,6 +557,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   </div>
 </div>
 
+<!-- Confirmación con el estilo de la app; evita el alert nativo del navegador. -->
+<div class="overlay" id="liquidacion-exitosa-modal">
+  <div class="modal">
+    <h2>✅ Anticipo liquidado</h2>
+    <p id="liquidacion-exitosa-detalle" style="font-size:14px;color:var(--text2);line-height:1.5"></p>
+    <div class="modal-footer">
+      <button class="primary" onclick="cerrarLiquidacionExitosa()">Aceptar</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal ticket digital -->
 <div class="overlay" id="ticket-modal">
   <div class="modal">
@@ -1647,6 +1658,12 @@ function abrirLiquidarAnticipo(){
   document.getElementById('liquidar-anticipo-modal').classList.add('open');
 }
 function cerrarLiquidarAnticipo(){document.getElementById('liquidar-anticipo-modal').classList.remove('open');}
+function mostrarLiquidacionExitosa(anticipo){
+  document.getElementById('liquidacion-exitosa-detalle').textContent =
+    'Se liquidó ' + anticipo.descripcion + ' por ' + money(anticipo.saldo) + '.';
+  document.getElementById('liquidacion-exitosa-modal').classList.add('open');
+}
+function cerrarLiquidacionExitosa(){document.getElementById('liquidacion-exitosa-modal').classList.remove('open');}
 
 async function buscarClienteLiquidar(){
   const q = document.getElementById('li-cliente-buscar').value.trim();
@@ -1739,7 +1756,7 @@ async function confirmarLiquidacion(){
     if(!r.ok){ msg.className='msg error show'; msg.textContent=extraerMensajeError(data.detail,'Error al liquidar'); return; }
     cerrarLiquidarAnticipo();
     if(metodoLiquidar==='efectivo') abrirCajonDinero();
-    alert('✅ Liquidado: '+anticipoALiquidar.descripcion+' — '+money(anticipoALiquidar.saldo));
+    mostrarLiquidacionExitosa(anticipoALiquidar);
   }catch(e){
     msg.className='msg error show'; msg.textContent='Error de conexión';
   }finally{
