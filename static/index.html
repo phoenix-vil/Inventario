@@ -187,6 +187,10 @@ button.danger:hover{background:var(--red-bg)}
         <tbody id="tabla"></tbody>
       </table>
     </div>
+    <!-- Cuántos productos se están viendo y el botón para cargar la siguiente
+         tanda. También sirve de marca para cargar solo con bajar (ver el
+         IntersectionObserver en el script). -->
+    <div id="pie-tabla" style="padding:.75rem 0;text-align:center"></div>
   </div>
 </div>
 
@@ -396,31 +400,34 @@ function estado(p) {
   return {txt:'En stock',cls:'badge-ok'};
 }
 
-function renderTabla() {
-  const tbody = document.getElementById('tabla');
-  if (!productos.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="empty">Sin productos</td></tr>`;
-    return;
-  }
+// El catálogo pasa de 2,900 productos. Pintarlos todos de golpe dejaba la
+// pantalla trabada varios segundos, así que se dibujan por tandas: el resto
+// se agrega al ir bajando (ver observadorFinal, más abajo).
+const PRODUCTOS_POR_TANDA = 150;
+let mostrados = 0;
+
+function filaProducto(p) {
   const ahora = new Date();
-  tbody.innerHTML = productos.map(p => {
-    const e = estado(p);
-    let descBadge = '';
-    if (p.descuento_pct > 0) {
-      const hastaOk = !p.descuento_hasta || new Date(p.descuento_hasta) >= ahora;
-      const desdeOk = !p.descuento_desde || new Date(p.descuento_desde) <= ahora;
-      if (hastaOk && desdeOk) {
-        descBadge = ` <span class="disc-badge" style="font-size:11px">-${p.descuento_pct}%</span>`;
-      }
+  const e = estado(p);
+  let descBadge = '';
+  if (p.descuento_pct > 0) {
+    const hastaOk = !p.descuento_hasta || new Date(p.descuento_hasta) >= ahora;
+    const desdeOk = !p.descuento_desde || new Date(p.descuento_desde) <= ahora;
+    if (hastaOk && desdeOk) {
+      descBadge = ` <span class="disc-badge" style="font-size:11px">-${p.descuento_pct}%</span>`;
     }
-    const porPeso = !!p.vendido_por_peso;
-    const paso = porPeso ? 0.1 : 1;
-    const precioLabel = porPeso ? '/kg' : '';
-    const tituloMenos = porPeso ? 'Restar 100g' : 'Restar 1';
-    const tituloMas = porPeso ? 'Sumar 100g' : 'Sumar 1';
-    return `<tr>
+  }
+  const porPeso = !!p.vendido_por_peso;
+  const paso = porPeso ? 0.1 : 1;
+  const precioLabel = porPeso ? '/kg' : '';
+  const tituloMenos = porPeso ? 'Restar 100g' : 'Restar 1';
+  const tituloMas = porPeso ? 'Sumar 100g' : 'Sumar 1';
+  // loading="lazy": casi todas las fotos son de sitios externos (Walmart y
+  // demás). Sin esto el navegador pedía las ~2,500 de una sola vez al abrir la
+  // pantalla, y ahí era donde se trababa. Así solo pide las que se van viendo.
+  return `<tr data-id="${p.id}">
       <td>
-        ${p.imagen_url ? `<img src="${esc(p.imagen_url)}" alt="" style="width:36px;height:36px;object-fit:cover;border-radius:6px;border:0.5px solid var(--border);float:left;margin-right:8px" onerror="this.style.display='none'">` : ''}
+        ${p.imagen_url ? `<img src="${esc(p.imagen_url)}" alt="" loading="lazy" decoding="async" style="width:36px;height:36px;object-fit:cover;border-radius:6px;border:0.5px solid var(--border);float:left;margin-right:8px" onerror="this.style.display='none'">` : ''}
         <strong>${esc(p.nombre)}</strong><br><span style="font-size:11px;color:var(--text2)">${esc(p.unidad)}${porPeso ? ' · por peso' : ''}</span>
       </td>
       <td class="hide-mobile">${esc(p.categoria)}</td>
@@ -441,7 +448,78 @@ function renderTabla() {
         <button class="sm danger" onclick="eliminar(${p.id})" title="Eliminar">🗑</button>
       </td>
     </tr>`;
-  }).join('');
+}
+
+function renderTabla() {
+  const tbody = document.getElementById('tabla');
+  if (!productos.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="empty">Sin productos</td></tr>`;
+    actualizarPie();
+    return;
+  }
+  mostrados = 0;
+  tbody.innerHTML = '';
+  agregarTanda();
+}
+
+function agregarTanda() {
+  const tbody = document.getElementById('tabla');
+  const hasta = Math.min(mostrados + PRODUCTOS_POR_TANDA, productos.length);
+  if (hasta <= mostrados) return;
+  // insertAdjacentHTML en vez de innerHTML += : no vuelve a construir ni a
+  // reemplazar las filas que ya estaban (perdería el foco y recargaría fotos).
+  tbody.insertAdjacentHTML('beforeend',
+    productos.slice(mostrados, hasta).map(filaProducto).join(''));
+  mostrados = hasta;
+  actualizarPie();
+  revisarPie();
+}
+
+// El observador solo avisa cuando el pie *entra* en pantalla. En monitores
+// altos una tanda de 150 filas no alcanza a empujarlo fuera de la vista: como
+// no cambia de estado, no vuelve a avisar y la carga se quedaba parada. Por eso
+// después de cada tanda revisamos a mano si el pie sigue a la vista. El
+// requestAnimationFrame deja que el navegador pinte entre tanda y tanda, para
+// que cargar el resto no se sienta como un tirón.
+let revisionPendiente = false;
+function revisarPie() {
+  if (revisionPendiente || mostrados >= productos.length) return;
+  revisionPendiente = true;
+  requestAnimationFrame(function () {
+    revisionPendiente = false;
+    const pie = document.getElementById('pie-tabla');
+    if (!pie || mostrados >= productos.length) return;
+    const alto = window.innerHeight || document.documentElement.clientHeight;
+    // Mismo criterio que el rootMargin del observador: 400px de anticipo.
+    if (pie.getBoundingClientRect().top < alto + 400) agregarTanda();
+  });
+}
+
+// Aviso de cuántos se están viendo, y botón por si el scroll automático no
+// alcanza (pantallas muy altas, o el usuario quiere cargar todo de una).
+function actualizarPie() {
+  const pie = document.getElementById('pie-tabla');
+  if (!pie) return;
+  if (!productos.length || mostrados >= productos.length) {
+    pie.innerHTML = productos.length
+      ? `<span style="color:var(--text2);font-size:12px">${productos.length} producto(s)</span>`
+      : '';
+    return;
+  }
+  pie.innerHTML = `<span style="color:var(--text2);font-size:12px">Mostrando ${mostrados} de ${productos.length}</span>`
+    + ` <button class="sm" onclick="agregarTanda()" style="margin-left:8px">Mostrar más</button>`;
+}
+
+// Al llegar abajo se carga la siguiente tanda sola, sin tener que presionar el
+// botón. Si el navegador no soporta IntersectionObserver, el botón sigue ahí.
+if (window.IntersectionObserver) {
+  const observadorFinal = new IntersectionObserver(function (entradas) {
+    if (entradas.some(e => e.isIntersecting)) agregarTanda();
+  }, { rootMargin: '400px' });
+  document.addEventListener('DOMContentLoaded', function () {
+    const pie = document.getElementById('pie-tabla');
+    if (pie) observadorFinal.observe(pie);
+  });
 }
 
 function esc(s) {
@@ -450,14 +528,26 @@ function esc(s) {
 
 function filtrar() { cargarProductos(); }
 
+// Ojo: antes esto volvía a pedir y a repintar el catálogo completo (2,900
+// productos y sus fotos) por cada toque de + o −, que es la acción más común
+// de esta pantalla. El endpoint ya devuelve el producto actualizado, así que
+// basta con refrescar su propia fila.
+function actualizarFila(p) {
+  const i = productos.findIndex(x => x.id === p.id);
+  if (i >= 0) productos[i] = p;
+  const fila = document.querySelector(`#tabla tr[data-id="${p.id}"]`);
+  if (fila) fila.outerHTML = filaProducto(p);
+}
+
 async function ajustarStock(id, cantidad) {
   try {
-    await fetchJSON(`/api/productos/${id}/stock`, {
+    const actualizado = await fetchJSON(`/api/productos/${id}/stock`, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ cantidad })
     });
-    await Promise.all([cargarProductos(), cargarResumen()]);
+    actualizarFila(actualizado);
+    cargarResumen();
   } catch(e) { toast('Error: ' + e.message, true); }
 }
 
@@ -466,12 +556,13 @@ async function editarStockManual(id, input, porPeso) {
   if (isNaN(val) || val < 0) val = 0;
   val = porPeso ? Math.round(val * 1000) / 1000 : Math.round(val);
   try {
-    await fetchJSON(`/api/productos/${id}`, {
+    const actualizado = await fetchJSON(`/api/productos/${id}`, {
       method: 'PATCH',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ stock: val })
     });
-    await Promise.all([cargarProductos(), cargarResumen()]);
+    actualizarFila(actualizado);
+    cargarResumen();
     toast('Stock actualizado');
   } catch(e) { toast('Error: ' + e.message, true); }
 }
