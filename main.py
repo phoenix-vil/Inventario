@@ -39,6 +39,48 @@ if os.path.exists("static"):
     app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
+# ─── Caché de las pantallas ────────────────────────────────────────────────
+@app.middleware("http")
+async def no_cachear_pantallas(request, call_next):
+    """Obliga a revalidar cada HTML antes de reutilizarlo de la caché.
+
+    FileResponse manda ETag y Last-Modified pero ningún Cache-Control, y con
+    eso el navegador aplica caché heurística: se queda con la copia guardada
+    sin preguntar. En el WebView de Android (setCacheMode(LOAD_DEFAULT), ver
+    MainActivity.java en ~/android-build) eso hacía que el login se pintara
+    desde la caché aunque el teléfono no alcanzara al servidor —la pantalla se
+    veía perfecta y solo el selector de sucursal, que sí pide datos, delataba
+    con "Error al cargar" que no había conexión; la app ni siquiera mostraba su
+    aviso de "sin conexión", porque para ella el marco principal había cargado
+    bien.
+
+    "no-cache" no prohíbe guardar: obliga a revalidar. Con red, la
+    revalidación devuelve 304 y no se transfiere nada; sin red, la petición
+    falla de verdad y cada capa puede reaccionar como debe.
+    """
+    respuesta = await call_next(request)
+    if not respuesta.headers.get("content-type", "").startswith("text/html"):
+        return respuesta
+    respuesta.headers["Cache-Control"] = "no-cache"
+
+    # FileResponse pone el ETag pero no atiende el If-None-Match del navegador
+    # (eso solo lo hace StaticFiles), así que sin esto "no-cache" saldría caro:
+    # cada carga bajaría el HTML entero -pagos.html son 120 KB, y auth.js
+    # recarga la pantalla cada 20 minutos-. Respondiendo 304 la revalidación no
+    # transfiere nada y el navegador reutiliza su copia.
+    etag = respuesta.headers.get("etag")
+    enviados = [e.strip() for e in (request.headers.get("if-none-match") or "").split(",")]
+    if etag and etag in enviados:
+        cerrar = getattr(respuesta, "body_iterator", None)
+        if cerrar is not None:
+            await cerrar.aclose()  # el archivo ya no se va a mandar
+        return Response(status_code=304, headers={
+            k: v for k, v in respuesta.headers.items()
+            if k.lower() in ("etag", "last-modified", "cache-control")
+        })
+    return respuesta
+
+
 # ─── Autenticación por sesión ──────────────────────────────────────────────
 def get_sesion(authorization: Optional[str], db: Session) -> Optional[Sesion]:
     if not authorization:
