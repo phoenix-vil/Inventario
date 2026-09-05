@@ -96,6 +96,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .field-select-wrap{position:relative}
 .field-select-wrap::after{content:'▾';position:absolute;right:14px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--text2);font-size:14px}
 .field input:focus,.field select:focus{outline:2px solid var(--blue);outline-offset:1px}
+/* Solo aparece cuando la lista de sucursales no se pudo cargar. */
+#reintentar-suc{display:none;width:100%;height:38px;margin-top:8px;border:0.5px solid var(--border);border-radius:10px;background:var(--bg2);color:var(--text);font-size:14px;font-family:inherit;cursor:pointer}
+#reintentar-suc:active{opacity:.85}
 .btn{width:100%;height:48px;border:none;border-radius:10px;background:var(--text);color:var(--bg2);font-size:15px;font-weight:600;cursor:pointer;margin-top:8px;transition:background .3s}
 .btn:active{opacity:.85}
 .msg{padding:10px;border-radius:8px;font-size:13px;margin-top:12px;display:none;background:var(--red-bg);color:var(--red)}
@@ -126,6 +129,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <option value="">Cargando...</option>
       </select>
     </div>
+    <button type="button" id="reintentar-suc" onclick="cargarSucursales()">Reintentar</button>
   </div>
   <div class="field">
     <label>Usuario</label>
@@ -162,19 +166,63 @@ if (getSesion() && getSesion().token) { location.href = '/'; }
 
 let sucursales = [];
 
+// Cargar esta lista es lo primero que hace la pantalla, y si falla el usuario
+// se queda sin poder entrar. Por eso distingue las causas en vez de decir
+// siempre "Error al cargar": no es lo mismo que el teléfono no tenga red
+// (problema del local) a que el servidor conteste mal (problema de aquí).
+const ESPERA_SUCURSALES = 12000;
+
+// Deja el selector con un solo mensaje y decide si ofrecer "Reintentar":
+// solo cuando volver a intentarlo puede cambiar algo. "Sin sucursales
+// registradas" no se arregla insistiendo.
+function estadoSucursales(texto, sePuedeReintentar) {
+  document.getElementById('sucursal').innerHTML =
+    `<option value="">${texto}</option>`;
+  document.getElementById('reintentar-suc').style.display =
+    sePuedeReintentar ? 'block' : 'none';
+}
+
 async function cargarSucursales() {
   const sel = document.getElementById('sucursal');
+  estadoSucursales('Cargando...', false);
+  // fetch no tiene tiempo límite propio. Sin esto, una conexión que se queda
+  // colgada -y no rechazada- deja el selector en "Cargando..." para siempre:
+  // ni error, ni botón, ni forma de salir que no sea cerrar la app.
+  const corte = new AbortController();
+  const reloj = setTimeout(() => corte.abort(), ESPERA_SUCURSALES);
   try {
-    const r = await fetch('/api/sucursales');
-    sucursales = await r.json();
-    if (!sucursales.length) {
-      sel.innerHTML = '<option value="">Sin sucursales registradas</option>';
+    // no-store: la lista de sucursales cambia y no vale la pena arriesgarse a
+    // que el WebView sirva una vieja de su caché.
+    const r = await fetch('/api/sucursales', { signal: corte.signal, cache: 'no-store' });
+    // Un fetch solo se rechaza cuando no hubo respuesta; un 500 llega aquí
+    // como respuesta normal. Sin este control seguiría a r.json(), que
+    // devolvería el {detail:...} del error: su .length es undefined y el
+    // usuario acababa leyendo un "Sin sucursales registradas" que era falso.
+    if (!r.ok) {
+      estadoSucursales(`Error del servidor (${r.status})`, true);
       return;
     }
+    const lista = await r.json();
+    if (!Array.isArray(lista)) {
+      estadoSucursales('Respuesta inesperada del servidor', true);
+      return;
+    }
+    if (!lista.length) {
+      estadoSucursales('Sin sucursales registradas', false);
+      return;
+    }
+    sucursales = lista;
     sel.innerHTML = sucursales.map(s => `<option value="${s.nombre}">${s.nombre}</option>`).join('');
+    document.getElementById('reintentar-suc').style.display = 'none';
     onCambioSucursal();
   } catch (e) {
-    sel.innerHTML = '<option value="">Error al cargar</option>';
+    // Se agotó el tiempo (la petición seguía viva sin contestar) frente a que
+    // la red la rechazara de entrada.
+    estadoSucursales(
+      e.name === 'AbortError' ? 'El servidor no responde' : 'Sin conexión con el servidor',
+      true);
+  } finally {
+    clearTimeout(reloj);
   }
 }
 cargarSucursales();
