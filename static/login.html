@@ -284,6 +284,14 @@ function onCambioSucursal() {
 const BROMA_USUARIO = 'daniel mondragon';
 const BROMA_CLAVE = 'broma_daniel_fecha';
 
+// En QA la broma sale en CADA inicio de sesión, para poder probarla sin
+// esperar al día siguiente ni borrar localStorage a mano. Se reconoce QA por
+// su puerto (:8001) en vez de por una bandera que haya que acordarse de
+// apagar: así esta línea es inofensiva si el archivo se porta a producción
+// -ahí el puerto es 8000, o ninguno cuando se entra por el Funnel-, donde la
+// broma sigue saliendo una sola vez al día.
+const BROMA_SIEMPRE = location.port === '8001';
+
 // Compara sin acentos ni mayúsculas, por si el nombre se corrige a "Mondragón".
 function normalizarNombre(s) {
   return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -292,6 +300,7 @@ function normalizarNombre(s) {
 
 function tocaBroma(usuario) {
   if (normalizarNombre(usuario) !== BROMA_USUARIO) return false;
+  if (BROMA_SIEMPRE) return true;  // QA: sin límite de una vez al día
   const d = new Date();
   const hoy = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
             + '-' + String(d.getDate()).padStart(2, '0');
