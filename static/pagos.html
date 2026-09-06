@@ -140,7 +140,25 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .tk-foot{font-size:12px;color:var(--text2);margin-top:10px}
 #ticket-contenido{background:var(--bg);border-radius:10px;padding:1.25rem;margin-bottom:1rem}
 @media(max-width:560px){
-  .topbar{padding:0 .625rem}.topbar-title{font-size:15px}.topbar-right{min-width:0}
+  /* gap más apretado que los 10px de escritorio: son 8px que en 360 de ancho
+     se los queda el nombre del operador en vez de perderse entre los botones. */
+  .topbar{padding:0 .625rem;gap:6px}
+  /* A 360px el título ("💳 Punto de venta") queda reducido a 5.6px por el
+     flex:1 con base 0: no se lee nada y solo asoma un trozo del emoji al lado
+     del nombre del operador. Fuera, y el grupo de botones se pega a la derecha
+     con margin-left:auto para no perder ese hueco. */
+  .topbar-title{display:none}
+  /* El nombre del operador es lo único elástico de esta barra, y con
+     white-space:nowrap dentro de un .topbar-right que no encogía, un nombre
+     largo ("Daniel Mondragon · Suc. Imprenta") empujaba los botones fuera de
+     la pantalla: en un A54 (360 px) se salían 95 px. Y como .totales va
+     position:fixed, ese desborde de ancho agrandaba el bloque contenedor y se
+     llevaba de paso el botón Cobrar por debajo del borde inferior -de ahí que
+     hubiera que hacer scroll a la derecha Y hacia abajo-. Ahora el texto se
+     recorta con puntos suspensivos en vez de empujar: los botones y el total
+     siempre quedan encuadrados, sea cual sea el nombre. */
+  .topbar-right{min-width:0;flex-shrink:1;margin-left:auto}
+  #nav-operador{overflow:hidden;text-overflow:ellipsis;min-width:0}
   .container{padding:.875rem .875rem 18rem}
   /* En pantallas angostas el stepper de cantidad + precio + botones ya no
      dejan casi nada de ancho para el nombre del producto (se veía cortado a
@@ -2237,9 +2255,25 @@ document.addEventListener('keydown', e => {
 });
 
 if(sesionPOS){
-  let txt='👤 '+sesionPOS.usuario;
-  if(sesionPOS.sucursal)txt+=' · Suc. '+sesionPOS.sucursal;
-  document.getElementById('nav-operador').textContent=txt;
+  // En un teléfono en vertical la barra solo deja ~116px para este texto (un
+  // A54 son 360 de ancho, y el botón de inicio más los tres de la derecha ya
+  // se llevan 212). El nombre completo con "· Suc. X" mide 202 y no cabe, así
+  // que ahí va el primer nombre y la sucursal a secas -que es lo que hay que
+  // distinguir de un equipo a otro-. Girando el teléfono o en escritorio
+  // vuelve el nombre completo, por eso se repinta al cambiar el ancho y no
+  // solo al cargar.
+  const barraAngosta = window.matchMedia('(max-width:560px)');
+  const pintarOperador = () => {
+    const angosta = barraAngosta.matches;
+    const nombre = angosta ? (sesionPOS.usuario||'').trim().split(/\s+/)[0] : sesionPOS.usuario;
+    let txt = '👤 ' + nombre;
+    if(sesionPOS.sucursal) txt += (angosta ? ' · ' : ' · Suc. ') + sesionPOS.sucursal;
+    document.getElementById('nav-operador').textContent = txt;
+  };
+  pintarOperador();
+  // addListener es el nombre viejo; hace falta para Safari anterior al 14.
+  if(barraAngosta.addEventListener) barraAngosta.addEventListener('change', pintarOperador);
+  else barraAngosta.addListener(pintarOperador);
 }
 renderCarrito();
 mostrarMasVendidos();
