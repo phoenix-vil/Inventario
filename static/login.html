@@ -278,9 +278,9 @@ function onCambioSucursal() {
 // ─── Broma para Daniel ───────────────────────────────────────────────────
 // En su primer inicio de sesión del día le sale un video. La fecha se guarda
 // en el propio aparato, así que sale una vez al día por dispositivo; no hace
-// falta tocar la base de datos. Si algo falla (el video no carga, el navegador
-// no deja reproducirlo, no hay localStorage), se entra al menú como siempre:
-// la broma nunca debe estorbar para trabajar.
+// falta tocar la base de datos. Del video solo se sale con el botón de abajo;
+// si no hay localStorage la broma ni siquiera se intenta, y si el video no
+// carga se queda el recuadro con el botón, que siempre deja continuar.
 const BROMA_USUARIO = 'daniel mondragon';
 const BROMA_CLAVE = 'broma_daniel_fecha';
 
@@ -308,28 +308,25 @@ function reproducirBroma() {
   return new Promise(resolve => {
     const capa = document.getElementById('broma');
     const video = document.getElementById('broma-video');
-    if (!capa || !video) return resolve();
-    let terminado = false;
-    const seguir = () => {
-      if (terminado) return;
-      terminado = true;
-      clearTimeout(reloj);
+    const boton = document.getElementById('broma-saltar');
+    if (!capa || !video || !boton) return resolve();
+    // El botón es la única salida: no se sigue al terminar el video ni por
+    // tiempo. Si no lo toca, se queda ahí -pero encerrado no está: la sesión
+    // ya se guardó antes de llegar aquí, así que recargar lo lleva al menú, y
+    // la fecha de hoy ya quedó marcada, así que la broma no se repite.
+    boton.addEventListener('click', () => {
       capa.style.display = 'none';
       resolve();
-    };
-    // Red de seguridad: pase lo que pase, a los 12 s se entra al menú.
-    const reloj = setTimeout(seguir, 12000);
-    video.addEventListener('ended', seguir);
-    video.addEventListener('error', seguir);
-    document.getElementById('broma-saltar').addEventListener('click', seguir);
+    }, { once: true });
     capa.style.display = 'flex';
     capa.classList.add('open');
     video.src = '/static/broma-daniel.mp4';
     // Con sonido si el navegador lo permite; si no (iPhone suele bloquearlo),
-    // se vuelve a intentar en mudo antes de rendirse.
+    // se reintenta en mudo. Si tampoco se puede, se queda el primer cuadro y
+    // el botón sigue estando, que es lo único que hace falta para continuar.
     video.play().catch(() => {
       video.muted = true;
-      video.play().catch(seguir);
+      video.play().catch(() => {});
     });
   });
 }
