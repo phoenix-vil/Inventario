@@ -118,7 +118,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
   <div class="stats-grid">
     <div class="stat">
-      <div class="stat-label">Total del periodo</div>
+      <div class="stat-label" id="lbl-total">Total del periodo</div>
       <div class="stat-value red" id="st-total">—</div>
     </div>
     <div class="stat">
@@ -143,12 +143,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <button class="primary" onclick="cargarTodo()">Filtrar</button>
   </div>
 
-  <div class="section-title">Por categoría</div>
+  <div class="section-title" id="titulo-categorias">Por categoría</div>
   <div class="card" id="desglose-categorias">
     <div class="empty">Cargando...</div>
   </div>
 
-  <div class="section-title">Detalle de gastos <span class="badge-cnt" id="badge-lista"></span></div>
+  <div class="section-title"><span id="titulo-lista">Detalle de gastos</span> <span class="badge-cnt" id="badge-lista"></span></div>
   <div class="card" id="lista-gastos">
     <div class="empty">Cargando...</div>
   </div>
@@ -199,7 +199,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 <script src="/static/auth.js?v=1787605997"></script>
 <script>
-requireGerente();
+requireAuth();
+
+// El cajero entra aquí para registrar los gastos de su caja: ve los que él
+// mismo capturó y no los totales ni el desglose del negocio (eso es
+// información de dueño). El backend recorta igual el listado; esto solo
+// ajusta lo que se dibuja.
+const GERENTE = esGerente();
+if(!GERENTE){
+  document.getElementById('titulo-categorias').style.display = 'none';
+  document.getElementById('desglose-categorias').style.display = 'none';
+  document.getElementById('titulo-lista').textContent = 'Mis gastos';
+  document.getElementById('lbl-total').textContent = 'Total de mis gastos';
+}
 
 let metodoActual = 'efectivo';
 
@@ -266,6 +278,16 @@ async function cargarTodo(){
   if(categoria) params.set('categoria', categoria);
 
   try{
+    if(!GERENTE){
+      // /api/gastos/resumen sigue siendo solo del gerente: suma el negocio
+      // entero. Para el cajero los dos números salen de su propia lista.
+      const rLista = await authFetch('/api/gastos?'+params.toString());
+      const lista = await rLista.json();
+      document.getElementById('st-total').textContent = money(lista.reduce((t,g)=>t+g.monto, 0));
+      document.getElementById('st-num').textContent = lista.length;
+      renderLista(lista);
+      return;
+    }
     const [rResumen, rLista] = await Promise.all([
       authFetch('/api/gastos/resumen?'+params.toString()),
       authFetch('/api/gastos?'+params.toString()),
@@ -321,7 +343,7 @@ function renderLista(lista){
       </div>
       <div class="gasto-right">
         <div class="gasto-monto">${money(g.monto)}</div>
-        <button class="gasto-del" onclick="borrarGasto(${g.id})">🗑 Eliminar</button>
+        ${GERENTE?`<button class="gasto-del" onclick="borrarGasto(${g.id})">🗑 Eliminar</button>`:''}
       </div>
     </div>`;
   }).join('');

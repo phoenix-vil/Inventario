@@ -2290,7 +2290,7 @@ def listar_gastos(
     hasta: Optional[str] = Query(None),
     categoria: Optional[str] = Query(None),
     sucursal: Optional[str] = Query(None),
-    sesion: Sesion = Depends(requerir_gerente),
+    sesion: Sesion = Depends(requerir_sesion),
     db: Session = Depends(get_db),
 ):
     d, h = _rango_utc_gastos(desde, hasta)
@@ -2306,6 +2306,12 @@ def listar_gastos(
     restriccion = sucursal_restriccion(sesion)
     if restriccion is not None:
         q = q.filter(Gasto.sucursal == restriccion)
+    # Un cajero registra gastos de su caja y revisa los que él capturó, pero
+    # no los del resto del negocio —cuánto se gasta en renta o sueldos es
+    # información de dueño—. La pantalla /gastos hace el mismo recorte, esto
+    # lo sostiene aunque alguien llame a la API a mano.
+    if sesion.rol != "gerente":
+        q = q.filter(Gasto.sucursal == sesion.sucursal, Gasto.operador == sesion.usuario)
     rows = q.order_by(Gasto.fecha.desc()).all()
     return [{
         "id": g.id,
