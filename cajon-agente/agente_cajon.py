@@ -182,7 +182,28 @@ def construir_ticket_escpos(v):
     linea(raya)
 
     metodo = v.get("metodo_pago", "efectivo")
-    if metodo == "credito":
+    metodo_2 = v.get("metodo_pago_2")
+    monto_2 = v.get("monto_2")
+    NOMBRES = {"efectivo": "EFECTIVO", "tarjeta": "TARJETA", "transferencia": "TRANSFER."}
+    if metodo_2 and monto_2:
+        # Venta cobrada con dos formas de pago: se imprimen las dos.
+        monto_1 = v.get("monto_1")
+        if monto_1 is None:
+            monto_1 = round(v.get("total", 0) - monto_2, 2)
+        linea(_linea("Pago 1", "%s %s" % (NOMBRES.get(metodo, ""), money(monto_1))))
+        linea(_linea("Pago 2", "%s %s" % (NOMBRES.get(metodo_2, ""), money(monto_2))))
+        if v.get("tpv_terminal"):
+            linea(_linea("Terminal", v["tpv_terminal"]))
+        if v.get("tpv_referencia"):
+            linea(_linea("Referencia", v["tpv_referencia"]))
+        if v.get("tpv_autorizacion"):
+            linea(_linea("Autorizacion", v["tpv_autorizacion"]))
+        if v.get("transferencia_referencia"):
+            linea(_linea("Ref. transf.", v["transferencia_referencia"]))
+        if v.get("cambio"):
+            linea(_linea("Pago con", money(v.get("pago_con") or 0)))
+            linea(_linea("Cambio", money(v.get("cambio") or 0)))
+    elif metodo == "credito":
         linea(_linea("Pago", "A CREDITO"))
         if v.get("cliente_nombre"):
             linea(_linea("Cliente", v["cliente_nombre"]))

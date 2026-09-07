@@ -332,7 +332,10 @@ function render(){
     const desc=v.descuento_extra_pct>0?`<div class="v-desc">desc ${fmtPct(v.descuento_extra_pct)}%</div>`:'';
     const op=v.operador?`<div class="v-items">Operador: ${esc(v.operador)}${v.sucursal?' · Suc. '+esc(v.sucursal):''}</div>`:'';
     const etiquetasMet={tarjeta:'💳 Tarjeta',credito:'📒 Crédito',transferencia:'🏦 Transferencia',efectivo:'💵 Efectivo'};
-    const met=etiquetasMet[v.metodo_pago]||'💵 Efectivo';
+    // Venta cobrada con dos formas de pago: se etiqueta con las dos
+    const met=(v.metodo_pago_2
+      ? (etiquetasMet[v.metodo_pago]||'💵 Efectivo')+' + '+(etiquetasMet[v.metodo_pago_2]||'')
+      : (etiquetasMet[v.metodo_pago]||'💵 Efectivo'));
     const esDev = (v.estado==='devolucion') || (v.total<0);
     const titulo = esDev
       ? `<div class="v-id" style="color:var(--red)">↩️ Devolución #${v.id}</div>`
@@ -601,7 +604,20 @@ function ticketHTML(v){
     html+=`<div class="tk-line tk-ahorro"><span>🎉 Ahorraste</span><span>${money(ahorroTk)}</span></div>`;
   }
   html+=`<div class="tk-line tk-total"><span>TOTAL</span><span>${money(v.total)}</span></div>`;
-  if(v.metodo_pago==='tarjeta'){
+  if(v.metodo_pago_2 && v.monto_2){
+    // Venta cobrada con dos formas de pago
+    const METODO_TICKET={efectivo:'EFECTIVO',tarjeta:'TARJETA',transferencia:'TRANSFER.'};
+    const monto1 = v.monto_1!=null ? v.monto_1 : (v.total - v.monto_2);
+    html+=`<div class="tk-line"><span>Pago 1</span><span>${METODO_TICKET[v.metodo_pago]||''} ${money(monto1)}</span></div>`;
+    html+=`<div class="tk-line"><span>Pago 2</span><span>${METODO_TICKET[v.metodo_pago_2]||''} ${money(v.monto_2)}</span></div>`;
+    if(v.tpv_terminal)html+=`<div class="tk-line"><span>Terminal</span><span>${esc(v.tpv_terminal)}</span></div>`;
+    if(v.tpv_referencia)html+=`<div class="tk-line"><span>Referencia</span><span>${esc(v.tpv_referencia)}</span></div>`;
+    if(v.tpv_autorizacion)html+=`<div class="tk-line"><span>Autorización</span><span>${esc(v.tpv_autorizacion)}</span></div>`;
+    if(v.cambio!=null && v.cambio>0){
+      html+=`<div class="tk-line"><span>Pagó con</span><span>${money(v.pago_con)}</span></div>`;
+      html+=`<div class="tk-line"><span>Cambio</span><span>${money(v.cambio)}</span></div>`;
+    }
+  }else if(v.metodo_pago==='tarjeta'){
     html+=`<div class="tk-line"><span>Pago</span><span>TARJETA</span></div>`;
     if(v.tpv_terminal)html+=`<div class="tk-line"><span>Terminal</span><span>${esc(v.tpv_terminal)}</span></div>`;
     if(v.tpv_referencia)html+=`<div class="tk-line"><span>Referencia</span><span>${esc(v.tpv_referencia)}</span></div>`;
@@ -682,7 +698,12 @@ function ticketTextoPlano(v){
     txt+=`🎉 Ahorraste: ${money(ahorroTxt)}\n`;
   }
   txt+=`💰 TOTAL: ${money(v.total)}\n`;
-  if(v.metodo_pago==='tarjeta'){
+  if(v.metodo_pago_2 && v.monto_2){
+    const NOM={efectivo:'Efectivo',tarjeta:'Tarjeta',transferencia:'Transferencia'};
+    const monto1 = v.monto_1!=null ? v.monto_1 : (v.total - v.monto_2);
+    txt+=`Pago 1: ${NOM[v.metodo_pago]||''} ${money(monto1)}\n`;
+    txt+=`Pago 2: ${NOM[v.metodo_pago_2]||''} ${money(v.monto_2)}\n`;
+  }else if(v.metodo_pago==='tarjeta'){
     txt+=`💳 Pago: Tarjeta`;
     if(v.tpv_terminal)txt+=` (${v.tpv_terminal})`;
     txt+=`\n`;
@@ -731,7 +752,9 @@ async function descargarCSV(){
     if(!v)return;
     const fecha=new Date(v.fecha).toLocaleString('es-MX').replace(',', '');
     const nombresMet={tarjeta:'Tarjeta',credito:'Crédito',transferencia:'Transferencia',efectivo:'Efectivo'};
-    const metodo=nombresMet[v.metodo_pago]||'Efectivo';
+    const metodo=(v.metodo_pago_2
+      ? (nombresMet[v.metodo_pago]||'Efectivo')+' + '+(nombresMet[v.metodo_pago_2]||'')
+      : (nombresMet[v.metodo_pago]||'Efectivo'));
     const term=v.tpv_terminal||'';
     const ref=v.tpv_referencia||'';
     const aut=v.tpv_autorizacion||'';
