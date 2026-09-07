@@ -455,6 +455,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <div class="field"><label>Nombre *</label><input type="text" id="c-nuevo-nombre" placeholder="Nombre del cliente"></div>
         <div class="field"><label>Teléfono *</label><input type="tel" inputmode="numeric" autocomplete="tel" id="c-nuevo-telefono" placeholder="10 dígitos, ej. 5527671391" oninput="limitarTelPOS(this)"></div>
         <div class="field"><label>Límite de crédito (opcional)</label><input type="number" id="c-nuevo-limite" min="0" step="0.01" placeholder="Ej: 5000"></div>
+        <div class="field"><label>Días de crédito (opcional)</label><input type="number" id="c-nuevo-dias" min="1" max="365" step="1" placeholder="Ej: 30"></div>
         <div class="field" id="c-nuevo-campo-nivel" style="display:none">
           <label>Nivel de precio (opcional)</label>
           <select id="c-nuevo-nivel">
@@ -1446,13 +1447,15 @@ async function crearClienteRapido(){
   const telefono = digitosTel;
   const limiteRaw = document.getElementById('c-nuevo-limite').value.trim();
   const limite_credito = limiteRaw ? parseFloat(limiteRaw) : null;
+  const diasRaw = document.getElementById('c-nuevo-dias').value.trim();
+  const dias_credito = diasRaw ? parseInt(diasRaw, 10) : null;
   const nivelRaw = document.getElementById('c-nuevo-nivel').value;
   const nivel_precio = nivelRaw ? parseInt(nivelRaw, 10) : null;
   const nota = document.getElementById('c-nuevo-nota').value.trim() || null;
   try{
     const r = await authFetch('/api/clientes', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({nombre, telefono, limite_credito, nivel_precio, nota})
+      body: JSON.stringify({nombre, telefono, limite_credito, dias_credito, nivel_precio, nota})
     });
     const data = await r.json();
     if(!r.ok){ alert(extraerMensajeError(data.detail, 'No se pudo crear el cliente')); return; }
@@ -1461,6 +1464,7 @@ async function crearClienteRapido(){
     document.getElementById('c-nuevo-nombre').value='';
     document.getElementById('c-nuevo-telefono').value='';
     document.getElementById('c-nuevo-limite').value='';
+    document.getElementById('c-nuevo-dias').value='';
     document.getElementById('c-nuevo-nivel').value='';
     document.getElementById('c-nuevo-nota').value='';
   }catch(e){ alert('Error de conexión'); }
@@ -1506,6 +1510,7 @@ function abrirCobro(){
   document.getElementById('c-nuevo-nombre').value='';
   document.getElementById('c-nuevo-telefono').value='';
   document.getElementById('c-nuevo-limite').value='';
+  document.getElementById('c-nuevo-dias').value='';
   document.getElementById('c-nuevo-nivel').value='';
   document.getElementById('c-nuevo-nota').value='';
   clienteSeleccionado = null;

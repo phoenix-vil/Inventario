@@ -231,6 +231,10 @@ class Cliente(Base):
     telefono = Column(String, nullable=True)
     nota = Column(String, nullable=True)
     limite_credito = Column(Float, nullable=True)
+    # Plazo acordado con este cliente para pagar una cuenta a crédito. Nulo =
+    # sin plazo pactado; esos clientes no entran en el aviso de cobranza,
+    # porque sin días no hay porcentaje de avance que calcular.
+    dias_credito = Column(Integer, nullable=True)
     # Sucursal donde se dio de alta: cada una lleva su propia cartera. Nulo =
     # visible desde cualquier sucursal (como eran todos antes de separarlos).
     sucursal = Column(String, nullable=True, index=True)
