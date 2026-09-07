@@ -85,6 +85,11 @@ class RegistrarVenta(BaseModel):
     autorizado_por: Optional[str] = None
     pago_con: Optional[float] = Field(None, ge=0)
     metodo_pago: str = Field(default="efectivo")
+    # Venta cobrada con dos formas de pago: la segunda y cuánto se cobró con
+    # ella. La primera se queda con el resto (total - monto_2). El crédito no
+    # entra en la mezcla.
+    metodo_pago_2: Optional[str] = None
+    monto_2: Optional[float] = Field(None, gt=0)
     tpv_referencia: Optional[str] = None
     tpv_autorizacion: Optional[str] = None
     tpv_terminal: Optional[str] = None

@@ -890,6 +890,26 @@ def registrar_venta(data: RegistrarVenta, sesion: Sesion = Depends(requerir_sesi
     ahorro_total = round(ahorro_productos + ahorro_descuento_extra, 2)
     metodo = data.metodo_pago if data.metodo_pago in ("efectivo", "tarjeta", "credito", "transferencia") else "efectivo"
 
+    # Segunda forma de pago: el cajero cobró una parte con un método y el
+    # resto con otro. Llega solo el segundo importe; el primero es lo que
+    # sobra del total, así nunca puede haber un reparto que no sume la venta.
+    metodo_2 = (data.metodo_pago_2 or "").strip() or None
+    monto_2 = None
+    if metodo_2:
+        if metodo not in METODOS_MIXTOS or metodo_2 not in METODOS_MIXTOS:
+            raise HTTPException(
+                status_code=400,
+                detail="El crédito no se puede combinar con otra forma de pago",
+            )
+        if metodo_2 == metodo:
+            raise HTTPException(status_code=400, detail="Las dos formas de pago deben ser distintas")
+        monto_2 = round(data.monto_2 or 0, 2)
+        if monto_2 <= 0 or monto_2 >= total:
+            raise HTTPException(
+                status_code=400,
+                detail=f"El segundo pago debe ser mayor a $0 y menor al total (${total:,.2f})",
+            )
+
     # Los pedidos en dos pagos son exclusivos de El Zar del LED. La interfaz
     # ya oculta esos botones en las demás tiendas, pero la API también debe
     # impedir que se creen manipulando la petición desde el navegador.
@@ -904,7 +924,18 @@ def registrar_venta(data: RegistrarVenta, sesion: Sesion = Depends(requerir_sesi
         if not cliente:
             raise HTTPException(status_code=404, detail="Cliente no encontrado")
 
-    if metodo == "tarjeta" or metodo == "transferencia":
+    if metodo_2:
+        # En una venta mixta, pago_con y cambio son los de la parte en
+        # efectivo: es la única con billetes de por medio. Si ninguna de las
+        # dos fue en efectivo, no hay nada que devolver.
+        efectivo_esperado = _monto_metodo_calculado(metodo, metodo_2, total, monto_2, "efectivo")
+        if efectivo_esperado is None:
+            pago_con = total
+            cambio = 0.0
+        else:
+            pago_con = data.pago_con if data.pago_con is not None else efectivo_esperado
+            cambio = round(pago_con - efectivo_esperado, 2) if pago_con >= efectivo_esperado else None
+    elif metodo == "tarjeta" or metodo == "transferencia":
         # En tarjeta/transferencia no hay cambio; el pago es por el total exacto
         pago_con = total
         cambio = 0.0
@@ -934,11 +965,17 @@ def registrar_venta(data: RegistrarVenta, sesion: Sesion = Depends(requerir_sesi
         operador=sesion.usuario,
         sucursal=sucursal_venta,
         metodo_pago=metodo,
+        metodo_pago_2=metodo_2,
+        monto_2=monto_2,
         cliente_id=data.cliente_id if metodo == "credito" else None,
-        tpv_referencia=data.tpv_referencia if metodo == "tarjeta" else None,
-        tpv_autorizacion=data.tpv_autorizacion if metodo == "tarjeta" else None,
-        tpv_terminal=data.tpv_terminal if metodo == "tarjeta" else None,
-        transferencia_referencia=data.transferencia_referencia if metodo == "transferencia" else None,
+        # Los datos de la terminal y de la transferencia se guardan en las
+        # mismas columnas de siempre venga la parte que venga: las dos formas
+        # de pago de una venta mixta son distintas, así que no se pisan.
+        tpv_referencia=data.tpv_referencia if "tarjeta" in (metodo, metodo_2) else None,
+        tpv_autorizacion=data.tpv_autorizacion if "tarjeta" in (metodo, metodo_2) else None,
+        tpv_terminal=data.tpv_terminal if "tarjeta" in (metodo, metodo_2) else None,
+        transferencia_referencia=(data.transferencia_referencia
+                                  if "transferencia" in (metodo, metodo_2) else None),
         detalle_json=json.dumps(detalle, ensure_ascii=False),
         pago_con=pago_con,
         cambio=cambio,
@@ -959,6 +996,9 @@ def registrar_venta(data: RegistrarVenta, sesion: Sesion = Depends(requerir_sesi
         "pago_con": pago_con,
         "cambio": cambio,
         "metodo_pago": metodo,
+        "metodo_pago_2": metodo_2,
+        "monto_2": monto_2,
+        "monto_1": round(total - monto_2, 2) if metodo_2 else None,
         "cliente_id": venta.cliente_id,
         "cliente_nombre": cliente.nombre if cliente else None,
         "es_anticipo": venta.es_anticipo,
@@ -975,6 +1015,43 @@ def registrar_venta(data: RegistrarVenta, sesion: Sesion = Depends(requerir_sesi
 
 
 # ─── Historial de ventas ───────────────────────────────────────────────────
+# Formas de pago que pueden combinarse en una misma venta. El crédito queda
+# fuera a propósito: no es dinero que entre hoy, sino saldo en la cartera del
+# cliente, y mezclarlo cambiaría cómo se calculan las deudas.
+METODOS_MIXTOS = ("efectivo", "tarjeta", "transferencia")
+
+
+def _partes_pago(v: Venta):
+    """Las formas de pago de una venta con su importe, siempre como lista: una
+    sola parte en las ventas normales y dos en las mixtas. Cualquier suma por
+    método debe pasar por aquí para que cuadre sin preguntar si fue mixta.
+    Funciona igual con las devoluciones, que llevan importes negativos."""
+    m1 = v.metodo_pago or "efectivo"
+    if v.metodo_pago_2 and v.monto_2:
+        return [(m1, round(v.total - v.monto_2, 2)), (v.metodo_pago_2, round(v.monto_2, 2))]
+    return [(m1, v.total)]
+
+
+def _monto_metodo_calculado(metodo, metodo_2, total, monto_2, buscado):
+    """Lo mismo que _monto_metodo pero con los datos sueltos, para usarlo
+    mientras se está armando la venta. None si `buscado` no se usó."""
+    if metodo == buscado:
+        return round(total - monto_2, 2)
+    if metodo_2 == buscado:
+        return round(monto_2, 2)
+    return None
+
+
+def _monto_metodo(v: Venta, metodo: str) -> float:
+    """Cuánto de esta venta se cobró con `metodo` (0 si no se usó)."""
+    return round(sum(monto for m, monto in _partes_pago(v) if m == metodo), 2)
+
+
+def _etiqueta_metodos(v: Venta) -> str:
+    """"efectivo" o "efectivo + tarjeta", para mostrar y para el CSV."""
+    return " + ".join(m for m, _ in _partes_pago(v))
+
+
 def _fecha_contable_venta(v: Venta):
     """Fecha en que una operación cuenta como venta.
 
@@ -1033,7 +1110,10 @@ def listar_ventas(
     if operador:
         query = query.filter(Venta.operador == operador)
     if metodo_pago in ("efectivo", "tarjeta", "credito", "transferencia"):
-        query = query.filter(Venta.metodo_pago == metodo_pago)
+        # Una venta mixta se cobró con dos métodos: debe salir al filtrar por
+        # cualquiera de los dos, no solo por el primero.
+        query = query.filter(or_(Venta.metodo_pago == metodo_pago,
+                                 Venta.metodo_pago_2 == metodo_pago))
     if sucursal:
         query = query.filter(Venta.sucursal == sucursal)
     restriccion = sucursal_restriccion(sesion)
@@ -1054,6 +1134,8 @@ def listar_ventas(
             "operador": v.operador,
             "sucursal": v.sucursal,
             "metodo_pago": v.metodo_pago or "efectivo",
+            "metodo_pago_2": v.metodo_pago_2,
+            "monto_2": v.monto_2,
             "estado": v.estado or "activa",
             "total_devuelto": v.total_devuelto or 0,
             "venta_origen_id": v.venta_origen_id,
@@ -1099,7 +1181,10 @@ def resumen_ventas(
     if operador:
         query = query.filter(Venta.operador == operador)
     if metodo_pago in ("efectivo", "tarjeta", "credito", "transferencia"):
-        query = query.filter(Venta.metodo_pago == metodo_pago)
+        # Una venta mixta se cobró con dos métodos: debe salir al filtrar por
+        # cualquiera de los dos, no solo por el primero.
+        query = query.filter(or_(Venta.metodo_pago == metodo_pago,
+                                 Venta.metodo_pago_2 == metodo_pago))
     if sucursal:
         query = query.filter(Venta.sucursal == sucursal)
     restriccion = sucursal_restriccion(sesion)
@@ -1107,8 +1192,8 @@ def resumen_ventas(
         query = query.filter(Venta.sucursal == restriccion)
     ventas = query.all()
     total_vendido = round(sum(v.total for v in ventas), 2)
-    total_efectivo = round(sum(v.total for v in ventas if (v.metodo_pago or "efectivo") == "efectivo"), 2)
-    total_tarjeta = round(sum(v.total for v in ventas if v.metodo_pago == "tarjeta"), 2)
+    total_efectivo = round(sum(_monto_metodo(v, "efectivo") for v in ventas), 2)
+    total_tarjeta = round(sum(_monto_metodo(v, "tarjeta") for v in ventas), 2)
 
     # Desglose por operador, separando efectivo y tarjeta
     por_operador = {}
@@ -1118,10 +1203,8 @@ def resumen_ventas(
             por_operador[op] = {"operador": op, "num_ventas": 0, "total": 0.0, "efectivo": 0.0, "tarjeta": 0.0}
         por_operador[op]["num_ventas"] += 1
         por_operador[op]["total"] += v.total
-        if v.metodo_pago == "tarjeta":
-            por_operador[op]["tarjeta"] += v.total
-        elif (v.metodo_pago or "efectivo") == "efectivo":
-            por_operador[op]["efectivo"] += v.total
+        por_operador[op]["tarjeta"] += _monto_metodo(v, "tarjeta")
+        por_operador[op]["efectivo"] += _monto_metodo(v, "efectivo")
     desglose = sorted(
         [{"operador": d["operador"], "num_ventas": d["num_ventas"],
           "total": round(d["total"], 2), "efectivo": round(d["efectivo"], 2), "tarjeta": round(d["tarjeta"], 2)}
@@ -1344,6 +1427,9 @@ def obtener_venta(venta_id: int, sesion: Sesion = Depends(requerir_gerente), db:
         "operador": v.operador,
         "sucursal": v.sucursal,
         "metodo_pago": v.metodo_pago or "efectivo",
+        "metodo_pago_2": v.metodo_pago_2,
+        "monto_2": v.monto_2,
+        "monto_1": round(v.total - v.monto_2, 2) if (v.metodo_pago_2 and v.monto_2) else None,
         "estado": v.estado or "activa",
         "total_devuelto": v.total_devuelto or 0,
         "venta_origen_id": v.venta_origen_id,
@@ -1438,6 +1524,12 @@ def devolver_items(
         operador=sesion.usuario,
         sucursal=sesion.sucursal,
         metodo_pago=v.metodo_pago,
+        # Si la venta se cobró con dos formas de pago, la devolución se
+        # reparte igual: así el corte de caja solo descuenta del cajón la
+        # parte que de verdad había entrado en efectivo.
+        metodo_pago_2=v.metodo_pago_2,
+        monto_2=(round(-monto_total * (v.monto_2 / v.total), 2)
+                 if (v.metodo_pago_2 and v.monto_2 and v.total) else None),
         cliente_id=v.cliente_id,
         detalle_json=json.dumps(detalle_dev, ensure_ascii=False),
         pago_con=None,
@@ -1530,6 +1622,12 @@ def cancelar_venta(
         operador=sesion.usuario,
         sucursal=sesion.sucursal,
         metodo_pago=v.metodo_pago,
+        # Si la venta se cobró con dos formas de pago, la devolución se
+        # reparte igual: así el corte de caja solo descuenta del cajón la
+        # parte que de verdad había entrado en efectivo.
+        metodo_pago_2=v.metodo_pago_2,
+        monto_2=(round(-monto_total * (v.monto_2 / v.total), 2)
+                 if (v.metodo_pago_2 and v.monto_2 and v.total) else None),
         cliente_id=v.cliente_id,
         detalle_json=json.dumps(detalle_dev, ensure_ascii=False),
         pago_con=None,
@@ -2394,7 +2492,10 @@ def _calcular_corte(db: Session, sucursal: str):
     # Lo que quedó en el cajón: lo contado menos lo que se retiró al cerrar
     saldo_inicial = round((anterior.contado or 0) - (anterior.retirado or 0), 2) if anterior else 0.0
 
-    ventas_q = db.query(Venta).filter(Venta.sucursal == sucursal, Venta.metodo_pago == "efectivo")
+    ventas_q = db.query(Venta).filter(
+        Venta.sucursal == sucursal,
+        or_(Venta.metodo_pago == "efectivo", Venta.metodo_pago_2 == "efectivo"),
+    )
     gastos_q = db.query(Gasto).filter(Gasto.sucursal == sucursal, Gasto.metodo_pago == "efectivo")
     abonos_q = db.query(PagoCredito).filter(PagoCredito.sucursal == sucursal, PagoCredito.metodo_pago == "efectivo")
     if desde:
@@ -2402,7 +2503,7 @@ def _calcular_corte(db: Session, sucursal: str):
         gastos_q = gastos_q.filter(Gasto.fecha > desde)
         abonos_q = abonos_q.filter(PagoCredito.creado_en > desde)
 
-    ventas_efectivo = round(sum(v.total for v in ventas_q.all()), 2)
+    ventas_efectivo = round(sum(_monto_metodo(v, "efectivo") for v in ventas_q.all()), 2)
     gastos_efectivo = round(sum(g.monto for g in gastos_q.all()), 2)
     abonos_efectivo = round(sum(p.monto for p in abonos_q.all()), 2)
     esperado = round(saldo_inicial + ventas_efectivo + abonos_efectivo - gastos_efectivo, 2)
@@ -2648,7 +2749,7 @@ def reporte_del_dia(
         # de "no hubo ninguno este día", que se verían idénticos con [].
         "ventas": None if reducido else [{
             "hora": hora(_fecha_contable_venta(v)), "folio": v.id, "sucursal": v.sucursal,
-            "operador": v.operador, "metodo": v.metodo_pago or "efectivo",
+            "operador": v.operador, "metodo": _etiqueta_metodos(v),
             "cliente": nombres_cliente.get(v.cliente_id, ""), "estado": v.estado or "activa",
             "devuelto": v.total_devuelto or 0, "total": v.total,
             "es_anticipo": bool(v.es_anticipo),
@@ -3271,13 +3372,16 @@ def _bloque_reporte(ventas_b, gastos_b, abonos_b):
     total_vendido = round(sum(v.total for v in ventas_b), 2)
     gastos_total = round(sum(g.monto for g in gastos_b), 2)
 
+    # Una venta mixta suma en sus dos métodos, cada uno con su parte; cuenta
+    # como una venta en cada uno (por eso las cantidades pueden sumar más que
+    # el número de ventas).
     por_metodo = {}
     for v in ventas_b:
-        m = v.metodo_pago or "efectivo"
-        if m not in por_metodo:
-            por_metodo[m] = {"cantidad": 0, "total": 0.0}
-        por_metodo[m]["cantidad"] += 1
-        por_metodo[m]["total"] += v.total
+        for m, monto in _partes_pago(v):
+            if m not in por_metodo:
+                por_metodo[m] = {"cantidad": 0, "total": 0.0}
+            por_metodo[m]["cantidad"] += 1
+            por_metodo[m]["total"] += monto
     desglose_metodos = sorted(
         [{"metodo": k, "cantidad": v["cantidad"], "total": round(v["total"], 2)} for k, v in por_metodo.items()],
         key=lambda x: x["total"], reverse=True
@@ -3297,7 +3401,7 @@ def _bloque_reporte(ventas_b, gastos_b, abonos_b):
         key=lambda x: x["total"], reverse=True
     )
 
-    ventas_efectivo = round(sum(v.total for v in ventas_b if (v.metodo_pago or "efectivo") == "efectivo"), 2)
+    ventas_efectivo = round(sum(_monto_metodo(v, "efectivo") for v in ventas_b), 2)
     abonos_efectivo = round(sum(p.monto for p in abonos_b if (p.metodo_pago or "efectivo") == "efectivo"), 2)
     gastos_efectivo = round(sum(g.monto for g in gastos_b if (g.metodo_pago or "efectivo") == "efectivo"), 2)
 

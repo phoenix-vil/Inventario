@@ -84,6 +84,12 @@ class Venta(Base):
     operador = Column(String, nullable=True)
     sucursal = Column(String, nullable=True)
     metodo_pago = Column(String, default="efectivo")  # efectivo | tarjeta
+    # Segunda forma de pago de una venta mixta (ej. $400 en efectivo y el
+    # resto con tarjeta). metodo_pago guarda la primera y monto_2 lo que se
+    # cobró con la segunda; la primera vale total - monto_2. Vacías en las
+    # ventas de una sola forma de pago, que son la inmensa mayoría.
+    metodo_pago_2 = Column(String, nullable=True)   # efectivo | tarjeta | transferencia
+    monto_2 = Column(Float, nullable=True)
     tpv_referencia = Column(String, nullable=True)
     tpv_autorizacion = Column(String, nullable=True)
     tpv_terminal = Column(String, nullable=True)

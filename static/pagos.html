@@ -115,6 +115,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .msg.ok{background:var(--green-bg);color:var(--green)}
 .metodo-btn{flex:1;height:44px;border:0.5px solid var(--border);border-radius:10px;background:transparent;color:var(--text);font-size:14px;font-weight:600;cursor:pointer}
 .metodo-btn.activo{background:var(--blue-bg);color:var(--blue);border-color:var(--blue)}
+.metodo-btn:disabled{opacity:.35;cursor:not-allowed}
+/* Cobro con dos formas de pago: lo ya cobrado y lo que falta */
+.cobrado{border:0.5px solid var(--green);background:var(--green-bg);border-radius:10px;padding:.5rem .75rem;margin-bottom:8px}
+.cobrado-tit{font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px}
+.cobrado-fila{display:flex;align-items:center;justify-content:space-between;font-size:14px;font-weight:600;color:var(--green)}
+.cobrado-fila button{background:none;border:none;color:var(--green);font-size:13px;cursor:pointer;padding:0 0 0 8px}
+.falta{display:flex;justify-content:space-between;align-items:baseline;font-weight:700;padding:9px 12px;border-radius:10px;background:var(--amber-bg);color:var(--amber);margin-bottom:10px}
+.falta .mn{font-size:19px}
+.ayuda{font-size:12px;color:var(--text2);margin-top:5px;line-height:1.4}
 #qr-reader{width:100%;border-radius:8px;overflow:hidden;position:relative;margin-bottom:8px}
 #qr-reader video{width:100%;border-radius:8px;display:block}
 .scan-frame{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:70%;height:42%;pointer-events:none}
@@ -384,6 +393,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <h2>Cobrar venta</h2>
     <div id="cobro-resumen"></div>
 
+    <!-- Cobro dividido: solo se ven en la segunda vuelta, cuando ya se cobró
+         una parte con otro método. -->
+    <div class="cobrado" id="cobro-parcial" style="display:none">
+      <div class="cobrado-tit">Ya cobrado</div>
+      <div class="cobrado-fila">
+        <span id="parcial-metodo"></span>
+        <span><span id="parcial-monto"></span><button type="button" onclick="quitarPagoParcial()" title="Quitar este pago">✕</button></span>
+      </div>
+    </div>
+    <div class="falta" id="cobro-falta" style="display:none"><span>Falta por cobrar</span><span class="mn" id="parcial-falta"></span></div>
+
     <div class="field">
       <label>Método de pago</label>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -394,10 +414,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </div>
     </div>
 
+    <!-- Monto con tarjeta o transferencia. En efectivo ese papel lo hace
+         "Paga con", que ya existía: vacío o mayor = se cobra todo lo que
+         falta (y lo de más es cambio); menor = se cobra esa parte y la
+         pantalla vuelve por el resto con otra forma de pago. -->
+    <div class="field" id="sec-monto-otro" style="display:none">
+      <label>Monto a cobrar ($)</label>
+      <input type="number" id="c-monto-otro" min="0" step="0.01" placeholder="Todo el total" oninput="actualizarCobroMixto()" onkeydown="confirmarConEnter(event)">
+      <div class="ayuda" id="ayuda-monto-otro"></div>
+    </div>
+
     <!-- Sección efectivo -->
     <div id="sec-efectivo">
       <div class="field"><label>Paga con ($) *</label><input type="number" id="c-pago" min="0" step="0.01" placeholder="0.00" oninput="calcCambio()" onkeydown="confirmarConEnter(event)"></div>
       <div class="linea-total"><span>Cambio</span><span id="c-cambio">$0.00</span></div>
+      <div class="ayuda" id="ayuda-efectivo"></div>
     </div>
 
     <!-- Sección tarjeta (datos del ticket de la TPV) -->
@@ -1154,10 +1185,98 @@ function extraerMensajeError(detail, fallback){
 
 const ORDEN_METODOS = ['efectivo', 'tarjeta', 'credito', 'transferencia'];
 
+// ─── Cobro con dos formas de pago ──────────────────────────────────────────
+// Si el cajero cobra menos del total con un método, esa parte se guarda aquí
+// y la misma pantalla vuelve para cobrar el resto con otro. La venta se
+// registra hasta que se junta el total: cancelar a media captura no deja
+// nada en la base. Tope de dos pagos —en la segunda vuelta ya no se puede
+// volver a partir—, que es lo que cabe en las columnas metodo_pago_2 /
+// monto_2 de la venta.
+let pagoParcial = null;   // {metodo, monto, pagoCon, tpvRef, tpvAut, tpvTerm, transfRef}
+
+const ETIQUETA_METODO = {efectivo:'💵 Efectivo', tarjeta:'💳 Tarjeta',
+                         transferencia:'🏦 Transferencia', credito:'📒 Crédito'};
+// Los mismos, como salen impresos en el ticket
+const METODO_TICKET = {efectivo:'EFECTIVO', tarjeta:'TARJETA', transferencia:'TRANSFER.'};
+
+const centavos = n => Math.round(n * 100) / 100;
+
+function totalCobro(){ return centavos(calcSubtotal() * (1 - descuentoExtra / 100)); }
+function faltaCobrar(){ return centavos(totalCobro() - (pagoParcial ? pagoParcial.monto : 0)); }
+
+// Lo que el cajero escribió en el campo de monto del método actual, o null
+// si lo dejó vacío (= cobrar todo lo que falta).
+function montoEscrito(){
+  const campo = metodoPago === 'efectivo' ? 'c-pago'
+              : (metodoPago === 'tarjeta' || metodoPago === 'transferencia') ? 'c-monto-otro' : null;
+  if(!campo) return null;
+  const raw = document.getElementById(campo).value.trim();
+  return raw === '' ? null : parseFloat(raw);
+}
+
+// Refresca todo lo que depende del reparto: los bloques de arriba, qué
+// métodos se pueden elegir, las ayudas y el texto del botón de confirmar.
+function actualizarCobroMixto(){
+  const falta = faltaCobrar();
+  const puedePartir = !pagoParcial && metodoPago !== 'credito';
+
+  document.getElementById('cobro-parcial').style.display = pagoParcial ? 'block' : 'none';
+  document.getElementById('cobro-falta').style.display = pagoParcial ? 'flex' : 'none';
+  if(pagoParcial){
+    document.getElementById('parcial-metodo').textContent = ETIQUETA_METODO[pagoParcial.metodo];
+    document.getElementById('parcial-monto').textContent = money(pagoParcial.monto);
+    document.getElementById('parcial-falta').textContent = money(falta);
+  }
+
+  // En la segunda vuelta no se repite el método ya usado, y el crédito no se
+  // mezcla nunca (sería deuda del cliente, no dinero cobrado hoy).
+  document.getElementById('btn-credito').disabled = !!pagoParcial;
+  ['efectivo', 'tarjeta', 'transferencia'].forEach(m => {
+    document.getElementById('btn-' + m).disabled = !!pagoParcial && pagoParcial.metodo === m;
+  });
+
+  // El campo de monto de tarjeta/transferencia solo tiene sentido en la
+  // primera vuelta: en la segunda el importe ya está fijado.
+  document.getElementById('sec-monto-otro').style.display =
+    (puedePartir && (metodoPago === 'tarjeta' || metodoPago === 'transferencia')) ? 'block' : 'none';
+  document.getElementById('c-monto-otro').placeholder = money(falta);
+
+  const monto = montoEscrito();
+  const parcial = puedePartir && monto != null && !isNaN(monto) && monto > 0 && monto < falta - 0.005;
+  let ayuda;
+  if(parcial){
+    ayuda = 'Se cobran ' + money(monto) + ' y quedan ' + money(centavos(falta - monto)) +
+            ' por cobrar con otra forma de pago.';
+  }else if(monto == null){
+    ayuda = pagoParcial ? 'Se cobra lo que falta: ' + money(falta) + '.'
+                        : 'Vacío = paga justo ' + money(falta) + '.';
+  }else{
+    ayuda = '';
+  }
+  document.getElementById('ayuda-efectivo').textContent = ayuda;
+  document.getElementById('ayuda-monto-otro').textContent = ayuda;
+
+  const btn = document.getElementById('btn-confirmar-cobro');
+  btn.textContent = parcial ? 'Cobrar ' + money(monto) + ' y seguir'
+                  : pagoParcial ? 'Cobrar ' + money(falta) + ' y terminar'
+                  : 'Confirmar venta';
+}
+
+function quitarPagoParcial(){
+  pagoParcial = null;
+  document.getElementById('cobro-msg').className = 'msg';
+  setMetodo('efectivo');
+}
+
 function irAMetodo(direccion){
   const n = ORDEN_METODOS.length;
-  const i = ORDEN_METODOS.indexOf(metodoPago);
-  setMetodo(ORDEN_METODOS[(i + direccion + n) % n]);
+  let i = ORDEN_METODOS.indexOf(metodoPago);
+  // Salta los métodos que no se pueden elegir en esta vuelta.
+  for(let paso = 0; paso < n; paso++){
+    i = (i + direccion + n) % n;
+    const btn = document.getElementById('btn-' + ORDEN_METODOS[i]);
+    if(btn && !btn.disabled){ setMetodo(ORDEN_METODOS[i]); return; }
+  }
 }
 
 // Flecha arriba/abajo solo cuando el foco sigue en uno de los 4 botones de
@@ -1217,6 +1336,7 @@ function setMetodo(m){
     transferencia: 'c-transf-ref', credito: 'c-cliente-buscar',
   }[m];
   if(campoPrincipal) document.getElementById(campoPrincipal).focus();
+  actualizarCobroMixto();
 }
 
 // Tarjeta tiene tres campos en fila (Terminal, Referencia, Autorización):
@@ -1371,8 +1491,10 @@ function alCobrar(){
 
 function abrirCobro(){
   if(!carrito.length)return;
+  pagoParcial = null;
   renderResumenCobro();
   document.getElementById('c-pago').value='';
+  document.getElementById('c-monto-otro').value='';
   document.getElementById('c-cambio').textContent=money(0);
   document.getElementById('c-tpv-ref').value='';
   document.getElementById('c-tpv-aut').value='';
@@ -1394,7 +1516,16 @@ function abrirCobro(){
   document.getElementById('cobro-modal').classList.add('open');
   setMetodo('efectivo');
 }
-function cerrarCobro(){document.getElementById('cobro-modal').classList.remove('open');}
+async function cerrarCobro(){
+  // Con una parte ya capturada, cerrar sin querer costaría volver a teclear
+  // todo: la venta no se ha registrado y ese dato solo vive aquí.
+  if(pagoParcial && !(await confirmarPersonalizado(
+      'Ya capturaste ' + money(pagoParcial.monto) + ' en ' + ETIQUETA_METODO[pagoParcial.metodo] +
+      '. Si cancelas, la venta no se registra y hay que capturarla de nuevo.',
+      'Cancelar el cobro'))) return;
+  pagoParcial = null;
+  document.getElementById('cobro-modal').classList.remove('open');
+}
 
 // ─── El Zar del LED: flujo de anticipo ──────────────────────────────────────
 // Arranca en lo que ya esté elegido arriba del carrito (clienteVentaActual):
@@ -1787,11 +1918,13 @@ async function confirmarLiquidacion(){
 }
 
 function calcCambio(){
-  const subtotal=calcSubtotal();
-  const total=subtotal*(1-descuentoExtra/100);
+  // Contra lo que falta, no contra el total: en la segunda vuelta de un
+  // cobro dividido el cambio se calcula sobre el resto pendiente.
+  const falta=faltaCobrar();
   const pago=parseFloat(document.getElementById('c-pago').value)||0;
-  const cambio=pago-total;
+  const cambio=pago-falta;
   document.getElementById('c-cambio').textContent=money(cambio>0?cambio:0);
+  actualizarCobroMixto();
 }
 
 // ─── Agente local del punto de venta (impresora + cajón) ───────────────────
@@ -1916,17 +2049,31 @@ async function confirmarCobro(){
       precio_unitario: c.precio,
       precio_original: c.precioOriginal||null,
     }));
-    let body={items,descuento_extra_pct:descuentoExtra,autorizado_por:autorizadoPor,metodo_pago:metodoPago};
+    // Lo que se está cobrando en esta vuelta. Por omisión, todo lo que
+    // falta; si el cajero escribió un monto menor, solo esa parte.
+    const falta=faltaCobrar();
+    const puedePartir = !pagoParcial && metodoPago!=='credito';
+    const parte={metodo:metodoPago, monto:falta, pagoCon:null,
+                 tpvRef:null, tpvAut:null, tpvTerm:null, transfRef:null};
 
     if(metodoPago==='efectivo'){
       const pagoRaw=document.getElementById('c-pago').value.trim();
       if(pagoRaw===''){
-        body.pago_con=total;
+        parte.pagoCon=falta;
       }else{
         const pago=parseFloat(pagoRaw);
-        if(isNaN(pago)||pago<0){msg.className='msg error show';msg.textContent='Monto de pago inválido';return;}
-        if(pago<total){msg.className='msg error show';msg.textContent=`El pago (${money(pago)}) es menor al total (${money(total)})`;return;}
-        body.pago_con=pago;
+        if(isNaN(pago)||pago<=0){msg.className='msg error show';msg.textContent='Monto de pago inválido';return;}
+        parte.pagoCon=pago;
+        // Menos de lo que falta ya no es un error: es la primera parte de un
+        // cobro dividido. En la segunda vuelta sí, porque no queda con qué
+        // completar.
+        if(pago<falta-0.005){
+          if(!puedePartir){
+            msg.className='msg error show';
+            msg.textContent=`El pago (${money(pago)}) es menor a lo que falta (${money(falta)})`;return;
+          }
+          parte.monto=centavos(pago);
+        }
       }
     }else if(metodoPago==='tarjeta'){
       // Tarjeta: pedir datos del ticket de la TPV
@@ -1935,21 +2082,76 @@ async function confirmarCobro(){
       if(!ref||!aut){
         msg.className='msg error show';msg.textContent='Ingresa la referencia y autorización de la TPV';return;
       }
-      body.tpv_referencia=ref;
-      body.tpv_autorizacion=aut;
-      body.tpv_terminal=document.getElementById('c-tpv-term').value.trim()||null;
+      parte.tpvRef=ref;
+      parte.tpvAut=aut;
+      parte.tpvTerm=document.getElementById('c-tpv-term').value.trim()||null;
     }else if(metodoPago==='credito'){
       if(!clienteSeleccionado){
         msg.className='msg error show';msg.textContent='Selecciona o crea un cliente para la venta a crédito';return;
       }
-      body.cliente_id=clienteSeleccionado.id;
+      parte.monto=falta;
     }else if(metodoPago==='transferencia'){
-      body.transferencia_referencia=document.getElementById('c-transf-ref').value.trim()||null;
+      parte.transfRef=document.getElementById('c-transf-ref').value.trim()||null;
     }
+
+    // Monto parcial con tarjeta o transferencia (en efectivo lo dice "Paga con")
+    if(metodoPago==='tarjeta'||metodoPago==='transferencia'){
+      const escrito=montoEscrito();
+      if(escrito!=null){
+        if(isNaN(escrito)||escrito<=0){msg.className='msg error show';msg.textContent='Monto inválido';return;}
+        if(escrito>falta+0.005){
+          msg.className='msg error show';
+          msg.textContent=`Con ${metodoPago} no puedes cobrar más de ${money(falta)}`;return;
+        }
+        if(escrito<falta-0.005){
+          if(!puedePartir){msg.className='msg error show';msg.textContent='Ya solo falta '+money(falta);return;}
+          parte.monto=centavos(escrito);
+        }
+      }
+    }
+
+    // ¿Solo se cobró una parte? La venta no se registra todavía: vuelve la
+    // misma pantalla con el resto pendiente y otra forma de pago.
+    if(parte.monto<falta-0.005){
+      pagoParcial=parte;
+      document.getElementById('c-pago').value='';
+      document.getElementById('c-monto-otro').value='';
+      document.getElementById('c-tpv-ref').value='';
+      document.getElementById('c-tpv-aut').value='';
+      document.getElementById('c-tpv-term').value='';
+      document.getElementById('c-transf-ref').value='';
+      document.getElementById('c-cambio').textContent=money(0);
+      msg.className='msg';
+      // Sugiere una forma de pago distinta a la que se acaba de usar.
+      setMetodo(parte.metodo==='efectivo'?'tarjeta':'efectivo');
+      return;
+    }
+
+    // Venta completa: la primera forma de pago es la parcial (si la hubo) y
+    // esta cierra el total.
+    const partes = pagoParcial ? [pagoParcial, parte] : [parte];
+    let body={items,descuento_extra_pct:descuentoExtra,autorizado_por:autorizadoPor,
+              metodo_pago:partes[0].metodo};
+    if(pagoParcial){
+      body.metodo_pago_2=parte.metodo;
+      body.monto_2=centavos(parte.monto);
+    }
+    const conTarjeta=partes.find(x=>x.metodo==='tarjeta');
+    if(conTarjeta){
+      body.tpv_referencia=conTarjeta.tpvRef;
+      body.tpv_autorizacion=conTarjeta.tpvAut;
+      body.tpv_terminal=conTarjeta.tpvTerm;
+    }
+    const conTransf=partes.find(x=>x.metodo==='transferencia');
+    if(conTransf) body.transferencia_referencia=conTransf.transfRef;
+    const conEfectivo=partes.find(x=>x.metodo==='efectivo');
+    if(conEfectivo && conEfectivo.pagoCon!=null) body.pago_con=conEfectivo.pagoCon;
+    if(metodoPago==='credito') body.cliente_id=clienteSeleccionado.id;
 
     const r=await authFetch('/api/pos/venta',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const data=await r.json();
     if(!r.ok){msg.className='msg error show';msg.textContent=extraerMensajeError(data.detail, 'Error al registrar venta');return;}
+    pagoParcial=null;   // antes de cerrar: si no, pide confirmación de cancelar
     cerrarCobro();
     carrito=[];descuentoExtra=0;autorizadoPor=null;
     if(esZarDelLed){ clienteVentaActual=null; actualizarEtiquetaClienteVenta(); }
@@ -2070,7 +2272,20 @@ function generarTicketHTML(v){
     html+=`<div class="tk-line tk-ahorro"><span>🎉 Ahorraste</span><span>${money(ahorroTk)}</span></div>`;
   }
   html+=`<div class="tk-line tk-total"><span>TOTAL</span><span>${money(v.total)}</span></div>`+RAYA;
-  if(v.metodo_pago==='credito' && v.anticipo_cobrado!=null){
+  if(v.metodo_pago_2 && v.monto_2){
+    // Venta cobrada con dos formas de pago: el ticket las lista las dos.
+    const monto1 = v.monto_1!=null ? v.monto_1 : (v.total - v.monto_2);
+    html+=`<div class="tk-line"><span>Pago 1</span><span>${METODO_TICKET[v.metodo_pago]||''} ${money(monto1)}</span></div>`;
+    html+=`<div class="tk-line"><span>Pago 2</span><span>${METODO_TICKET[v.metodo_pago_2]||''} ${money(v.monto_2)}</span></div>`;
+    if(v.tpv_terminal)html+=`<div class="tk-line"><span>Terminal</span><span>${esc(v.tpv_terminal)}</span></div>`;
+    if(v.tpv_referencia)html+=`<div class="tk-line"><span>Referencia</span><span>${esc(v.tpv_referencia)}</span></div>`;
+    if(v.tpv_autorizacion)html+=`<div class="tk-line"><span>Autorización</span><span>${esc(v.tpv_autorizacion)}</span></div>`;
+    if(v.transferencia_referencia)html+=`<div class="tk-line"><span>Ref. transferencia</span><span>${esc(v.transferencia_referencia)}</span></div>`;
+    if(v.cambio!=null && v.cambio>0){
+      html+=`<div class="tk-line"><span>Pagó con</span><span>${money(v.pago_con)}</span></div>`;
+      html+=`<div class="tk-line"><span>Cambio</span><span>${money(v.cambio)}</span></div>`;
+    }
+  }else if(v.metodo_pago==='credito' && v.anticipo_cobrado!=null){
     html+=`<div class="tk-line" style="color:var(--amber)"><span>Pago</span><span>ANTICIPO</span></div>`;
     if(v.cliente_nombre)html+=`<div class="tk-line"><span>Cliente</span><span>${esc(v.cliente_nombre)}</span></div>`;
     html+=`<div class="tk-line"><span>Anticipo cobrado hoy</span><span>${money(v.anticipo_cobrado)}</span></div>`;
@@ -2121,7 +2336,12 @@ function ticketTextoPlano(v){
     txt+=`🎉 Ahorraste: ${money(ahorroTxt)}\n`;
   }
   txt+=`💰 TOTAL: ${money(v.total)}\n`;
-  if(v.metodo_pago==='credito' && v.anticipo_cobrado!=null){
+  if(v.metodo_pago_2 && v.monto_2){
+    const monto1 = v.monto_1!=null ? v.monto_1 : (v.total - v.monto_2);
+    txt+=`Pago 1: ${METODO_TICKET[v.metodo_pago]||''} ${money(monto1)}\n`;
+    txt+=`Pago 2: ${METODO_TICKET[v.metodo_pago_2]||''} ${money(v.monto_2)}\n`;
+    if(v.cambio!=null && v.cambio>0)txt+=`Pagó con: ${money(v.pago_con)} | Cambio: ${money(v.cambio)}\n`;
+  }else if(v.metodo_pago==='credito' && v.anticipo_cobrado!=null){
     txt+=`🔖 Anticipo`;
     if(v.cliente_nombre)txt+=` — ${v.cliente_nombre}`;
     txt+=`\nCobrado hoy: ${money(v.anticipo_cobrado)}\nSaldo pendiente: ${money(v.anticipo_saldo)}\n`;
