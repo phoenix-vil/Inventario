@@ -174,11 +174,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="arrow">›</div>
   </a>
 
-  <a class="menu-btn solo-gerente" href="/gastos" style="display:none">
+  <a class="menu-btn" href="/gastos">
     <div class="icon icon-precios">💸</div>
     <div class="menu-text">
       <div class="menu-title">Gastos</div>
-      <div class="menu-desc">Registra y consulta los gastos del negocio</div>
+      <div class="menu-desc" id="menu-gastos-desc">Registra y consulta los gastos del negocio</div>
     </div>
     <div class="arrow">›</div>
   </a>
@@ -264,6 +264,12 @@ if (sesion) {
       document.querySelectorAll('.solo-enterprise').forEach(el => el.style.display = 'flex');
       document.querySelectorAll('.config-enterprise-only').forEach(el => el.style.display = 'block');
     }
+  }
+  // El cajero también entra a Gastos, pero solo puede registrar y ver los
+  // suyos; el texto del botón lo dice para que no espere el resumen completo.
+  if (sesion.rol !== 'gerente') {
+    const _descGastos = document.getElementById('menu-gastos-desc');
+    if(_descGastos) _descGastos.textContent = 'Registra un gasto de la caja y consulta los tuyos';
   }
   // Al revés que .solo-enterprise: esto se ve por omisión y se esconde solo
   // para Only Enterprises, que no es una sucursal física —no tiene caja ni
