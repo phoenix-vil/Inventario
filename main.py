@@ -3011,6 +3011,7 @@ def crear_cliente(data: CrearCliente, sesion: Sesion = Depends(requerir_sesion),
         telefono=normalizar_telefono(data.telefono),
         nota=data.nota,
         limite_credito=data.limite_credito,
+        dias_credito=data.dias_credito,
         # Cada sucursal lleva su propia cartera; queda con la de quien lo da de alta
         sucursal=sesion.sucursal,
         nivel_precio=data.nivel_precio,
@@ -3020,7 +3021,8 @@ def crear_cliente(data: CrearCliente, sesion: Sesion = Depends(requerir_sesion),
     db.commit()
     db.refresh(c)
     return {"id": c.id, "nombre": c.nombre, "telefono": c.telefono, "limite_credito": c.limite_credito,
-            "sucursal": c.sucursal, "nivel_precio": c.nivel_precio, "temporal": c.temporal, "saldo": 0.0}
+            "dias_credito": c.dias_credito, "sucursal": c.sucursal, "nivel_precio": c.nivel_precio,
+            "temporal": c.temporal, "saldo": 0.0}
 
 
 @app.get("/api/clientes")
@@ -3037,6 +3039,7 @@ def listar_clientes(q: Optional[str] = Query(None), sesion: Sesion = Depends(req
             "nombre": c.nombre,
             "telefono": c.telefono,
             "limite_credito": c.limite_credito,
+            "dias_credito": c.dias_credito,
             "sucursal": c.sucursal,
             "nivel_precio": c.nivel_precio,
             "temporal": bool(c.temporal),
@@ -3204,6 +3207,7 @@ def detalle_cliente(cliente_id: int, sesion: Sesion = Depends(requerir_sesion), 
         "telefono": c.telefono,
         "nota": c.nota,
         "limite_credito": c.limite_credito,
+        "dias_credito": c.dias_credito,
         "sucursal": c.sucursal,
         "nivel_precio": c.nivel_precio,
         "temporal": bool(c.temporal),
@@ -3239,6 +3243,7 @@ def editar_cliente(cliente_id: int, data: CrearCliente, sesion: Sesion = Depends
     c.telefono = normalizar_telefono(data.telefono)
     c.nota = data.nota
     c.limite_credito = data.limite_credito
+    c.dias_credito = data.dias_credito
     c.nivel_precio = data.nivel_precio
     db.commit()
     return {"ok": True}
@@ -3537,6 +3542,65 @@ def reporte_completo(
         "por_sucursal": por_sucursal,
         "clientes_detalle": detalle_clientes,
         "total_por_cobrar": round(sum(c["saldo_actual"] for c in detalle_clientes if c["saldo_actual"] > 0), 2),
+    }
+
+
+@app.get("/api/creditos/por-cobrar")
+def creditos_por_cobrar(
+    umbral: float = Query(0.5, ge=0, le=5, description="Fracción del plazo ya consumida a partir de la cual avisar"),
+    sesion: Sesion = Depends(requerir_gerente),
+    db: Session = Depends(get_db),
+):
+    """Cuentas a crédito que ya se comieron al menos la mitad de su plazo y
+    siguen sin pagarse. Es la lista que aparece al iniciar sesión: sirve para
+    llamar al cliente antes de que se venza, no después.
+
+    Solo entran los clientes con días de crédito pactados —sin plazo no hay
+    porcentaje que calcular— y las ventas a crédito normales: los pedidos con
+    anticipo llevan su propio flujo de liquidación."""
+    clientes = clientes_visibles_query(db, sesion).filter(Cliente.dias_credito.isnot(None)).all()
+    ahora = datetime.utcnow()
+    pendientes = []
+    for c in clientes:
+        ventas = db.query(Venta).filter(
+            Venta.cliente_id == c.id, Venta.metodo_pago == "credito").all()
+        if not ventas:
+            continue
+        pagos = db.query(PagoCredito).filter(PagoCredito.cliente_id == c.id).all()
+        asignacion = _saldo_por_venta_credito(ventas, pagos)
+        for v in ventas:
+            if v.es_anticipo:
+                continue
+            saldo = asignacion[v.id]["saldo"]
+            if saldo <= 0.005:
+                continue
+            dias = (ahora - v.creado_en).days
+            avance = dias / c.dias_credito
+            if avance < umbral:
+                continue
+            pendientes.append({
+                "venta_id": v.id,
+                "fecha": v.creado_en.isoformat() + "Z",
+                "cliente_id": c.id,
+                "cliente": c.nombre,
+                "telefono": c.telefono,
+                "sucursal": v.sucursal or c.sucursal,
+                "total": v.total,
+                "saldo": saldo,
+                "dias_transcurridos": dias,
+                "dias_credito": c.dias_credito,
+                "dias_restantes": c.dias_credito - dias,
+                "avance_pct": round(avance * 100),
+                "vencido": dias >= c.dias_credito,
+            })
+    # Primero lo más urgente: lo más vencido y, a igual avance, lo que más pesa
+    pendientes.sort(key=lambda x: (-x["avance_pct"], -x["saldo"]))
+    return {
+        "umbral_pct": round(umbral * 100),
+        "num": len(pendientes),
+        "num_vencidos": sum(1 for x in pendientes if x["vencido"]),
+        "saldo_total": round(sum(x["saldo"] for x in pendientes), 2),
+        "creditos": pendientes,
     }
 
 

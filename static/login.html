@@ -26,20 +26,20 @@ if (navigator.userAgent.indexOf('VilnixPOSApp') !== -1) {
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
   --bg:#f5f4f0;--bg2:#fff;--border:#e2e0d8;--text:#1a1a18;--text2:#6b6b66;
-  --blue:#185fa5;--red:#a32d2d;--red-bg:#fcebeb;--radius:14px;
+  --blue:#185fa5;--red:#a32d2d;--red-bg:#fcebeb;--amber:#854f0b;--amber-bg:#faeeda;--radius:14px;
   --t1:#2b2b28;--t2:#4a4a44;--tblob:#6b6b66;
 }
 @media(prefers-color-scheme:dark){:root{
   --bg:#1c1c1a;--bg2:#252522;--border:#3a3a36;--text:#e8e6dc;--text2:#9c9a92;
-  --blue:#85b7eb;--red:#f09595;--red-bg:#501313
+  --blue:#85b7eb;--red:#f09595;--red-bg:#501313;--amber:#ef9f27;--amber-bg:#412402
 }}
 html.tema-oscuro{
   --bg:#1c1c1a;--bg2:#252522;--border:#3a3a36;--text:#e8e6dc;--text2:#9c9a92;
-  --blue:#85b7eb;--red:#f09595;--red-bg:#501313
+  --blue:#85b7eb;--red:#f09595;--red-bg:#501313;--amber:#ef9f27;--amber-bg:#412402
 }
 html.tema-claro{
   --bg:#f5f4f0;--bg2:#fff;--border:#e2e0d8;--text:#1a1a18;--text2:#6b6b66;
-  --blue:#185fa5;--red:#a32d2d;--red-bg:#fcebeb;--radius:14px;
+  --blue:#185fa5;--red:#a32d2d;--red-bg:#fcebeb;--amber:#854f0b;--amber-bg:#faeeda;--radius:14px;
   --t1:#2b2b28;--t2:#4a4a44;--tblob:#6b6b66;
 }
 html,body{height:100%}
@@ -155,6 +155,28 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
                 box-shadow:0 12px 40px rgba(0,0,0,.55);background:#000"></video>
   <button id="broma-saltar" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,.45);
           border-radius:10px;padding:.55rem 1.1rem;font-size:14px;cursor:pointer">Ya, déjame entrar →</button>
+</div>
+
+<!-- Aviso de cobranza: al entrar, a la gerencia le sale la lista de cuentas a
+     crédito que ya consumieron la mitad de su plazo y siguen sin pagarse. Se
+     llena desde el servidor al iniciar sesión; si no hay ninguna, ni aparece. -->
+<div id="cobranza" style="display:none;position:fixed;inset:0;z-index:9998;
+     background:rgba(0,0,0,.55);align-items:center;justify-content:center;padding:16px">
+  <div style="background:var(--bg2);color:var(--text);border:0.5px solid var(--border);
+       border-radius:16px;padding:1.25rem;width:460px;max-width:96vw;max-height:88vh;
+       display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.35)">
+    <div style="font-size:17px;font-weight:700;margin-bottom:2px">📌 Cuentas por cobrar</div>
+    <div id="cobranza-resumen" style="font-size:13px;color:var(--text2);margin-bottom:12px"></div>
+    <div id="cobranza-lista" style="overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button id="cobranza-clientes" style="flex:1;height:44px;border:0.5px solid var(--border);
+              border-radius:10px;background:transparent;color:var(--text);font-size:14px;
+              font-weight:600;cursor:pointer">Ver clientes</button>
+      <button id="cobranza-ok" style="flex:1;height:44px;border:none;border-radius:10px;
+              background:var(--text);color:var(--bg2);font-size:14px;font-weight:700;
+              cursor:pointer">Entendido</button>
+    </div>
+  </div>
 </div>
 
 <script src="/static/auth.js?v=1787605997"></script>
@@ -313,6 +335,72 @@ function tocaBroma(usuario) {
   return true;
 }
 
+// ─── Aviso de cobranza al entrar ──────────────────────────────────────────
+// A quién le toca ver la lista de cuentas a crédito a medio plazo. Se compara
+// con normalizarNombre() —el mismo de la broma— para que "Mondragón" con
+// acento o con mayúsculas distintas siga contando.
+const USUARIOS_COBRANZA = ['daniel mondragon'];
+
+function tocaCobranza(usuario) {
+  return USUARIOS_COBRANZA.includes(normalizarNombre(usuario));
+}
+
+// Devuelve una promesa que se resuelve cuando el usuario cierra el aviso. Si
+// algo falla (red, permisos, la columna todavía sin migrar) no se muestra
+// nada: este aviso nunca debe impedirle entrar a trabajar.
+function mostrarCobranza(sesion) {
+  if (!tocaCobranza(sesion.usuario)) return Promise.resolve();
+  return fetch('/api/creditos/por-cobrar', {
+    headers: { 'Authorization': 'Bearer ' + sesion.token }
+  }).then(r => r.ok ? r.json() : null).then(datos => {
+    if (!datos || !datos.creditos || !datos.creditos.length) return;
+    return new Promise(resolve => {
+      const capa = document.getElementById('cobranza');
+      const money = n => '$' + Number(n || 0).toLocaleString('es-MX',
+        { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const esc = t => String(t == null ? '' : t)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+      document.getElementById('cobranza-resumen').textContent =
+        datos.num + (datos.num === 1 ? ' cuenta' : ' cuentas') + ' por ' + money(datos.saldo_total) +
+        (datos.num_vencidos ? ' · ' + datos.num_vencidos + ' ya vencida' + (datos.num_vencidos === 1 ? '' : 's') : '');
+
+      document.getElementById('cobranza-lista').innerHTML = datos.creditos.map(c => {
+        // Vencida en rojo; a punto de vencer en ámbar.
+        const color = c.vencido ? 'var(--red)' : 'var(--amber)';
+        const fondo = c.vencido ? 'var(--red-bg)' : 'var(--amber-bg)';
+        const plazo = c.vencido
+          ? (c.dias_transcurridos - c.dias_credito === 0
+              ? 'Vence hoy'
+              : 'Vencida hace ' + (c.dias_transcurridos - c.dias_credito) + ' d')
+          : 'Faltan ' + c.dias_restantes + ' d';
+        const tel = c.telefono ? ' · ' + esc(c.telefono) : '';
+        return '<div style="border:0.5px solid var(--border);border-radius:11px;padding:.7rem .85rem">' +
+          '<div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline">' +
+            '<span style="font-weight:600;font-size:14px">' + esc(c.cliente) + '</span>' +
+            '<span style="font-weight:700;font-size:15px">' + money(c.saldo) + '</span>' +
+          '</div>' +
+          '<div style="font-size:12px;color:var(--text2);margin-top:3px">Ticket #' + c.venta_id +
+            ' · ' + c.dias_transcurridos + ' de ' + c.dias_credito + ' días' + tel + '</div>' +
+          '<div style="display:inline-block;margin-top:6px;font-size:11px;font-weight:700;' +
+            'padding:2px 8px;border-radius:20px;background:' + fondo + ';color:' + color + '">' +
+            plazo + ' · ' + c.avance_pct + '%</div>' +
+        '</div>';
+      }).join('');
+
+      document.getElementById('cobranza-ok').addEventListener('click', () => {
+        capa.style.display = 'none';
+        resolve();
+      }, { once: true });
+      // Se va derecho a la cartera; no hace falta resolver, la página cambia
+      document.getElementById('cobranza-clientes').addEventListener('click', () => {
+        location.href = '/clientes';
+      }, { once: true });
+      capa.style.display = 'flex';
+    });
+  }).catch(() => {});
+}
+
 function reproducirBroma() {
   return new Promise(resolve => {
     const capa = document.getElementById('broma');
@@ -366,6 +454,7 @@ async function entrar() {
     }
     localStorage.setItem('sesion', JSON.stringify(data));
     if (tocaBroma(data.usuario)) await reproducirBroma();
+    await mostrarCobranza(data);
     location.href = '/';
   } catch (e) {
     msg.className = 'msg show'; msg.textContent = 'Error de conexión';

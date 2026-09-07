@@ -201,6 +201,8 @@ class CrearCliente(BaseModel):
     telefono: Optional[str] = Field(None, max_length=30)
     nota: Optional[str] = Field(None, max_length=500)
     limite_credito: Optional[float] = Field(None, ge=0)
+    # Días acordados para pagar una cuenta a crédito (nulo = sin plazo)
+    dias_credito: Optional[int] = Field(None, ge=1, le=365)
     nivel_precio: Optional[int] = Field(None, ge=1, le=3)  # mayoreo: 1, 2 o 3
     # Cliente dado de alta solo para un anticipo (El Zar del LED): a
     # diferencia de un cliente de crédito normal, se borra solo en cuanto ya
