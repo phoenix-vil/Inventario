@@ -205,8 +205,9 @@ class CrearCliente(BaseModel):
     dias_credito: Optional[int] = Field(None, ge=1, le=365)
     nivel_precio: Optional[int] = Field(None, ge=1, le=3)  # mayoreo: 1, 2 o 3
     # Cliente dado de alta solo para un anticipo (El Zar del LED): a
-    # diferencia de un cliente de crédito normal, se borra solo en cuanto ya
-    # no debe nada -no tiene sentido dejarlo en la cartera para siempre-.
+    # diferencia de un cliente de crédito normal, se borra solo unos días
+    # después de quedar liquidado -no tiene sentido dejarlo en la cartera
+    # para siempre-. Tampoco se le pide plazo de crédito, porque no lo usa.
     temporal: bool = False
 
 

@@ -241,8 +241,9 @@ class Cliente(Base):
     # 1, 2 o 3 para los clientes de mayoreo; nulo = precio de mostrador
     nivel_precio = Column(Integer, nullable=True)
     # Dado de alta desde el flujo de pedidos/anticipos (El Zar del LED). Se
-    # conserva al liquidarse para poder reutilizarlo en compras posteriores,
-    # pero se presenta separado de los clientes con cuenta de crédito.
+    # presenta separado de los clientes con cuenta de crédito y, una vez
+    # liquidado, se borra solo a los pocos días -ver purgar_clientes_temporales
+    # en main.py-; sus ventas y abonos se quedan en el historial.
     temporal = Column(Boolean, default=False)
     creado_en = Column(DateTime, default=datetime.utcnow)
 

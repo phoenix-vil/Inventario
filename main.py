@@ -3002,6 +3002,68 @@ def _resumen_cuentas_cliente(db, cliente_id):
     }
 
 
+# Días que un cliente provisional (el que se da de alta solo para un pedido
+# con anticipo en El Zar del LED) se conserva después de quedar liquidado.
+# Se queda ese margen por si el cliente vuelve enseguida por otra cosa o hay
+# que corregir algo del pedido; pasado eso no tiene sentido dejarlo en la
+# cartera para siempre.
+DIAS_BORRAR_CLIENTE_TEMPORAL = 3
+
+
+def _fecha_ultimo_movimiento_cliente(db, cliente_id, creado_en):
+    """Cuándo se movió por última vez la cuenta de un cliente: su último abono
+    o la liquidación más reciente de sus pedidos. Si nunca tuvo movimientos
+    -se dio de alta y el pedido no llegó a concretarse- vale su fecha de alta,
+    para que esos clientes sueltos también se limpien."""
+    fechas = []
+    ultimo_pago = (
+        db.query(PagoCredito.creado_en)
+        .filter(PagoCredito.cliente_id == cliente_id)
+        .order_by(PagoCredito.creado_en.desc())
+        .first()
+    )
+    if ultimo_pago and ultimo_pago[0]:
+        fechas.append(ultimo_pago[0])
+    ultima_liquidacion = (
+        db.query(Venta.liquidado_en)
+        .filter(Venta.cliente_id == cliente_id, Venta.liquidado_en.is_not(None))
+        .order_by(Venta.liquidado_en.desc())
+        .first()
+    )
+    if ultima_liquidacion and ultima_liquidacion[0]:
+        fechas.append(ultima_liquidacion[0])
+    return max(fechas) if fechas else creado_en
+
+
+def purgar_clientes_temporales(db):
+    """Borra los clientes provisionales que ya no deben nada y llevan
+    DIAS_BORRAR_CLIENTE_TEMPORAL días liquidados.
+
+    Solo los crea el flujo de pedidos con anticipo (El Zar del LED), así que
+    la bandera `temporal` ya acota esto a esa tienda. Se borra ÚNICAMENTE la
+    ficha del cliente: sus ventas y sus abonos se quedan en el historial y en
+    los reportes, que son dinero real que entró. Se corre sola al abrir la
+    cartera, que es donde se notaría tenerlos de más."""
+    limite = datetime.utcnow() - timedelta(days=DIAS_BORRAR_CLIENTE_TEMPORAL)
+    borrados = 0
+    for c in db.query(Cliente).filter(Cliente.temporal == True).all():  # noqa: E712
+        cuentas = _resumen_cuentas_cliente(db, c.id)
+        if cuentas["saldo"] > 0.005:
+            continue   # todavía debe algo: no se toca
+        ultimo = _fecha_ultimo_movimiento_cliente(db, c.id, c.creado_en)
+        if ultimo is None or ultimo > limite:
+            continue
+        # Queda constancia en el journal (journalctl -u inventario): es un
+        # borrado automático y conviene poder rastrear cuál se fue y cuándo.
+        print(f"[clientes] Borrado el cliente provisional {c.id} '{c.nombre}' "
+              f"(sin movimientos desde el {ultimo:%Y-%m-%d})", flush=True)
+        db.delete(c)
+        borrados += 1
+    if borrados:
+        db.commit()
+    return borrados
+
+
 @app.post("/api/clientes", status_code=201)
 def crear_cliente(data: CrearCliente, sesion: Sesion = Depends(requerir_sesion), db: Session = Depends(get_db)):
     if data.nivel_precio is not None and data.nivel_precio not in (1, 2, 3):
@@ -3032,6 +3094,7 @@ def crear_cliente(data: CrearCliente, sesion: Sesion = Depends(requerir_sesion),
 
 @app.get("/api/clientes")
 def listar_clientes(q: Optional[str] = Query(None), sesion: Sesion = Depends(requerir_sesion), db: Session = Depends(get_db)):
+    purgar_clientes_temporales(db)
     query = clientes_visibles_query(db, sesion)
     if q:
         query = query.filter(Cliente.nombre.ilike(f"%{q}%"))
