@@ -3006,6 +3006,11 @@ def _resumen_cuentas_cliente(db, cliente_id):
 def crear_cliente(data: CrearCliente, sesion: Sesion = Depends(requerir_sesion), db: Session = Depends(get_db)):
     if data.nivel_precio is not None and data.nivel_precio not in (1, 2, 3):
         raise HTTPException(status_code=400, detail="El nivel de precio debe ser 1, 2 o 3")
+    # Todo cliente de crédito lleva plazo pactado: sin él la cuenta nunca
+    # aparecería en el aviso de cobranza. Los temporales quedan fuera —los
+    # crea el flujo de anticipos y no son clientes de crédito—.
+    if not data.temporal and not data.dias_credito:
+        raise HTTPException(status_code=400, detail="Indica los días de crédito del cliente")
     c = Cliente(
         nombre=data.nombre.strip(),
         telefono=normalizar_telefono(data.telefono),
@@ -3239,6 +3244,8 @@ def editar_cliente(cliente_id: int, data: CrearCliente, sesion: Sesion = Depends
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
     if data.nivel_precio is not None and data.nivel_precio not in (1, 2, 3):
         raise HTTPException(status_code=400, detail="El nivel de precio debe ser 1, 2 o 3")
+    if not c.temporal and not data.dias_credito:
+        raise HTTPException(status_code=400, detail="Indica los días de crédito del cliente")
     c.nombre = data.nombre.strip()
     c.telefono = normalizar_telefono(data.telefono)
     c.nota = data.nota
