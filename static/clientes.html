@@ -168,9 +168,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </select>
     </div>
     <div class="field"><label>Límite de crédito (opcional)</label><input type="number" id="cl-limite" min="0" step="0.01" placeholder="Sin límite"></div>
-    <!-- Plazo pactado con el cliente. Sin él, la cuenta no entra en el aviso
-         de cobranza del inicio de sesión: no hay contra qué medir los días. -->
-    <div class="field"><label>Días de crédito (opcional)</label><input type="number" id="cl-dias" min="1" max="365" step="1" placeholder="Ej: 30 · sin plazo si se deja vacío"></div>
+    <!-- Plazo pactado con el cliente, obligatorio: sin él la cuenta no entra
+         en el aviso de cobranza del inicio de sesión, porque no hay contra
+         qué medir los días. -->
+    <div class="field"><label>Días de crédito *</label><input type="number" id="cl-dias" min="1" max="365" step="1" placeholder="Ej: 30"></div>
     <div class="field"><label>Nota</label><textarea id="cl-nota" placeholder="Notas adicionales..."></textarea></div>
     <div class="msg" id="cliente-msg"></div>
     <div class="modal-footer">
@@ -340,10 +341,15 @@ function filaCliente(c){
   const sub = vistaClientes === 'pedidos'
     ? `${c.pedidos_pendientes||0} pendiente(s) · ${c.pedidos_liquidados||0} liquidado(s)`
     : (c.telefono ? esc(formatearTel(c.telefono)) : (c.nivel_precio ? 'Precio '+c.nivel_precio : ''));
+  // Los clientes dados de alta antes de que el plazo fuera obligatorio se
+  // quedaron sin él: hay que poder verlos de un vistazo para completarlos,
+  // porque sin plazo no entran en el aviso de cobranza.
+  const avisoPlazo = (vistaClientes === 'credito' && !c.temporal && !c.dias_credito)
+    ? ' · <span style="color:var(--amber);font-weight:600">sin plazo</span>' : '';
   return `<div class="cliente-row" onclick="abrirDetalle(${c.id})">
     <div class="cliente-nombre">${esc(c.nombre)}</div>
     <div class="cliente-row-sub">
-      <span class="cliente-tel">${sub}</span>
+      <span class="cliente-tel">${sub}${avisoPlazo}</span>
       ${saldoHtml}
     </div>
   </div>`;
@@ -424,6 +430,10 @@ async function guardarCliente(){
   if(!nombre){ msg.className='msg error show'; msg.textContent='Escribe el nombre del cliente'; return; }
   const errTel = errorTelefono(digitosTel);
   if(errTel){ msg.className='msg error show'; msg.textContent=errTel; return; }
+  if(!dias_credito || dias_credito < 1){
+    msg.className='msg error show';
+    msg.textContent='Escribe los días de crédito del cliente (ej. 30)'; return;
+  }
 
   const url = clienteActualId ? '/api/clientes/'+clienteActualId : '/api/clientes';
   const metodo = clienteActualId ? 'PATCH' : 'POST';
