@@ -1,0 +1,136 @@
+ACTUALIZAR EL AGENTE DEL CAJON - version v2.9.0 (7 de septiembre de 2026)
+=========================================================================
+
+QUE CAMBIA
+----------
+Solo el ticket impreso, y solo en un caso: cuando una venta se cobra con DOS
+formas de pago (por ejemplo $400 en efectivo y $600 con tarjeta), el ticket
+ahora imprime las dos:
+
+    Pago 1          EFECTIVO $400.00
+    Pago 2           TARJETA $600.00
+    Terminal                    Clip
+    Referencia                001234
+    Autorizacion              456789
+    Pago con                 $500.00
+    Cambio                   $100.00
+
+Las ventas de una sola forma de pago imprimen EXACTAMENTE igual que antes.
+No cambia nada mas: ni el cajon, ni la impresora, ni como arranca el agente,
+ni hace falta reinstalar Python ni pywin32.
+
+Mientras no hagas esta actualizacion, todo sigue funcionando: el ticket de
+papel de una venta con dos formas de pago mostrara solo la primera. En la
+pantalla y en el ticket digital ya se ven las dos.
+
+
+ANTES DE EMPEZAR
+----------------
+Esto es una ACTUALIZACION: da por hecho que esa PC ya tiene el agente
+instalado y funcionando. Si fuera una instalacion nueva, no uses este
+archivo, sigue el README.md que viene en el zip.
+
+Toma unos 5 minutos y hay que hacerlo en la PC de mostrador, la que tiene la
+impresora conectada.
+
+En estas instrucciones la carpeta del agente es  C:\cajon-agente\ . Si en tu
+PC quedo en otro lado, usa esa ruta en todos los pasos.
+
+
+PASO 1 - Apuntar la configuracion que tienes hoy
+------------------------------------------------
+El archivo nuevo trae los valores de fabrica. Si en esa PC se cambio alguno
+al instalar, hay que volver a ponerlo despues.
+
+  1. Abre  C:\cajon-agente\agente_cajon.py  con el Bloc de notas
+     (clic derecho sobre el archivo > Abrir con > Bloc de notas).
+  2. Cerca del principio busca estas lineas y ANOTA en un papel lo que dicen:
+
+         NOMBRE_IMPRESORA = "XP-58IIH"
+         ANCHO_TICKET = 32
+         PULSO_ABRIR_CAJON = b"\x1b\x70\x00\x19\xfa"
+
+     Si alguna vez cambiaste tambien ESC_CODEPAGE_CP850, anotala.
+  3. Cierra el Bloc de notas SIN guardar nada.
+
+
+PASO 2 - Detener el agente
+--------------------------
+  1. Ctrl + Shift + Esc  para abrir el Administrador de tareas.
+  2. Pestaña "Detalles".
+  3. Busca  pythonw.exe , clic derecho > "Finalizar tarea".
+     Si hay varios pythonw.exe y no sabes cual es, ciérralos todos: el agente
+     se vuelve a arrancar en el Paso 5.
+
+
+PASO 3 - Reemplazar el archivo
+------------------------------
+  1. Descomprime este zip (clic derecho > Extraer todo).
+  2. Copia el archivo  agente_cajon.py  del zip a  C:\cajon-agente\ .
+  3. Windows preguntara si reemplazar el archivo que ya existe: di que SI
+     ("Reemplazar el archivo en el destino").
+
+Los demas archivos del zip NO hace falta copiarlos: no cambiaron.
+
+
+PASO 4 - Devolver tu configuracion (solo si el Paso 1 dio distinto)
+-------------------------------------------------------------------
+Si alguno de los valores que anotaste en el Paso 1 no coincide con lo que
+trae el archivo nuevo:
+
+  1. Abre  C:\cajon-agente\agente_cajon.py  con el Bloc de notas.
+  2. Cambia esas lineas para que digan lo mismo que tenias.
+  3. Guarda con  Ctrl + S .
+
+El mas importante es NOMBRE_IMPRESORA: si no coincide exactamente con el
+nombre que Windows le puso a la impresora, no imprime nada.
+
+
+PASO 5 - Arrancarlo otra vez
+----------------------------
+Doble clic en  C:\cajon-agente\iniciar_agente.vbs
+
+No se abre ninguna ventana: es normal, el agente corre oculto. (No hace falta
+tocar la carpeta de inicio de Windows: el arranque automatico ya estaba
+configurado y sigue igual.)
+
+
+PASO 6 - Comprobar que quedo bien
+---------------------------------
+  1. Abre el Simbolo del sistema (busca "cmd" en el menu de inicio).
+  2. Escribe estos dos comandos, uno por uno:
+
+         cd C:\cajon-agente
+
+         curl.exe -X POST http://127.0.0.1:8788/imprimir-ticket -H "Content-Type: application/json" -d "@prueba-pago-mixto.json"
+
+     (el archivo prueba-pago-mixto.json viene en el zip; copialo a
+     C:\cajon-agente\ antes de correr el comando)
+
+  3. Debe salir un ticket de prueba con estas dos lineas:
+
+         Pago 1          EFECTIVO $400.00
+         Pago 2           TARJETA $600.00
+
+Si salieron las dos lineas, la actualizacion quedo. Ya puedes tirar ese
+ticket de prueba.
+
+Como ultima comprobacion, haz un cobro real normal (una sola forma de pago) y
+confirma que el ticket sale como siempre.
+
+
+SI ALGO SALE MAL
+----------------
+* No imprime nada:
+  Revisa el Paso 4 (el nombre de la impresora) y que el agente este corriendo
+  (repite el Paso 5). Con el agente apagado, el punto de venta no se queda sin
+  ticket: vuelve solo al dialogo de impresion de Windows de siempre.
+
+* Quieres volver a la version anterior:
+  En el zip viene  agente_cajon_ANTERIOR.py . Renombralo a  agente_cajon.py ,
+  copialo a C:\cajon-agente\ reemplazando el nuevo, y repite los pasos 2 y 5.
+  Con eso queda como estaba.
+
+* Cualquier otra cosa (acentos raros, columnas desalineadas, el cajon no
+  abre): la seccion "Si algo deja de funcionar mas adelante" del README.md
+  cubre esos casos, y no cambio nada de eso en esta version.
