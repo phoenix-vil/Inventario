@@ -102,6 +102,88 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .msg.error{background:var(--red-bg);color:var(--red)}
 .msg.ok{background:var(--green-bg);color:var(--green)}
 @media(max-width:600px){.topbar{padding:0 .625rem}.topbar-title{font-size:15px}}
+
+/* Los encabezados de las cajas solo existen en escritorio: en el teléfono la
+   pantalla sigue siendo una sola columna con sus .section-title de siempre. */
+.box-header{display:none}
+
+/* ─── Escritorio ancho: la pantalla en cajas, dos columnas ────────────────
+   Mismo lenguaje visual que /pagos y /devoluciones: cada bloque va dentro de
+   una caja con su encabezado en mayúsculas, y la lista larga hace scroll
+   dentro de su propia caja en vez de estirar la página.
+
+   Todo el diseño de escritorio vive dentro de este @media y nada más: fuera
+   de aquí las clases .pantalla, .col-izq, .col-der y .box no tienen ningún
+   estilo, así que los divs que las llevan son transparentes y la vista del
+   teléfono queda exactamente igual que antes.
+
+   A partir de 1024px (una PC o el contenedor de escritorio, nunca un iPhone
+   ni una tableta en vertical), igual que en /pagos y /devoluciones. */
+@media(min-width:1024px){
+  .pantalla{
+    display:grid;
+    grid-template-columns:360px minmax(0,1fr);
+    grid-template-rows:minmax(0,1fr);
+    gap:24px;
+    max-width:1400px;margin:0 auto;padding:1.25rem;
+    height:calc(100vh - 54px);
+  }
+  /* .container desaparece como caja (sin tocar el DOM) para que las dos
+     columnas entren directo a la cuadrícula de .pantalla. */
+  .container{display:contents}
+  /* La columna izquierda hace scroll propio: el formulario de un gasto con
+     nota larga no debe empujar nada fuera de la pantalla. */
+  .col-izq{display:flex;flex-direction:column;gap:16px;min-height:0;overflow-y:auto}
+  /* Sin esto las cajas se comprimen unas a otras dentro de la columna y se
+     recortan por el overflow:hidden (el botón de guardar desaparecía). Cada
+     caja mide lo que mide y quien hace scroll es la columna. */
+  .col-izq > .box{flex-shrink:0}
+  .col-der{display:flex;flex-direction:column;gap:16px;min-height:0}
+
+  .box{background:var(--bg2);border:0.5px solid var(--border);border-radius:12px;display:flex;flex-direction:column;overflow:hidden}
+  .box-header{
+    display:flex;justify-content:space-between;align-items:center;flex-shrink:0;
+    padding:.875rem 1rem;border-bottom:0.5px solid var(--border);
+    font-size:12px;font-weight:700;color:var(--text2);
+    text-transform:uppercase;letter-spacing:.4px;
+  }
+  .box-header .badge-cnt{background:transparent;border:none;color:var(--text);font-weight:700;padding:0}
+  .box-body{padding:.875rem}
+
+  /* La caja ya pone el marco: .card, .stat y los títulos de sección de la
+     vista móvil se quedan sin el suyo para no dibujar dos bordes. */
+  .card{background:transparent;border:none;box-shadow:none;border-radius:0;margin-bottom:0}
+  .section-title{display:none}
+  /* En escritorio el gasto se captura en el formulario de la izquierda, que
+     está siempre a la vista; el botón que abre el modal no hace falta. */
+  .btn-agregar{display:none}
+
+  /* Formulario de alta: es el mismo nodo .modal, que abre() mueve aquí
+     dentro al cargar la página. Aquí deja de parecer modal. */
+  #hueco-form-gasto{display:contents}
+  #hueco-form-gasto .modal{width:auto;max-width:none;max-height:none;overflow:visible;border:none;background:transparent;border-radius:0;padding:.875rem}
+  #hueco-form-gasto .modal h2{display:none}
+  #hueco-form-gasto .modal-footer{margin-top:1rem}
+  #hueco-form-gasto .modal-footer .btn-cancelar-gasto{display:none}
+  #hueco-form-gasto .modal-footer .primary{flex:1;height:46px}
+
+  .box-filtros .filtros{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:0}
+  .box-filtros .filtro-campo{min-width:0}
+  .box-filtros .filtro-cat{grid-column:1 / -1}
+  .filtros input,.filtros select{width:100%}
+  .box-filtros .filtros button{grid-column:1 / -1;width:100%}
+
+  .stats-grid{grid-template-columns:1fr 1fr;gap:10px;margin-bottom:0;padding:.875rem}
+  .col-der > .box-resumen{flex-shrink:0}
+  .stat{background:var(--bg);border:none;box-shadow:none;border-radius:10px;padding:.75rem .875rem}
+  .stat-value{font-size:19px}
+
+  /* La lista de gastos es lo único que crece: se queda con el alto que
+     sobra y hace scroll adentro. */
+  .box-lista{flex:1;min-height:0}
+  .box-lista .box-body{flex:1;min-height:0;overflow-y:auto;padding:0}
+  .box-cats .box-body{padding:0;max-height:32vh;overflow-y:auto}
+}
 </style>
 <link rel="stylesheet" href="/static/modern.css?v=1787605997">
 </head>
@@ -113,45 +195,85 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <button class="icon-btn" onclick="cargarTodo()" title="Actualizar">↻</button>
 </div>
 
+<!-- .pantalla y las .box son transparentes en el teléfono (no tienen ningún
+     estilo fuera del @media de escritorio): la vista móvil sigue siendo la
+     misma columna de siempre. A partir de 1024px se convierten en las dos
+     columnas de cajas. -->
+<div class="pantalla">
 <div class="container">
-  <button class="btn-agregar" onclick="abrirModal()">+ Agregar gasto</button>
-
-  <div class="stats-grid">
-    <div class="stat">
-      <div class="stat-label" id="lbl-total">Total del periodo</div>
-      <div class="stat-value red" id="st-total">—</div>
+  <div class="col-izq">
+    <!-- Alta de un gasto. En el teléfono es este botón, que abre el modal de
+         abajo; en escritorio acomodarFormGasto() mueve el formulario del modal
+         aquí dentro, donde se queda siempre a la vista. -->
+    <div class="box box-nuevo">
+      <div class="box-header">Nuevo gasto</div>
+      <button class="btn-agregar" onclick="abrirModal()">+ Agregar gasto</button>
+      <div id="hueco-form-gasto"></div>
     </div>
-    <div class="stat">
-      <div class="stat-label">Número de gastos</div>
-      <div class="stat-value" id="st-num">—</div>
+
+    <div class="box box-resumen">
+      <div class="box-header">Resumen</div>
+      <div class="stats-grid">
+        <div class="stat">
+          <div class="stat-label" id="lbl-total">Total del periodo</div>
+          <div class="stat-value red" id="st-total">—</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Número de gastos</div>
+          <div class="stat-value" id="st-num">—</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="box box-filtros">
+      <div class="box-header">Periodo</div>
+      <div class="box-body">
+        <div class="filtros">
+          <div class="filtro-campo">
+            <label>Desde</label>
+            <input type="date" id="f-desde">
+          </div>
+          <div class="filtro-campo">
+            <label>Hasta</label>
+            <input type="date" id="f-hasta">
+          </div>
+          <div class="filtro-campo filtro-cat">
+            <label>Categoría</label>
+            <select id="f-categoria"><option value="">Todas</option></select>
+          </div>
+          <button class="primary" onclick="cargarTodo()">Filtrar</button>
+        </div>
+      </div>
     </div>
   </div>
 
-  <div class="filtros">
-    <div class="filtro-campo">
-      <label>Desde</label>
-      <input type="date" id="f-desde">
+  <div class="col-der">
+    <!-- El desglose por categoría es información de dueño: para el cajero se
+         esconde la caja entera (ver el bloque de arriba del script). -->
+    <div class="box box-cats" id="box-categorias">
+      <div class="box-header">Por categoría</div>
+      <div class="section-title">Por categoría</div>
+      <div class="box-body">
+        <div class="card" id="desglose-categorias">
+          <div class="empty">Cargando...</div>
+        </div>
+      </div>
     </div>
-    <div class="filtro-campo">
-      <label>Hasta</label>
-      <input type="date" id="f-hasta">
-    </div>
-    <div class="filtro-campo">
-      <label>Categoría</label>
-      <select id="f-categoria"><option value="">Todas</option></select>
-    </div>
-    <button class="primary" onclick="cargarTodo()">Filtrar</button>
-  </div>
 
-  <div class="section-title" id="titulo-categorias">Por categoría</div>
-  <div class="card" id="desglose-categorias">
-    <div class="empty">Cargando...</div>
+    <!-- El título y el contador van dos veces a propósito: el .box-header solo
+         se ve en escritorio y el .section-title solo en el teléfono. El JS
+         escribe en los dos a la vez, por clase. -->
+    <div class="box box-lista">
+      <div class="box-header"><span class="titulo-lista">Detalle de gastos</span> <span class="badge-cnt badge-lista"></span></div>
+      <div class="section-title"><span class="titulo-lista">Detalle de gastos</span> <span class="badge-cnt badge-lista"></span></div>
+      <div class="box-body">
+        <div class="card" id="lista-gastos">
+          <div class="empty">Cargando...</div>
+        </div>
+      </div>
+    </div>
   </div>
-
-  <div class="section-title"><span id="titulo-lista">Detalle de gastos</span> <span class="badge-cnt" id="badge-lista"></span></div>
-  <div class="card" id="lista-gastos">
-    <div class="empty">Cargando...</div>
-  </div>
+</div>
 </div>
 
 <!-- Modal agregar gasto -->
@@ -191,7 +313,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
     <div class="msg" id="g-msg"></div>
     <div class="modal-footer">
-      <button onclick="cerrarModal()">Cancelar</button>
+      <button class="btn-cancelar-gasto" onclick="cerrarModal()">Cancelar</button>
       <button class="primary" onclick="guardarGasto()">Guardar</button>
     </div>
   </div>
@@ -207,9 +329,8 @@ requireAuth();
 // ajusta lo que se dibuja.
 const GERENTE = esGerente();
 if(!GERENTE){
-  document.getElementById('titulo-categorias').style.display = 'none';
-  document.getElementById('desglose-categorias').style.display = 'none';
-  document.getElementById('titulo-lista').textContent = 'Mis gastos';
+  document.getElementById('box-categorias').style.display = 'none';
+  document.querySelectorAll('.titulo-lista').forEach(e => e.textContent = 'Mis gastos');
   document.getElementById('lbl-total').textContent = 'Total de mis gastos';
 }
 
@@ -325,7 +446,7 @@ function renderCategorias(por_categoria, total){
 }
 
 function renderLista(lista){
-  document.getElementById('badge-lista').textContent = lista.length;
+  document.querySelectorAll('.badge-lista').forEach(e => e.textContent = lista.length);
   const cont = document.getElementById('lista-gastos');
   if(!lista.length){
     cont.innerHTML = '<div class="empty">Sin gastos registrados en este período</div>';
@@ -355,7 +476,10 @@ function setMetodo(m){
   document.getElementById('btn-'+m).classList.add('activo');
 }
 
-function abrirModal(){
+// Deja el formulario en blanco y listo para el siguiente gasto. En el
+// teléfono se llama al abrir el modal; en escritorio, al cargar la página y
+// después de cada gasto guardado, porque el formulario nunca se cierra.
+function limpiarFormGasto(){
   document.getElementById('g-concepto').value='';
   document.getElementById('g-categoria').value='';
   document.getElementById('g-monto').value='';
@@ -363,11 +487,51 @@ function abrirModal(){
   document.getElementById('g-fecha').value=hoyStr();
   setMetodo('efectivo');
   document.getElementById('g-msg').className='msg';
+}
+
+function abrirModal(){
+  limpiarFormGasto();
   document.getElementById('modal-gasto').classList.add('open');
 }
 
 function cerrarModal(){
   document.getElementById('modal-gasto').classList.remove('open');
+}
+
+// ─── El formulario en escritorio ──────────────────────────────────────────
+// A partir de 1024px el alta no es un modal: el mismo nodo del formulario se
+// muda a la caja "Nuevo gasto" de la columna izquierda y se queda ahí. Se
+// mueve el nodo en vez de duplicarlo para no tener dos juegos de campos con
+// los mismos id (guardarGasto() sigue leyendo exactamente los mismos).
+// Si la ventana se reduce por debajo de 1024px, regresa al modal.
+const ESCRITORIO = window.matchMedia('(min-width:1024px)');
+const formGasto = document.querySelector('#modal-gasto .modal');
+const huecoForm = document.getElementById('hueco-form-gasto');
+const modalGasto = document.getElementById('modal-gasto');
+const btnGuardar = document.querySelector('#modal-gasto .modal-footer .primary');
+const boxResumen = document.querySelector('.box-resumen');
+const boxFiltros = document.querySelector('.box-filtros');
+const colIzq = document.querySelector('.col-izq');
+const colDer = document.querySelector('.col-der');
+
+function acomodarFormGasto(){
+  const destino = ESCRITORIO.matches ? huecoForm : modalGasto;
+  if(formGasto.parentElement !== destino){
+    destino.appendChild(formGasto);
+    // Al salir del modal se cierra: si no, la capa oscura quedaría encima de
+    // la pantalla con el formulario ya fuera de ella.
+    cerrarModal();
+  }
+  // El botón del modal ("Guardar") dice lo que hace cuando el formulario vive
+  // suelto en la columna, sin título arriba que lo explique.
+  btnGuardar.textContent = ESCRITORIO.matches ? 'Registrar gasto' : 'Guardar';
+
+  // El resumen del periodo acompaña a los datos de ese periodo (categorías y
+  // detalle), no al formulario de alta: en escritorio se muda a la columna de
+  // la derecha. En el teléfono se queda donde siempre estuvo, arriba de los
+  // filtros. Igual que el formulario, se mueve el nodo, no se duplica.
+  if(ESCRITORIO.matches) colDer.insertBefore(boxResumen, colDer.firstElementChild);
+  else colIzq.insertBefore(boxResumen, boxFiltros);
 }
 
 async function guardarGasto(){
@@ -397,6 +561,7 @@ async function guardarGasto(){
     if(!r.ok){ msg.className='msg error show'; msg.textContent=data.detail||'Error al guardar'; return; }
     if(metodoActual==='efectivo') abrirCajonDinero();
     cerrarModal();
+    limpiarFormGasto();
     cargarCategorias();
     cargarTodo();
   }catch(e){
@@ -418,6 +583,10 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') cerrarModal(); })
 
 document.getElementById('f-desde').value = hoyStr();
 document.getElementById('f-hasta').value = hoyStr();
+
+acomodarFormGasto();
+ESCRITORIO.addEventListener('change', acomodarFormGasto);
+limpiarFormGasto();
 
 cargarCategorias();
 cargarTodo();
