@@ -102,6 +102,111 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .hist-row:last-child{border-bottom:none}
 .hist-fecha{color:var(--text2);font-size:11px}
 @media(max-width:600px){.topbar{padding:0 .625rem}.topbar-title{font-size:15px}}
+
+/* Solo existen en escritorio (ver el @media de abajo): el encabezado de cada
+   caja y el segundo botón de alta, el que va junto al buscador. En el teléfono
+   la pantalla sigue siendo la columna de siempre. */
+.box-header{display:none}
+.search-bar .btn-nuevo-cliente{display:none}
+#detalle-vacio{display:none}
+
+/* ─── Escritorio ancho: la pantalla en cajas, dos columnas ────────────────
+   Mismo lenguaje visual que /pagos y /devoluciones: cada bloque va dentro de
+   una caja con su encabezado en mayúsculas, la lista de clientes hace scroll
+   dentro de la suya y la ficha del cliente deja de ser un modal para vivir
+   fija en la columna de la derecha.
+
+   Todo el diseño de escritorio vive dentro de este @media y nada más: fuera
+   de aquí las clases .pantalla, .col-izq, .col-der y .box no tienen ningún
+   estilo, así que los divs que las llevan son transparentes y la vista del
+   teléfono queda exactamente igual que antes. */
+@media(min-width:1024px){
+  .pantalla{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) 420px;
+    grid-template-rows:minmax(0,1fr);
+    gap:24px;
+    max-width:1400px;margin:0 auto;padding:1.25rem;
+    height:calc(100vh - 54px);
+  }
+  /* .container desaparece como caja (sin tocar el DOM) para que las dos
+     columnas entren directo a la cuadrícula de .pantalla. */
+  .container{display:contents}
+  .col-izq,.col-der{display:flex;flex-direction:column;gap:16px;min-height:0}
+  .col-izq > .box{flex-shrink:0}
+
+  .box{background:var(--bg2);border:0.5px solid var(--border);border-radius:12px;display:flex;flex-direction:column;overflow:hidden}
+  .box-header{
+    display:flex;justify-content:space-between;align-items:center;flex-shrink:0;
+    padding:.875rem 1rem;border-bottom:0.5px solid var(--border);
+    font-size:12px;font-weight:700;color:var(--text2);
+    text-transform:uppercase;letter-spacing:.4px;
+  }
+  .box-body{padding:.875rem}
+
+  /* El buscador manda: va arriba, con el botón de alta a un lado. El botón
+     grande de la vista móvil sobra. */
+  .box-buscar{order:1}
+  .box-resumen{order:2}
+  .box-lista{order:3;flex:1;min-height:0}
+  .box-acciones{display:none}
+  .search-bar{display:flex;gap:8px;margin-bottom:0}
+  .search-bar input{flex:1;min-width:0}
+  .search-bar .btn-nuevo-cliente{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:auto;height:46px;padding:0 18px;margin-bottom:0;
+    border-radius:12px;background:var(--text);color:var(--bg2);
+    border:none;font-size:14px;font-weight:700;cursor:pointer;white-space:nowrap;
+  }
+  .tabs-clientes{margin-bottom:.75rem}
+
+  .stats-grid{grid-template-columns:1fr 1fr;gap:10px;margin-bottom:0;padding:.875rem}
+  .stat{background:var(--bg);border:none;box-shadow:none;border-radius:10px;padding:.75rem .875rem}
+  .stat-value{font-size:19px}
+
+  /* La lista se queda con el alto que sobra y hace scroll adentro. Las dos
+     columnas "Deben"/"Sin deuda" de la vista móvil se apilan: aquí hay ancho
+     de sobra para que cada renglón lleve el saldo a la derecha del nombre. */
+  .box-lista .box-body{flex:1;min-height:0;overflow-y:auto;padding:.625rem}
+  /* "Ninguno" con el padding de la vista móvil se comía media caja */
+  .box-lista .empty{padding:1rem}
+  .card{background:transparent;border:none;box-shadow:none;border-radius:0}
+  .grid-clientes{grid-template-columns:minmax(0,1fr);gap:4px}
+  .grupo-titulo{margin:.5rem 0 .25rem 2px}
+  .cliente-row{
+    display:grid;grid-template-columns:minmax(0,1fr) auto;
+    grid-template-areas:"nombre saldo" "tel saldo";
+    align-items:center;column-gap:14px;
+    padding:.7rem .875rem;border-radius:10px;border-bottom:none;
+  }
+  .cliente-nombre{grid-area:nombre}
+  /* display:contents saca al div intermedio de en medio para que el teléfono
+     y el saldo entren directo a la cuadrícula de la fila. */
+  .cliente-row-sub{display:contents}
+  .cliente-tel{grid-area:tel;margin-top:2px}
+  .cliente-saldo{grid-area:saldo;font-size:15px}
+  .cliente-row.activo{background:var(--blue-bg)}
+  .cliente-row.activo:hover{background:var(--blue-bg)}
+
+  /* ─── Ficha del cliente: columna, no modal ──────────────────────────────
+     acomodarDetalle() muda aquí el mismo nodo .modal que en el teléfono se
+     abre encima de la pantalla. Mientras no haya cliente elegido, la columna
+     lleva la clase .sin-cliente y en su lugar se ve el aviso de abajo. */
+  .col-der > .modal{
+    width:auto;max-width:none;max-height:none;height:100%;
+    margin:0;border-radius:12px;overflow-y:auto;
+  }
+  .col-der.sin-cliente > .modal{display:none}
+  .col-der.sin-cliente #detalle-vacio{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:10px;height:100%;
+    background:var(--bg2);border:0.5px solid var(--border);border-radius:12px;
+    color:var(--text2);font-size:13px;text-align:center;padding:2rem;
+  }
+  #detalle-vacio .emoji{font-size:34px}
+  /* En la columna la ficha no se cierra: se cambia de cliente. */
+  .btn-cerrar-detalle{display:none}
+}
 </style>
 <link rel="stylesheet" href="/static/modern.css?v=1787605997">
 <style>
@@ -124,32 +229,66 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <button class="icon-btn" onclick="cargarClientes()" title="Actualizar">↻</button>
 </div>
 
+<!-- .pantalla y las .box son transparentes en el teléfono (no tienen ningún
+     estilo fuera del @media de escritorio): la vista móvil sigue siendo la
+     misma columna de siempre. A partir de 1024px se convierten en las dos
+     columnas: la lista a la izquierda y la ficha del cliente a la derecha. -->
+<div class="pantalla">
 <div class="container">
-  <button class="btn-agregar" id="btn-nuevo-cliente" onclick="abrirNuevoCliente()">+ Nuevo cliente</button>
-
-  <div class="stats-grid">
-    <div class="stat">
-      <div class="stat-label" id="st-total-label">Cuentas por cobrar</div>
-      <div class="stat-value red" id="st-total">—</div>
+  <div class="col-izq">
+    <!-- El botón grande de alta es el de la vista móvil; en escritorio se usa
+         el que va junto al buscador, más abajo. Los dos hacen lo mismo. -->
+    <div class="box box-acciones">
+      <button class="btn-agregar btn-nuevo-cliente" onclick="abrirNuevoCliente()">+ Nuevo cliente</button>
     </div>
-    <div class="stat">
-      <div class="stat-label" id="st-num-label">Clientes con saldo</div>
-      <div class="stat-value" id="st-num">—</div>
+
+    <div class="box box-resumen">
+      <div class="box-header">Resumen</div>
+      <div class="stats-grid">
+        <div class="stat">
+          <div class="stat-label" id="st-total-label">Cuentas por cobrar</div>
+          <div class="stat-value red" id="st-total">—</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label" id="st-num-label">Clientes con saldo</div>
+          <div class="stat-value" id="st-num">—</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="box box-buscar">
+      <div class="box-header">Buscar cliente</div>
+      <div class="box-body">
+        <div class="tabs-clientes" id="tabs-clientes">
+          <button id="tab-credito" class="activo" onclick="cambiarVistaClientes('credito')">Cuenta de crédito</button>
+          <button id="tab-pedidos" onclick="cambiarVistaClientes('pedidos')">Pedidos y anticipos</button>
+        </div>
+
+        <div class="search-bar">
+          <input type="search" id="buscar" name="busqueda-clientes" placeholder="Buscar cliente por nombre..." autocomplete="off" oninput="filtrarClientes()">
+          <button class="btn-nuevo-cliente" onclick="abrirNuevoCliente()">+ Nuevo</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="box box-lista">
+      <div class="box-header">Clientes</div>
+      <div class="box-body" id="lista-clientes">
+        <div class="card"><div class="empty">Cargando...</div></div>
+      </div>
     </div>
   </div>
 
-  <div class="tabs-clientes" id="tabs-clientes">
-    <button id="tab-credito" class="activo" onclick="cambiarVistaClientes('credito')">Cuenta de crédito</button>
-    <button id="tab-pedidos" onclick="cambiarVistaClientes('pedidos')">Pedidos y anticipos</button>
+  <!-- Columna derecha: solo en escritorio. Mientras no se elija un cliente
+       lleva la clase .sin-cliente y muestra el aviso; al elegir uno,
+       acomodarDetalle() ya movió aquí la ficha y esta ocupa su lugar. -->
+  <div class="col-der sin-cliente" id="col-detalle">
+    <div id="detalle-vacio">
+      <span class="emoji">👥</span>
+      <span>Elige un cliente de la lista<br>para ver su cuenta y registrar abonos.</span>
+    </div>
   </div>
-
-  <div class="search-bar">
-    <input type="search" id="buscar" name="busqueda-clientes" placeholder="Buscar cliente por nombre..." autocomplete="off" oninput="filtrarClientes()">
-  </div>
-
-  <div id="lista-clientes">
-    <div class="card"><div class="empty">Cargando...</div></div>
-  </div>
+</div>
 </div>
 
 <!-- Modal nuevo/editar cliente -->
@@ -227,7 +366,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="modal-footer">
       <button onclick="abrirEditarCliente()">✏️ Editar</button>
       <button onclick="eliminarClienteActual()" id="btn-eliminar-cliente" style="color:var(--red);display:none">🗑 Eliminar</button>
-      <button onclick="cerrarDetalle()">Cerrar</button>
+      <button class="btn-cerrar-detalle" onclick="cerrarDetalle()">Cerrar</button>
     </div>
   </div>
 </div>
@@ -276,7 +415,7 @@ function cambiarVistaClientes(vista){
   vistaClientes = vista;
   document.getElementById('tab-credito').classList.toggle('activo', vista === 'credito');
   document.getElementById('tab-pedidos').classList.toggle('activo', vista === 'pedidos');
-  document.getElementById('btn-nuevo-cliente').style.display = vista === 'credito' ? '' : 'none';
+  document.querySelectorAll('.btn-nuevo-cliente').forEach(b => b.style.display = vista === 'credito' ? '' : 'none');
   filtrarClientes();
 }
 
@@ -346,7 +485,7 @@ function filaCliente(c){
   // porque sin plazo no entran en el aviso de cobranza.
   const avisoPlazo = (vistaClientes === 'credito' && !c.temporal && !c.dias_credito)
     ? ' · <span style="color:var(--amber);font-weight:600">sin plazo</span>' : '';
-  return `<div class="cliente-row" onclick="abrirDetalle(${c.id})">
+  return `<div class="cliente-row${c.id===clienteActualId?' activo':''}" data-cliente="${c.id}" onclick="abrirDetalle(${c.id})">
     <div class="cliente-nombre">${esc(c.nombre)}</div>
     <div class="cliente-row-sub">
       <span class="cliente-tel">${sub}${avisoPlazo}</span>
@@ -453,6 +592,36 @@ async function guardarCliente(){
 }
 
 // ─── Detalle de cliente ─────────────────────────────────────────────────────
+// A partir de 1024px la ficha deja de ser un modal: el mismo nodo se muda a la
+// columna de la derecha y se queda ahí, cambiando de cliente conforme se
+// eligen en la lista. Se mueve el nodo en vez de duplicarlo para no tener dos
+// juegos de campos con los mismos id (abrirDetalle() escribe en los mismos de
+// siempre). Si la ventana se reduce por debajo de 1024px, vuelve a ser modal.
+const ESCRITORIO = window.matchMedia('(min-width:1024px)');
+const panelDetalle = document.getElementById('col-detalle');
+const overlayDetalle = document.getElementById('modal-detalle');
+const cajaDetalle = document.querySelector('#modal-detalle .modal');
+
+function acomodarDetalle(){
+  const destino = ESCRITORIO.matches ? panelDetalle : overlayDetalle;
+  if(cajaDetalle.parentElement !== destino){
+    destino.appendChild(cajaDetalle);
+    // Al salir del modal se cierra: si no, la capa oscura se quedaría encima
+    // de la pantalla con la ficha ya fuera de ella.
+    cerrarDetalle();
+  }
+}
+
+// Deja la columna de la derecha en su estado inicial ("elige un cliente").
+// Hace falta cuando el cliente que se estaba viendo ya no existe.
+function limpiarPanelDetalle(){
+  clienteActualId = null;
+  panelDetalle.classList.add('sin-cliente');
+  document.querySelectorAll('.cliente-row.activo').forEach(f => f.classList.remove('activo'));
+}
+
+acomodarDetalle();
+ESCRITORIO.addEventListener('change', acomodarDetalle);
 
 precargarLogosActivos();
 
@@ -636,7 +805,17 @@ let clienteActualNombre = '';
 async function abrirDetalle(id){
   clienteActualId = id;
   document.getElementById('form-abono').style.display='none';
-  document.getElementById('modal-detalle').classList.add('open');
+  // La capa oscura del modal solo en el teléfono: en escritorio la ficha ya
+  // está fuera del overlay, así que dejarlo abierto nada más pondría un velo
+  // gris sobre toda la pantalla —y de paso impediría para siempre la recarga
+  // automática de auth.js, que se salta si hay un .overlay.open—.
+  document.getElementById('modal-detalle').classList.toggle('open', !ESCRITORIO.matches);
+  // En escritorio la ficha ya está en la columna: lo que cambia es que deja de
+  // verse el aviso de "elige un cliente" y la fila abierta queda resaltada.
+  panelDetalle.classList.remove('sin-cliente');
+  document.querySelectorAll('.cliente-row.activo').forEach(f => f.classList.remove('activo'));
+  const fila = document.querySelector('.cliente-row[data-cliente="'+id+'"]');
+  if(fila) fila.classList.add('activo');
   document.getElementById('detalle-nombre').textContent = 'Cargando...';
   try{
     const r = await authFetch('/api/clientes/'+id);
@@ -705,6 +884,7 @@ async function eliminarClienteActual(){
     const r = await authFetch('/api/clientes/'+clienteActualId, {method:'DELETE'});
     if(r.status===204){
       cerrarDetalle();
+      limpiarPanelDetalle();
       cargarClientes();
     }else{
       const data = await r.json();
