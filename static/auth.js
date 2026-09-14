@@ -388,7 +388,8 @@ async function authFetch(url, opts = {}, skipAuthRedirect = false) {
 // ─── Chequeo periodico de sesion + auto-actualizacion ──────────────────────
 // Cada 20 minutos: valida que la sesion siga activa (si expiro, manda a login)
 // y recarga la pagina para traer actualizaciones, salvo que haya un modal
-// abierto o un carrito de venta con productos (para no interrumpir al usuario).
+// abierto, un carrito de venta con productos o cambios sin guardar (para no
+// interrumpir al usuario).
 (function () {
   const INTERVALO_MIN = 20;
   setInterval(async () => {
@@ -408,6 +409,10 @@ async function authFetch(url, opts = {}, skipAuthRedirect = false) {
 
     if (document.querySelector('.overlay.open')) return;
     if (typeof carrito !== 'undefined' && Array.isArray(carrito) && carrito.length > 0) return;
+    // Cualquier pantalla puede declarar hayCambiosSinGuardar() para frenar la
+    // recarga mientras tenga trabajo a medio capturar (lo usa la asignación
+    // por lotes de /inventario-sucursales). Si no existe, todo sigue igual.
+    if (typeof hayCambiosSinGuardar === 'function' && hayCambiosSinGuardar()) return;
 
     location.reload();
   }, INTERVALO_MIN * 60 * 1000);

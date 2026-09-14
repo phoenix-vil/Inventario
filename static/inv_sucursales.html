@@ -125,6 +125,109 @@ tr:hover td{background:var(--bg)}
 .toast.show{opacity:1}
 @media(max-width:600px){.topbar{padding:0 .625rem}.topbar-title{font-size:15px}.filtros input{min-width:130px}}
 
+/* ─── Cambios pendientes ──────────────────────────────────────────────────
+   Las cantidades ya no se guardan una por una: se van anotando y al final se
+   mandan todas juntas. La barra aparece sola en cuanto hay algo pendiente. */
+.oculta{display:none}
+.fila-pendiente td{background:var(--amber-bg)!important}
+.qty-inp.pendiente{border-color:var(--amber);background:var(--bg2);font-weight:700}
+.barra-cambios{
+  display:none;position:fixed;left:0;right:0;bottom:0;z-index:90;
+  background:color-mix(in srgb, var(--bg2) 92%, transparent);
+  backdrop-filter:blur(16px) saturate(160%);-webkit-backdrop-filter:blur(16px) saturate(160%);
+  border-top:0.5px solid var(--border);box-shadow:0 -4px 16px rgba(0,0,0,.12);
+  padding:.75rem 1rem calc(.75rem + env(safe-area-inset-bottom));
+  align-items:center;gap:10px;
+}
+.barra-cambios.hay{display:flex}
+.barra-txt{flex:1;min-width:0;font-size:13px;font-weight:600}
+.barra-txt small{display:block;font-weight:400;color:var(--text2);font-size:11.5px;margin-top:1px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.barra-cambios button{height:44px;padding:0 16px;border-radius:10px;border:0.5px solid var(--border);
+  background:transparent;color:var(--text);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
+.barra-cambios button.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+.barra-cambios button:disabled{opacity:.5;cursor:not-allowed}
+body.hay-cambios{padding-bottom:84px}
+
+/* Solo existen en escritorio (ver el @media de abajo) */
+.box-header{display:none}
+
+/* ─── Escritorio ancho: la pantalla en cajas, dos columnas ────────────────
+   Mismo lenguaje visual que /inventario, /pagos y /devoluciones: cada bloque
+   va dentro de una caja con su encabezado en mayúsculas, y las tablas hacen
+   scroll dentro de su caja en vez de estirar la página.
+
+   Todo el diseño de escritorio vive dentro de este @media y nada más: fuera
+   de aquí .pantalla, .col-izq, .col-der y .box no tienen ningún estilo, así
+   que los divs que las llevan son transparentes y la vista del teléfono queda
+   exactamente igual que antes. */
+@media(min-width:1024px){
+  .pantalla{
+    display:grid;
+    grid-template-columns:340px minmax(0,1fr);
+    grid-template-rows:minmax(0,1fr);
+    gap:24px;
+    max-width:1600px;margin:0 auto;padding:1.25rem;
+    height:calc(100vh - 54px);
+  }
+  /* .container desaparece como caja (sin tocar el DOM) para que las dos
+     columnas entren directo a la cuadrícula de .pantalla. */
+  .container{display:contents}
+  .col-izq{display:flex;flex-direction:column;gap:16px;min-height:0;overflow-y:auto}
+  .col-izq > .box{flex-shrink:0}
+  .col-der{display:flex;flex-direction:column;gap:16px;min-height:0}
+
+  .box{background:var(--bg2);border:0.5px solid var(--border);border-radius:12px;display:flex;flex-direction:column;overflow:hidden}
+  .box.oculta{display:none}
+  .box-header{
+    display:flex;justify-content:space-between;align-items:center;gap:10px;flex-shrink:0;
+    padding:.875rem 1rem;border-bottom:0.5px solid var(--border);
+    font-size:12px;font-weight:700;color:var(--text2);
+    text-transform:uppercase;letter-spacing:.4px;
+  }
+  .box-header .badge-cnt{background:transparent;border:none;color:var(--text);font-weight:700;padding:0}
+  .box-body{padding:.875rem}
+  /* En escritorio el título lo pone el encabezado de la caja */
+  .sec-header{display:none}
+
+  /* Filtros apilados en la columna angosta */
+  .box-filtros .filtros{flex-direction:column;align-items:stretch;gap:12px;margin-bottom:0}
+  .filtros input,.filtros select{width:100%;min-width:0}
+
+  .suc-stats{grid-template-columns:1fr 1fr;gap:10px;margin-bottom:0;padding:.875rem}
+  .stat{background:var(--bg);border:none;box-shadow:none;border-radius:10px;padding:.625rem .75rem}
+  .stat-value{font-size:17px}
+  .stat-label{font-size:11px}
+
+  /* El aviso de agotados ya va dentro de una caja: sin su marco rojo propio,
+     solo el fondo, y con tope de altura para no comerse la columna. */
+  .box-alertas .box-body{padding:0;max-height:34vh;overflow-y:auto}
+  .alert-section{background:transparent;border:none;border-radius:0;padding:.875rem 1rem;margin-bottom:0}
+  .alert-title{display:none}
+
+  /* Las dos tablas se reparten el alto de la columna y cada una hace scroll
+     adentro; el encabezado de columnas se queda fijo arriba. */
+  /* Los asignados suelen ser unas pocas filas y los no asignados, miles: la
+     caja de arriba mide lo que trae dentro (con tope) y la de abajo se queda
+     con todo lo que sobre. Si solo se ve una, .sola le da el alto completo. */
+  .box-tabla{min-height:132px}
+  #box-sec1{flex:0 0 auto;max-height:45%}
+  #box-sec2{flex:1 1 auto}
+  #box-sec1.sola,#box-sec2.sola{flex:1 1 auto;max-height:none}
+  .box-tabla .box-body{flex:1;min-height:0;overflow:auto;padding:0}
+  .tabla-wrap{overflow:visible;margin-bottom:0}
+  table{border-radius:0;box-shadow:none}
+  thead th{position:sticky;top:0;z-index:1}
+
+  /* La barra de cambios deja de flotar: es el último renglón de la columna,
+     siempre visible bajo las tablas. */
+  .barra-cambios{position:static;padding:.75rem 1rem;border-top:none;
+    border:0.5px solid var(--border);border-radius:12px;box-shadow:none;flex-shrink:0}
+  body.hay-cambios{padding-bottom:0}
+  #tabla-cont{display:contents}
+  .empty{padding:2rem}
+}
+
 /* --- Diseno del modal de traslado --- */
 .field{margin-bottom:14px}
 .field label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px}
@@ -153,41 +256,87 @@ tr:hover td{background:var(--bg)}
   </div>
 </div>
 
+<!-- .pantalla y las .box son transparentes en el teléfono (no tienen ningún
+     estilo fuera del @media de escritorio): la vista móvil sigue siendo la
+     misma columna de siempre. A partir de 1024px se convierten en las dos
+     columnas: filtros, resumen y alertas a la izquierda; las tablas a la
+     derecha, con la barra de cambios pendientes al fondo. -->
+<div class="pantalla">
 <div class="container">
-  <div class="filtros">
-    <div class="filtro-campo">
-      <label>Sucursal</label>
-      <select id="f-suc" class="sel-suc" onchange="onCambioSucursal()">
-        <option value="">Cargando...</option>
-      </select>
+  <div class="col-izq">
+    <div class="box box-filtros">
+      <div class="box-header">Sucursal y filtros</div>
+      <div class="box-body">
+        <div class="filtros">
+          <div class="filtro-campo">
+            <label>Sucursal</label>
+            <select id="f-suc" class="sel-suc" onchange="onCambioSucursal()">
+              <option value="">Cargando...</option>
+            </select>
+          </div>
+          <div class="filtro-campo">
+            <label>Buscar</label>
+            <input type="search" id="f-buscar" placeholder="Nombre, marca o código..." oninput="render()">
+          </div>
+          <div class="filtro-campo">
+            <label>Categoría</label>
+            <select id="f-cat" onchange="render()"><option value="">Todas</option></select>
+          </div>
+          <div class="filtro-campo">
+            <label>Marca</label>
+            <select id="f-marca" onchange="render()"><option value="">Todas</option></select>
+          </div>
+        </div>
+      </div>
     </div>
-    <div class="filtro-campo">
-      <label>Buscar</label>
-      <input type="search" id="f-buscar" placeholder="Nombre, marca o código..." oninput="render()">
+
+    <!-- Stats -->
+    <div class="box box-resumen oculta" id="box-resumen">
+      <div class="box-header">Resumen de la sucursal</div>
+      <div class="suc-stats" id="suc-stats">
+        <div class="stat"><div class="stat-label">Productos asignados</div><div class="stat-value" id="st-asig">—</div></div>
+        <div class="stat"><div class="stat-label">Unidades asignadas</div><div class="stat-value" id="st-unid">—</div></div>
+        <div class="stat"><div class="stat-label">Unidades vendidas</div><div class="stat-value" id="st-vend">—</div></div>
+        <div class="stat"><div class="stat-label">Restante en sucursal</div><div class="stat-value" id="st-rest">—</div></div>
+        <div class="stat"><div class="stat-label">⚠️ Agotados en suc.</div><div class="stat-value danger" id="st-agot">—</div></div>
+      </div>
     </div>
-    <div class="filtro-campo">
-      <label>Categoría</label>
-      <select id="f-cat" onchange="render()"><option value="">Todas</option></select>
-    </div>
-    <div class="filtro-campo">
-      <label>Marca</label>
-      <select id="f-marca" onchange="render()"><option value="">Todas</option></select>
+
+    <!-- Alertas agotado -->
+    <div class="box box-alertas oculta" id="box-alertas">
+      <div class="box-header">🚨 Agotados en la sucursal</div>
+      <div class="box-body"><div id="alert-agotado"></div></div>
     </div>
   </div>
 
-  <!-- Stats -->
-  <div class="suc-stats" id="suc-stats" style="display:none">
-    <div class="stat"><div class="stat-label">Productos asignados</div><div class="stat-value" id="st-asig">—</div></div>
-    <div class="stat"><div class="stat-label">Unidades asignadas</div><div class="stat-value" id="st-unid">—</div></div>
-    <div class="stat"><div class="stat-label">Unidades vendidas</div><div class="stat-value" id="st-vend">—</div></div>
-    <div class="stat"><div class="stat-label">Restante en sucursal</div><div class="stat-value" id="st-rest">—</div></div>
-    <div class="stat"><div class="stat-label">⚠️ Agotados en suc.</div><div class="stat-value danger" id="st-agot">—</div></div>
+  <div class="col-der">
+    <!-- Las dos secciones (asignados / no asignados) son dos cajas. El título
+         va dos veces a propósito: el .box-header solo se ve en escritorio y el
+         .sec-header solo en el teléfono; el JS escribe en los dos. -->
+    <div id="tabla-cont">
+      <div class="box box-tabla oculta" id="box-sec1">
+        <div class="box-header"><span id="hdr1"></span><span class="badge-cnt" id="cnt1"></span></div>
+        <div class="sec-header" id="sec1"></div>
+        <div class="box-body" id="cuerpo1"></div>
+      </div>
+      <div class="box box-tabla oculta" id="box-sec2">
+        <div class="box-header"><span id="hdr2"></span><span class="badge-cnt" id="cnt2"></span></div>
+        <div class="sec-header" id="sec2"></div>
+        <div class="box-body" id="cuerpo2"></div>
+      </div>
+      <div class="empty" id="tabla-vacio">Selecciona una sucursal</div>
+    </div>
+
+    <!-- Barra de cambios pendientes: aparece sola en cuanto hay una cantidad
+         escrita sin guardar. En el teléfono va fija abajo; en escritorio es el
+         último renglón de la columna. -->
+    <div class="barra-cambios" id="barra-cambios">
+      <div class="barra-txt"><span id="barra-cuenta"></span><small id="barra-detalle"></small></div>
+      <button onclick="descartarCambios()" id="btn-descartar">Descartar</button>
+      <button class="primary" onclick="guardarCambios()" id="btn-guardar-todo">Guardar cambios</button>
+    </div>
   </div>
-
-  <!-- Alertas agotado -->
-  <div id="alert-agotado" style="display:none"></div>
-
-  <div id="tabla-cont"><div class="empty">Selecciona una sucursal</div></div>
+</div>
 </div>
 
 
@@ -249,6 +398,19 @@ requireEnterprise();   // pantalla de Only Enterprises
 const NO_ASIG = '__no_asignados__';
 let data = null;
 
+// Cantidades escritas y todavía sin mandar al servidor. Clave
+// "productoId|sucursal" —el mismo producto puede tener pendiente una cantidad
+// distinta en dos sucursales si se cambia el filtro sin guardar—; valor
+// {producto_id, sucursal, cantidad, nombre, por_peso}. Mientras algo esté aquí
+// dentro, la barra de abajo está a la vista y la página no se recarga sola.
+const cambios = new Map();
+
+function claveCambio(productoId, sucursal){ return productoId + '|' + sucursal; }
+
+// auth.js la consulta antes de recargar la página cada 20 minutos: con
+// cantidades a medio capturar, la recarga se salta.
+function hayCambiosSinGuardar(){ return cambios.size > 0; }
+
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function toast(msg,err=false){
   const t=document.getElementById('toast');t.textContent=msg;
@@ -265,18 +427,19 @@ function fmtNum(n,pp){
 
 /* ── Carga ── */
 async function cargar(){
-  document.getElementById('tabla-cont').innerHTML='<div class="empty">Cargando...</div>';
-  document.getElementById('alert-agotado').style.display='none';
-  document.getElementById('suc-stats').style.display='none';
+  vaciar('Cargando...');
+  document.getElementById('box-alertas').classList.add('oculta');
+  document.getElementById('box-resumen').classList.add('oculta');
   try{
     const r=await authFetch('/api/inventario/por-sucursal');
     if(!r.ok)throw new Error();
     data=await r.json();
     poblarSucursales();
     poblarFiltros();
+    depurarCambios();
     onCambioSucursal();
   }catch(e){
-    document.getElementById('tabla-cont').innerHTML='<div class="empty">Error al cargar datos</div>';
+    vaciar('Error al cargar datos');
   }
 }
 
@@ -306,8 +469,9 @@ function onCambioSucursal(){actualizarStats();renderAlertas();render();}
 /* ── Stats ── */
 function actualizarStats(){
   const suc=document.getElementById('f-suc').value;
-  if(!data||suc===NO_ASIG){document.getElementById('suc-stats').style.display='none';return;}
-  document.getElementById('suc-stats').style.display='grid';
+  const caja=document.getElementById('box-resumen');
+  if(!data||suc===NO_ASIG){caja.classList.add('oculta');return;}
+  caja.classList.remove('oculta');
   let asig=0,unid=0,vend=0,rest=0,agot=0;
   data.productos.forEach(p=>{
     const d=p.por_sucursal[suc]||{asignado:0,vendido:0};
@@ -329,12 +493,13 @@ function actualizarStats(){
 function renderAlertas(){
   const suc=document.getElementById('f-suc').value;
   const cont=document.getElementById('alert-agotado');
-  if(!data||suc===NO_ASIG){cont.style.display='none';return;}
+  const caja=document.getElementById('box-alertas');
+  if(!data||suc===NO_ASIG){caja.classList.add('oculta');return;}
   const agotados=data.productos.filter(p=>{
     const d=p.por_sucursal[suc]||{asignado:0,vendido:0};
     return d.asignado>0&&(d.asignado-d.vendido)<=0;
   });
-  if(!agotados.length){cont.style.display='none';return;}
+  if(!agotados.length){caja.classList.add('oculta');return;}
   let html=`<div class="alert-section"><div class="alert-title">🚨 Agotados en Suc. ${esc(suc)} — Disponibilidad en otras sucursales</div>`;
   agotados.forEach(p=>{
     const otros=data.sucursales.filter(s=>{
@@ -350,7 +515,7 @@ function renderAlertas(){
       <div class="disponible-en">${tags}</div></div>`;
   });
   html+='</div>';
-  cont.innerHTML=html;cont.style.display='block';
+  cont.innerHTML=html;caja.classList.remove('oculta');
 }
 
 /* ── Render ── */
@@ -364,10 +529,42 @@ function filtrar(prods,suc){
   });
 }
 
+// Cada sección vive en su propia caja (dos en la vista normal, una sola en
+// "sin asignación"). Se escribe el título en los dos sitios: el encabezado de
+// la caja, que solo se ve en escritorio, y el .sec-header de la vista móvil.
+function pintarSeccion(n, titulo, conteo, html){
+  document.getElementById('box-sec'+n).classList.remove('oculta');
+  document.getElementById('hdr'+n).textContent = titulo;
+  document.getElementById('cnt'+n).textContent = conteo;
+  document.getElementById('sec'+n).innerHTML =
+    esc(titulo) + ' <span class="badge-cnt">' + conteo + '</span>';
+  document.getElementById('cuerpo'+n).innerHTML = html;
+}
+
+function ocultarSeccion(n){
+  document.getElementById('box-sec'+n).classList.add('oculta');
+  document.getElementById('cuerpo'+n).innerHTML = '';
+}
+
+// Con una sola sección a la vista, esa se lleva el alto completo de la columna
+// (en escritorio; en el teléfono la clase no pinta nada).
+function ajustarCajas(){
+  const b1=document.getElementById('box-sec1'), b2=document.getElementById('box-sec2');
+  const sola=b1.classList.contains('oculta')||b2.classList.contains('oculta');
+  b1.classList.toggle('sola',sola); b2.classList.toggle('sola',sola);
+}
+
+function vaciar(texto){
+  ocultarSeccion(1); ocultarSeccion(2);
+  const v=document.getElementById('tabla-vacio');
+  v.textContent=texto; v.classList.remove('oculta');
+}
+
 function render(){
   if(!data)return;
   const suc=document.getElementById('f-suc').value;
-  if(!suc){document.getElementById('tabla-cont').innerHTML='<div class="empty">Selecciona una sucursal</div>';return;}
+  if(!suc){vaciar('Selecciona una sucursal');return;}
+  document.getElementById('tabla-vacio').classList.add('oculta');
 
   if(suc===NO_ASIG){
     // Solo productos sin asignación en NINGUNA sucursal. Se mira
@@ -378,12 +575,12 @@ function render(){
       p.stock_disponible >= p.stock_global
     );
     if(!sinNinguna.length){
-      document.getElementById('tabla-cont').innerHTML='<div class="empty">✅ Todo el inventario tiene asignación en alguna sucursal</div>';
+      vaciar('✅ Todo el inventario tiene asignación en alguna sucursal');
       return;
     }
-    let html=`<div class="sec-header">⚠️ Sin asignación en ninguna sucursal <span class="badge-cnt">${sinNinguna.length}</span></div>`;
-    html+=tablaNoAsignados(sinNinguna);
-    document.getElementById('tabla-cont').innerHTML=html;
+    pintarSeccion(1, '⚠️ Sin asignación en ninguna sucursal', sinNinguna.length, tablaNoAsignados(sinNinguna));
+    ocultarSeccion(2);
+    ajustarCajas();
     return;
   }
 
@@ -392,22 +589,16 @@ function render(){
   const asignados=todos.filter(p=>(p.por_sucursal[suc]||{}).asignado>0);
   const noAsignadosAqui=todos.filter(p=>!((p.por_sucursal[suc]||{}).asignado>0));
 
-  let html='';
+  if(!asignados.length && !noAsignadosAqui.length){ vaciar('Sin productos'); return; }
 
   // Sección 1: asignados
-  if(asignados.length){
-    html+=`<div class="sec-header">📦 Asignados a Suc. ${esc(suc)} <span class="badge-cnt">${asignados.length}</span></div>`;
-    html+=tablaAsignados(asignados,suc);
-  }
+  if(asignados.length) pintarSeccion(1, '📦 Asignados a Suc. '+suc, asignados.length, tablaAsignados(asignados,suc));
+  else ocultarSeccion(1);
 
   // Sección 2: no asignados A ESTA sucursal (pero pueden estar en otras)
-  if(noAsignadosAqui.length){
-    html+=`<div class="sec-header">➕ No asignados a Suc. ${esc(suc)} — disponibles del stock global <span class="badge-cnt">${noAsignadosAqui.length}</span></div>`;
-    html+=tablaAsignarNuevo(noAsignadosAqui,suc);
-  }
-
-  if(!html) html='<div class="empty">Sin productos</div>';
-  document.getElementById('tabla-cont').innerHTML=html;
+  if(noAsignadosAqui.length) pintarSeccion(2, '➕ No asignados a Suc. '+suc+' — disponibles del stock global', noAsignadosAqui.length, tablaAsignarNuevo(noAsignadosAqui,suc));
+  else ocultarSeccion(2);
+  ajustarCajas();
 }
 
 function cabecera(cols){
@@ -439,13 +630,14 @@ function tablaAsignados(prods,suc){
     const restante=d.asignado-d.vendido;
     const restCls=restante<=0?'stock-out':restante<=p.stock_minimo?'stock-bajo':'td-g';
     const step=p.vendido_por_peso?'0.001':'1';
-    html+=`<tr>${filaBase(p,suc)}
+    const pend=cambios.get(claveCambio(p.id,suc));
+    html+=`<tr class="${pend?'fila-pendiente':''}">${filaBase(p,suc)}
       <td>
         <div class="arow">
-          <input type="number" class="qty-inp" id="inp-${p.id}"
+          <input type="number" class="qty-inp${pend?' pendiente':''}" id="inp-${p.id}"
             min="0" max="${maxAsig}" step="${step}"
-            value="${d.asignado}" onfocus="this.select()">
-          <button class="btn-ok" onclick="guardar(${p.id},'${suc}',${p.vendido_por_peso?1:0})">✓ Guardar</button>
+            value="${pend?pend.cantidad:d.asignado}" onfocus="this.select()"
+            oninput="registrarCambio(${p.id})">
         </div>
       </td>
       <td>${fmt(d.vendido,p.vendido_por_peso)}</td>
@@ -465,14 +657,15 @@ function tablaAsignarNuevo(prods,suc){
     const maxAsig=Math.max(0,p.stock_disponible);
     const step=p.vendido_por_peso?'0.001':'1';
     const dispCls=p.stock_disponible<=0?'stock-out':'';
-    html+=`<tr>${filaBase(p,suc)}
+    const pend=cambios.get(claveCambio(p.id,suc));
+    html+=`<tr class="${pend?'fila-pendiente':''}">${filaBase(p,suc)}
       <td>
         ${p.stock_disponible>0
           ?`<div class="arow">
-              <input type="number" class="qty-inp" id="inp-${p.id}"
+              <input type="number" class="qty-inp${pend?' pendiente':''}" id="inp-${p.id}"
                 min="0" max="${maxAsig}" step="${step}"
-                placeholder="0" onfocus="this.select()">
-              <button class="btn-ok" onclick="guardar(${p.id},'${suc}',${p.vendido_por_peso?1:0})">✓ Asignar</button>
+                value="${pend?pend.cantidad:''}" placeholder="0" onfocus="this.select()"
+                oninput="registrarCambio(${p.id})">
             </div>`
           :`<span class="stock-out" style="font-size:12px">Sin stock disponible</span>`}
       </td>
@@ -490,16 +683,20 @@ function tablaNoAsignados(prods){
   prods.forEach(p=>{
     const maxAsig=Math.max(0,p.stock_disponible);
     const step=p.vendido_por_peso?'0.001':'1';
-    html+=`<tr>${filaBase(p,null)}
+    // Aquí la sucursal la elige cada fila, así que el cambio pendiente puede
+    // estar guardado bajo cualquiera de ellas: se busca por producto.
+    const pend=[...cambios.values()].find(c=>c.producto_id===p.id);
+    html+=`<tr class="${pend?'fila-pendiente':''}">${filaBase(p,null)}
       <td>
-        <select id="suc-${p.id}" style="height:30px;padding:0 8px;border:0.5px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px">
-          ${data.sucursales.map(s=>`<option value="${esc(s)}">${s}</option>`).join('')}
+        <select id="suc-${p.id}" onchange="registrarCambio(${p.id})" style="height:30px;padding:0 8px;border:0.5px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px">
+          ${data.sucursales.map(s=>`<option value="${esc(s)}"${pend&&pend.sucursal===s?' selected':''}>${s}</option>`).join('')}
         </select>
       </td>
       <td>
         <div class="arow">
-          <input type="number" class="qty-inp" id="inp-${p.id}" min="0" max="${maxAsig}" step="${step}" placeholder="0" onfocus="this.select()">
-          <button class="btn-ok" onclick="guardarConSucursal(${p.id},${p.vendido_por_peso?1:0})">✓ Asignar</button>
+          <input type="number" class="qty-inp${pend?' pendiente':''}" id="inp-${p.id}" min="0" max="${maxAsig}" step="${step}"
+            value="${pend?pend.cantidad:''}" placeholder="0" onfocus="this.select()"
+            oninput="registrarCambio(${p.id})">
         </div>
       </td>
     </tr>`;
@@ -507,39 +704,135 @@ function tablaNoAsignados(prods){
   return html+'</tbody></table></div>';
 }
 
-/* ── Guardar ── */
-async function guardar(productoId, sucursal, porPeso){
-  const input=document.getElementById('inp-'+productoId);
-  if(!input)return;
-  const val=Math.max(0,parseFloat(input.value)||0);
-  const p=data.productos.find(x=>x.id===productoId);
-  if(!p)return;
+/* ── Asignación por lotes ─────────────────────────────────────────────────
+   Antes cada cantidad se mandaba sola, con su propio botón, y la tabla se
+   volvía a dibujar después de cada una: repartir un pedido entre sucursales
+   era un botón por producto. Ahora se capturan todas las cantidades, quedan
+   marcadas en ámbar, y un único botón las manda todas. */
+
+// A cuánto puede llegar esta fila: el pool sin repartir del producto más lo
+// que esta sucursal ya tenía asignado (reasignar lo suyo siempre se puede).
+function maximoAsignable(p, sucursal){
   const ant=(p.por_sucursal[sucursal]||{}).asignado||0;
-  // pool disponible real = actual + lo que ya tenía esta sucursal
-  const maxAsig=Math.max(0,p.stock_disponible)+ant;
-  if(val>maxAsig){
-    toast(`Máximo disponible: ${porPeso?maxAsig.toFixed(3)+' kg':maxAsig}`,true);
-    input.value=maxAsig;return;
-  }
-  const btn=input.nextElementSibling;btn.disabled=true;
-  try{
-    const r=await authFetch('/api/stock-sucursal',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({producto_id:productoId,sucursal,cantidad:val})});
-    const d=await r.json();
-    if(!r.ok){toast(d.detail||'Error',true);btn.disabled=false;return;}
-    toast(`✓ ${porPeso?val.toFixed(3)+' kg':val} asignado a Suc. ${sucursal}`);
-    // Actualizar localmente: liberar ant y consumir val del pool
-    p.stock_disponible=Math.round((p.stock_disponible+ant-val)*1000)/1000;
-    p.por_sucursal[sucursal]={...(p.por_sucursal[sucursal]||{}),asignado:val};
-    actualizarStats();renderAlertas();render();
-  }catch(e){toast('Error de conexión',true);btn.disabled=false;}
+  return Math.round((Math.max(0,p.stock_disponible)+ant)*1000)/1000;
 }
 
-async function guardarConSucursal(productoId, porPeso){
-  const sucursal=document.getElementById('suc-'+productoId).value;
-  if(!sucursal){toast('Selecciona una sucursal',true);return;}
-  await guardar(productoId, sucursal, porPeso);
+// Anota (o borra) la cantidad de una fila. La sucursal sale del filtro de
+// arriba, salvo en la vista "sin asignación", donde la elige cada fila.
+function registrarCambio(productoId){
+  const p=data && data.productos.find(x=>x.id===productoId);
+  const input=document.getElementById('inp-'+productoId);
+  if(!p||!input)return;
+
+  const sucFiltro=document.getElementById('f-suc').value;
+  const selFila=document.getElementById('suc-'+productoId);
+  const sucursal=selFila?selFila.value:sucFiltro;
+  if(!sucursal)return;
+
+  // En la vista "sin asignación" la sucursal se cambia con el select de la
+  // fila: lo anotado antes bajo otra sucursal deja de valer.
+  if(selFila){
+    for(const [k,c] of cambios) if(c.producto_id===productoId && c.sucursal!==sucursal) cambios.delete(k);
+  }
+
+  const anterior=(p.por_sucursal[sucursal]||{}).asignado||0;
+  const maxAsig=maximoAsignable(p,sucursal);
+  let val=parseFloat(input.value);
+  const vacio = input.value.trim()==='';
+  if(vacio || isNaN(val) || val<0) val = vacio ? anterior : 0;
+  if(val>maxAsig){
+    toast(`Máximo disponible de ${p.nombre}: ${p.vendido_por_peso?maxAsig.toFixed(3)+' kg':maxAsig}`,true);
+    val=maxAsig;
+    input.value=maxAsig;
+  }
+
+  const clave=claveCambio(productoId,sucursal);
+  // Volver al valor que ya tiene el servidor no es un cambio: se olvida.
+  if(Math.abs(val-anterior)<0.0005) cambios.delete(clave);
+  else cambios.set(clave,{producto_id:productoId,sucursal,cantidad:val,
+                          nombre:p.nombre,por_peso:!!p.vendido_por_peso});
+
+  const pendiente=cambios.has(clave);
+  input.classList.toggle('pendiente',pendiente);
+  const fila=input.closest('tr');
+  if(fila) fila.classList.toggle('fila-pendiente',pendiente);
+  actualizarBarra();
 }
+
+function textoCantidad(c){
+  return c.por_peso?Number(c.cantidad).toFixed(3)+' kg':String(c.cantidad);
+}
+
+function actualizarBarra(){
+  const n=cambios.size;
+  document.getElementById('barra-cambios').classList.toggle('hay',n>0);
+  document.body.classList.toggle('hay-cambios',n>0);
+  if(!n)return;
+  document.getElementById('barra-cuenta').textContent =
+    n===1?'1 cambio sin guardar':n+' cambios sin guardar';
+  const lista=[...cambios.values()];
+  const muestra=lista.slice(0,3).map(c=>`${c.nombre} → ${textoCantidad(c)} en Suc. ${c.sucursal}`);
+  document.getElementById('barra-detalle').textContent =
+    muestra.join(' · ') + (lista.length>3?` · y ${lista.length-3} más`:'');
+}
+
+// Después de recargar del servidor, lo que ya coincide con lo guardado deja
+// de estar pendiente (p. ej. si alguien más lo asignó mientras tanto).
+function depurarCambios(){
+  for(const [k,c] of cambios){
+    const p=data.productos.find(x=>x.id===c.producto_id);
+    if(!p){cambios.delete(k);continue;}
+    const actual=(p.por_sucursal[c.sucursal]||{}).asignado||0;
+    if(Math.abs(c.cantidad-actual)<0.0005) cambios.delete(k);
+  }
+  actualizarBarra();
+}
+
+async function descartarCambios(){
+  if(!cambios.size)return;
+  if(!(await confirmarPersonalizado(
+        `¿Descartar ${cambios.size===1?'el cambio':'los '+cambios.size+' cambios'} sin guardar?`,
+        'Descartar cambios'))) return;
+  cambios.clear();
+  actualizarBarra();
+  render();
+}
+
+async function guardarCambios(){
+  if(!cambios.size)return;
+  const btn=document.getElementById('btn-guardar-todo');
+  const btnD=document.getElementById('btn-descartar');
+  const lista=[...cambios.entries()];
+  btn.disabled=true;btnD.disabled=true;
+  let ok=0;const fallos=[];
+
+  // De uno en uno a propósito: el servidor recalcula el stock disponible en
+  // cada asignación, y mandarlas en paralelo haría que unas pisaran a otras.
+  for(let i=0;i<lista.length;i++){
+    const [clave,c]=lista[i];
+    btn.textContent=`Guardando ${i+1} de ${lista.length}…`;
+    try{
+      const r=await authFetch('/api/stock-sucursal',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({producto_id:c.producto_id,sucursal:c.sucursal,cantidad:c.cantidad})});
+      if(r.ok){cambios.delete(clave);ok++;}
+      else{const d=await r.json().catch(()=>({}));fallos.push(`${c.nombre}: ${d.detail||'error'}`);}
+    }catch(e){fallos.push(`${c.nombre}: sin conexión`);}
+  }
+
+  btn.disabled=false;btnD.disabled=false;btn.textContent='Guardar cambios';
+  // Los que fallaron siguen pendientes y marcados, para reintentarlos.
+  if(fallos.length) toast(`${ok} guardado(s), ${fallos.length} con error — ${fallos[0]}`,true);
+  else toast(`✓ ${ok===1?'1 cambio guardado':ok+' cambios guardados'}`);
+  await cargar();
+}
+
+// Cerrar la pestaña con cantidades a medio capturar pide confirmación al
+// navegador (el texto lo pone él, no se puede personalizar).
+window.addEventListener('beforeunload', e=>{
+  if(!cambios.size)return;
+  e.preventDefault();
+  e.returnValue='';
+});
 
 /* ── CSV ── */
 function descargarCSV(){
