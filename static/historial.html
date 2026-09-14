@@ -93,6 +93,112 @@ button.primary:hover{opacity:.85;background:var(--text)}
   .topbar{padding:0 .625rem}.topbar-title{font-size:15px}.topbar-right{min-width:0}
   .container{padding:.875rem}.stat-value{font-size:16px}
 }
+
+/* Solo existen en escritorio (ver el @media de abajo): el encabezado de cada
+   caja y el aviso de la columna derecha. En el teléfono la pantalla sigue
+   siendo la columna de siempre. */
+.box-header{display:none}
+#detalle-vacio{display:none}
+
+/* ─── Escritorio ancho: la pantalla en cajas, dos columnas ────────────────
+   Mismo lenguaje visual que /pagos, /devoluciones y /clientes: cada bloque
+   va dentro de una caja con su encabezado en mayúsculas, la lista de
+   movimientos hace scroll dentro de la suya y el ticket deja de ser un modal
+   para vivir fijo en la columna de la derecha.
+
+   Todo el diseño de escritorio vive dentro de este @media y nada más: fuera
+   de aquí las clases .pantalla, .col-izq, .col-der, .box y .box-body no
+   tienen ningún estilo, así que los divs que las llevan son transparentes y
+   la vista del teléfono queda exactamente igual que antes. */
+@media(min-width:1024px){
+  .pantalla{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) 420px;
+    grid-template-rows:minmax(0,1fr);
+    gap:24px;
+    max-width:1400px;margin:0 auto;padding:1.25rem;
+    height:calc(100vh - 54px);
+  }
+  /* .container desaparece como caja (sin tocar el DOM) para que las dos
+     columnas entren directo a la cuadrícula de .pantalla. */
+  .container{display:contents}
+  .col-izq,.col-der{display:flex;flex-direction:column;gap:16px;min-height:0}
+  /* Filtros y resumen miden lo que traen dentro; la lista se queda con el
+     resto y hace scroll dentro de su caja. */
+  .col-izq > .box{flex-shrink:0}
+  /* El ticket va arriba de la columna derecha y el desglose debajo, sin que
+     importe el orden del HTML: acomodarDetalle() mete el ticket al final con
+     appendChild, y en el teléfono este orden no pinta nada. */
+  .col-der > .modal,.col-der > #detalle-vacio{order:1}
+  .col-der > .box-desglose{order:2}
+
+  .box{background:var(--bg2);border:0.5px solid var(--border);border-radius:12px;display:flex;flex-direction:column;overflow:hidden}
+  .box-header{
+    display:flex;justify-content:space-between;align-items:center;flex-shrink:0;
+    padding:.875rem 1rem;border-bottom:0.5px solid var(--border);
+    font-size:12px;font-weight:700;color:var(--text2);
+    text-transform:uppercase;letter-spacing:.4px;
+  }
+  .box-header .contador{color:var(--text);font-weight:700}
+  .box-body{padding:.875rem}
+
+  /* Los filtros ya van dentro de su caja: sobra el aire de abajo. */
+  .filtros{margin-bottom:0}
+  /* Los seis números del periodo en un solo renglón: en el monitor hay ancho
+     de sobra y así el alto que ahorran se lo queda la lista de movimientos. */
+  .stats{margin-bottom:0;gap:8px;grid-template-columns:repeat(6,1fr)}
+  /* Las tarjetas de resumen pierden borde y sombra: adentro de la caja el
+     encuadre ya lo pone la caja, y el fondo --bg las separa. */
+  .box .stat{background:var(--bg);border:none;box-shadow:none;padding:.625rem .75rem}
+  .box .stat-label{font-size:11px}
+  .box .stat-value{font-size:17px}
+
+  /* La lista se queda con todo el alto de su columna; el desglose vive en la
+     columna del ticket, donde aprovecha el hueco que este deja debajo en vez
+     de robarle renglones a la lista. */
+  .box-lista{flex:1 1 0;min-height:0}
+  .box-desglose{flex:0 1 auto;min-height:0;max-height:45%}
+  .box-lista .box-body,.box-desglose .box-body{flex:1;min-height:0;overflow-y:auto;padding:.625rem}
+  .box-lista .empty{padding:1.5rem}
+  /* Los renglones dejan de ser tarjetas sueltas: dentro de la caja son filas
+     con hover, como las de /devoluciones y /clientes. */
+  .lista{gap:2px}
+  .box .venta{background:transparent;border:none;padding:.7rem .875rem}
+  .box .venta:hover{background:var(--bg)}
+  .box .venta.activo,.box .venta.activo:hover{background:var(--blue-bg)}
+  /* Las tres secciones del desglose comparten una sola caja: sus títulos
+     bajan de tamaño y el .card de cada una deja de ser tarjeta. */
+  .box .card{background:transparent;border:none;box-shadow:none}
+  .box-desglose .section-title{margin:.5rem 0 .25rem 2px !important;font-size:11px !important}
+  .box-desglose .section-title:first-child{margin-top:0 !important}
+  .box .op-row{padding:.7rem .875rem;border-bottom:none;border-radius:10px}
+  .box .op-row:hover{background:var(--bg)}
+  .box .op-total{font-size:16px}
+  .box .hist-row{border-bottom:none !important;border-radius:10px;padding:.7rem .875rem !important}
+  .box .hist-row:hover{background:var(--bg)}
+  .box .hist-row.activo,.box .hist-row.activo:hover{background:var(--blue-bg)}
+
+  /* ─── Ticket: columna, no modal ─────────────────────────────────────────
+     acomodarDetalle() muda aquí el mismo nodo .modal que en el teléfono se
+     abre encima de la pantalla. Mientras no haya movimiento elegido, la
+     columna lleva la clase .sin-detalle y en su lugar se ve el aviso. */
+  .col-der > .modal{
+    width:auto;max-width:none;max-height:none;
+    flex:1 1 auto;min-height:0;
+    margin:0;border-radius:12px;overflow-y:auto;
+    box-shadow:none;border:0.5px solid var(--border);
+  }
+  .col-der.sin-detalle > .modal{display:none}
+  .col-der.sin-detalle #detalle-vacio{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:10px;flex:1 1 auto;min-height:0;
+    background:var(--bg2);border:0.5px solid var(--border);border-radius:12px;
+    color:var(--text2);font-size:13px;text-align:center;padding:2rem;
+  }
+  #detalle-vacio .emoji{font-size:34px}
+  /* En la columna el ticket no se cierra: se cambia de movimiento. */
+  .col-der .modal-footer{display:none}
+}
 </style>
 <link rel="stylesheet" href="/static/modern.css?v=1789360082">
 </head>
@@ -107,62 +213,106 @@ button.primary:hover{opacity:.85;background:var(--text)}
   </div>
 </div>
 
+<!-- .pantalla, .col-izq, .col-der y las .box son transparentes en el teléfono
+     (no tienen ningún estilo fuera del @media de escritorio): la vista móvil
+     sigue siendo la misma columna de siempre. A partir de 1024px se convierten
+     en las dos columnas: filtros, resumen, movimientos y desglose a la
+     izquierda; el ticket del movimiento elegido a la derecha. -->
+<div class="pantalla">
 <div class="container">
-  <div class="filtros">
-    <div class="filtro-campo">
-      <label>Desde</label>
-      <input type="date" id="f-desde">
+  <div class="col-izq">
+    <div class="box box-filtros">
+      <div class="box-header">Periodo y filtros</div>
+      <div class="box-body">
+        <div class="filtros">
+          <div class="filtro-campo">
+            <label>Desde</label>
+            <input type="date" id="f-desde">
+          </div>
+          <div class="filtro-campo">
+            <label>Hasta</label>
+            <input type="date" id="f-hasta">
+          </div>
+          <div class="filtro-campo">
+            <label>Operador</label>
+            <select id="f-operador"><option value="">Todos</option></select>
+          </div>
+          <div class="filtro-campo">
+            <label>Pago</label>
+            <select id="f-metodo">
+              <option value="">Todos</option>
+              <option value="efectivo">Efectivo</option>
+              <option value="tarjeta">Tarjeta</option>
+              <option value="credito">Crédito</option>
+              <option value="transferencia">Transferencia</option>
+            </select>
+          </div>
+          <!-- Solo para sesiones sin restricción (Only Enterprises); ver
+               cargarSucursalesSelect(). -->
+          <div class="filtro-campo" id="campo-sucursal" style="display:none">
+            <label>Sucursal</label>
+            <select id="f-sucursal"><option value="">Todas</option></select>
+          </div>
+          <button class="primary" onclick="cargar()">Filtrar</button>
+          <button class="btn-csv" onclick="descargarCSV()">⬇ CSV</button>
+        </div>
+      </div>
     </div>
-    <div class="filtro-campo">
-      <label>Hasta</label>
-      <input type="date" id="f-hasta">
+
+    <div class="box box-resumen">
+      <div class="box-header">Resumen del periodo</div>
+      <div class="box-body">
+        <div class="stats">
+          <div class="stat"><div class="stat-label">Ventas</div><div class="stat-value" id="s-num">—</div></div>
+          <div class="stat"><div class="stat-label">Total vendido</div><div class="stat-value" id="s-total" style="color:var(--green)">—</div></div>
+          <div class="stat"><div class="stat-label">Efectivo</div><div class="stat-value" id="s-efectivo">—</div></div>
+          <div class="stat"><div class="stat-label">Tarjeta</div><div class="stat-value" id="s-tarjeta">—</div></div>
+          <div class="stat"><div class="stat-label">Ticket promedio</div><div class="stat-value" id="s-prom">—</div></div>
+          <div class="stat"><div class="stat-label">💰 Cobros recibidos</div><div class="stat-value" id="s-abonos" style="color:var(--blue)">—</div></div>
+        </div>
+      </div>
     </div>
-    <div class="filtro-campo">
-      <label>Operador</label>
-      <select id="f-operador"><option value="">Todos</option></select>
+
+    <div class="box box-lista">
+      <div class="box-header">Movimientos <span class="contador" id="lista-contador"></span></div>
+      <div class="box-body">
+        <div class="lista" id="lista"></div>
+      </div>
     </div>
-    <div class="filtro-campo">
-      <label>Pago</label>
-      <select id="f-metodo">
-        <option value="">Todos</option>
-        <option value="efectivo">Efectivo</option>
-        <option value="tarjeta">Tarjeta</option>
-        <option value="credito">Crédito</option>
-        <option value="transferencia">Transferencia</option>
-      </select>
-    </div>
-    <!-- Solo para sesiones sin restricción (Only Enterprises); ver
-         cargarSucursalesSelect(). -->
-    <div class="filtro-campo" id="campo-sucursal" style="display:none">
-      <label>Sucursal</label>
-      <select id="f-sucursal"><option value="">Todas</option></select>
-    </div>
-    <button class="primary" onclick="cargar()">Filtrar</button>
-    <button class="btn-csv" onclick="descargarCSV()">⬇ CSV</button>
   </div>
 
-  <div class="stats">
-    <div class="stat"><div class="stat-label">Ventas</div><div class="stat-value" id="s-num">—</div></div>
-    <div class="stat"><div class="stat-label">Total vendido</div><div class="stat-value" id="s-total" style="color:var(--green)">—</div></div>
-    <div class="stat"><div class="stat-label">Efectivo</div><div class="stat-value" id="s-efectivo">—</div></div>
-    <div class="stat"><div class="stat-label">Tarjeta</div><div class="stat-value" id="s-tarjeta">—</div></div>
-    <div class="stat"><div class="stat-label">Ticket promedio</div><div class="stat-value" id="s-prom">—</div></div>
-    <div class="stat"><div class="stat-label">💰 Cobros recibidos</div><div class="stat-value" id="s-abonos" style="color:var(--blue)">—</div></div>
+  <!-- Columna derecha: solo en escritorio. Mientras no se elija un movimiento
+       lleva la clase .sin-detalle y muestra el aviso; al elegir uno,
+       acomodarDetalle() ya movió aquí el ticket y este ocupa su lugar. -->
+  <div class="col-der sin-detalle" id="col-detalle">
+    <div id="detalle-vacio">
+      <span class="emoji">🧾</span>
+      <span>Elige una venta o un cobro de la lista<br>para ver su ticket aquí.</span>
+    </div>
+    <!-- Los tres desgloses comparten una sola caja en escritorio, debajo del
+         ticket; en el teléfono siguen siendo las mismas secciones sueltas, una
+         debajo de otra y justo después de la lista (que es donde caen al estar
+         aquí, porque el aviso de arriba no se ve).
+         actualizarCajaDesglose() esconde la caja entera cuando ninguno tiene
+         datos, para no dejar un encabezado sobre el vacío. -->
+    <div class="box box-desglose" id="caja-desglose" style="display:none">
+      <div class="box-header">Desglose del periodo</div>
+      <div class="box-body">
+        <div class="section-title" id="op-titulo" style="font-size:13px;font-weight:600;color:var(--text2);margin:1.5rem 0 .75rem;text-transform:uppercase;letter-spacing:.5px;display:none">Ventas por operador</div>
+        <div class="card" id="op-desglose" style="display:none"></div>
+
+        <div class="section-title" id="suc-titulo" style="font-size:13px;font-weight:600;color:var(--text2);margin:1.5rem 0 .75rem;text-transform:uppercase;letter-spacing:.5px;display:none">Ventas por sucursal</div>
+        <div class="card" id="suc-desglose" style="display:none"></div>
+
+        <!-- Detalle de los abonos cobrados en el periodo. Faltaba: renderAbonos()
+             existía desde siempre, pero nunca llegó a ejecutarse porque el endpoint
+             de abonos devolvía 422 por un orden de rutas equivocado. -->
+        <div class="section-title" id="abonos-titulo" style="font-size:13px;font-weight:600;color:var(--text2);margin:1.5rem 0 .75rem;text-transform:uppercase;letter-spacing:.5px;display:none">💰 Cobros de crédito y pedidos</div>
+        <div class="card" id="abonos-lista" style="display:none"></div>
+      </div>
+    </div>
   </div>
-
-  <div class="lista" id="lista"></div>
-
-  <div class="section-title" id="op-titulo" style="font-size:13px;font-weight:600;color:var(--text2);margin:1.5rem 0 .75rem;text-transform:uppercase;letter-spacing:.5px;display:none">Ventas por operador</div>
-  <div class="card" id="op-desglose" style="display:none"></div>
-
-  <div class="section-title" id="suc-titulo" style="font-size:13px;font-weight:600;color:var(--text2);margin:1.5rem 0 .75rem;text-transform:uppercase;letter-spacing:.5px;display:none">Ventas por sucursal</div>
-  <div class="card" id="suc-desglose" style="display:none"></div>
-
-  <!-- Detalle de los abonos cobrados en el periodo. Faltaba: renderAbonos()
-       existía desde siempre, pero nunca llegó a ejecutarse porque el endpoint
-       de abonos devolvía 422 por un orden de rutas equivocado. -->
-  <div class="section-title" id="abonos-titulo" style="font-size:13px;font-weight:600;color:var(--text2);margin:1.5rem 0 .75rem;text-transform:uppercase;letter-spacing:.5px;display:none">💰 Cobros de crédito y pedidos</div>
-  <div class="card" id="abonos-lista" style="display:none"></div>
+</div>
 </div>
 
 <!-- Modal detalle de venta -->
@@ -251,11 +401,22 @@ async function cargar(){
   }catch(e){console.error(e);}
 }
 
+// La caja que envuelve los tres desgloses solo tiene sentido si alguno trae
+// datos: si los tres están ocultos se esconde entera, para que en escritorio no
+// quede un encabezado sobre una caja vacía.
+function actualizarCajaDesglose(){
+  const caja=document.getElementById('caja-desglose');
+  if(!caja)return;
+  const hayAlgo=['op-desglose','suc-desglose','abonos-lista']
+    .some(id=>{const el=document.getElementById(id);return el && el.style.display!=='none';});
+  caja.style.display=hayAlgo?'':'none';
+}
+
 function renderAbonos(lista){
   const titulo=document.getElementById('abonos-titulo');
   const cont=document.getElementById('abonos-lista');
   if(!titulo||!cont)return;
-  if(!lista.length){titulo.style.display='none';cont.style.display='none';return;}
+  if(!lista.length){titulo.style.display='none';cont.style.display='none';actualizarCajaDesglose();return;}
   titulo.style.display='block';
   cont.style.display='block';
   const etiquetasMet={tarjeta:'💳 Tarjeta',transferencia:'🏦 Transferencia',efectivo:'💵 Efectivo',condonado:'🧾 Condonado'};
@@ -268,17 +429,18 @@ function renderAbonos(lista){
     const pedido=a.venta_id && a.tipo_movimiento!=='abono' ? ` de pedido #${a.venta_id}` : '';
     const ref = a.tpv_referencia || a.transferencia_referencia
       ? `<div style="font-size:11px;color:var(--text2)">Ref: ${esc(a.tpv_referencia||a.transferencia_referencia)}${a.tpv_autorizacion?' · Aut: '+esc(a.tpv_autorizacion):''}</div>` : '';
-    return `<div class="hist-row" onclick="verAbono(${a.id})" style="display:flex;justify-content:space-between;padding:.75rem 1rem;border-bottom:0.5px solid var(--border);cursor:pointer">
+    return `<div class="hist-row" data-abono="${a.id}" onclick="verAbono(${a.id})" style="display:flex;justify-content:space-between;padding:.75rem 1rem;border-bottom:0.5px solid var(--border);cursor:pointer">
       <span><b>${tipo}${pedido}</b> · ${esc(a.cliente_nombre)}${a.nota?' · '+esc(a.nota):''}<div style="font-size:11px;color:var(--text2)">${fecha} · ${esc(a.operador||'')}${a.sucursal?' · Suc. '+esc(a.sucursal):''} · ${met}${autorizo}</div>${ref}</span>
       <span style="color:${esCondonado?'var(--red)':'var(--blue)'};font-weight:600">+${money(a.monto)}</span>
     </div>`;
   }).join('');
+  actualizarCajaDesglose();
 }
 
 function renderDesglose(lista){
   const titulo=document.getElementById('op-titulo');
   const cont=document.getElementById('op-desglose');
-  if(!lista.length){titulo.style.display='none';cont.style.display='none';return;}
+  if(!lista.length){titulo.style.display='none';cont.style.display='none';actualizarCajaDesglose();return;}
   titulo.style.display='block';
   cont.style.display='block';
   cont.innerHTML=lista.map(o=>`
@@ -289,6 +451,7 @@ function renderDesglose(lista){
       </div>
       <div class="op-total">${money(o.total)}</div>
     </div>`).join('');
+  actualizarCajaDesglose();
 }
 
 function renderDesgloseSucursal(lista){
@@ -296,7 +459,7 @@ function renderDesgloseSucursal(lista){
   const cont=document.getElementById('suc-desglose');
   // Con una sesión de sucursal el desglose sería siempre una sola fila con su
   // propia sucursal, repitiendo lo que ya dicen las tarjetas de arriba.
-  if(!lista.length || !sesionVeTodo()){titulo.style.display='none';cont.style.display='none';return;}
+  if(!lista.length || !sesionVeTodo()){titulo.style.display='none';cont.style.display='none';actualizarCajaDesglose();return;}
   titulo.style.display='block';
   cont.style.display='block';
   cont.innerHTML=lista.map(s=>`
@@ -307,6 +470,7 @@ function renderDesgloseSucursal(lista){
       </div>
       <div class="op-total">${money(s.total)}</div>
     </div>`).join('');
+  actualizarCajaDesglose();
 }
 
 // El filtro de sucursal solo existe para quien ve el negocio completo (Only
@@ -326,7 +490,10 @@ async function cargarSucursalesSelect(){
 
 function render(){
   const cont=document.getElementById('lista');
-  if(!ventas.length){cont.innerHTML='<div class="empty">No hay movimientos en este periodo</div>';return;}
+  const contador=document.getElementById('lista-contador');
+  // El contador solo se ve en el encabezado de la caja, o sea en escritorio.
+  if(contador)contador.textContent=ventas.length?ventas.length:'';
+  if(!ventas.length){cont.innerHTML='<div class="empty">No hay movimientos en este periodo</div>';limpiarPanelDetalle();return;}
   cont.innerHTML=ventas.map(v=>{
     const fecha=new Date(v.fecha).toLocaleString('es-MX',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
     const desc=v.descuento_extra_pct>0?`<div class="v-desc">desc ${fmtPct(v.descuento_extra_pct)}%</div>`:'';
@@ -346,7 +513,7 @@ function render(){
     const badgeEstado = (!esDev && (v.estado==='parcial'||v.estado==='devuelta'))
       ? `<div class="v-items" style="color:var(--amber)">${v.estado==='devuelta'?'Devuelta por completo':'Con devolución parcial'}</div>`
       : '';
-    return `<div class="venta" onclick="verDetalle(${v.id})">
+    return `<div class="venta" data-venta="${v.id}" onclick="verDetalle(${v.id})">
       <div>
         ${titulo}
         <div class="v-fecha">${fecha} · ${met}</div>
@@ -362,16 +529,56 @@ function render(){
   }).join('');
 }
 
+// ─── Ticket del movimiento elegido ──────────────────────────────────────────
+// A partir de 1024px el ticket deja de ser un modal: el mismo nodo se muda a la
+// columna de la derecha y se queda ahí, cambiando de movimiento conforme se
+// eligen en la lista. Se mueve el nodo en vez de duplicarlo para no tener dos
+// juegos de campos con los mismos id (verDetalle()/verAbono() escriben en los
+// de siempre). Si la ventana baja de 1024px, vuelve a ser modal.
+const ESCRITORIO = window.matchMedia('(min-width:1024px)');
+const panelDetalle = document.getElementById('col-detalle');
+const overlayDetalle = document.getElementById('detalle-modal');
+const cajaDetalle = document.querySelector('#detalle-modal .modal');
+
+function acomodarDetalle(){
+  const destino = ESCRITORIO.matches ? panelDetalle : overlayDetalle;
+  if(cajaDetalle.parentElement !== destino){
+    destino.appendChild(cajaDetalle);
+    // Al salir del modal se cierra: si no, la capa oscura se quedaría encima
+    // de la pantalla con el ticket ya fuera de ella.
+    cerrarDetalle();
+  }
+}
+
+// Deja la columna de la derecha en su estado inicial ("elige un movimiento").
+function limpiarPanelDetalle(){
+  panelDetalle.classList.add('sin-detalle');
+  document.querySelectorAll('.venta.activo,.hist-row.activo').forEach(f=>f.classList.remove('activo'));
+}
+
+// Marca en la lista el renglón que se está viendo y saca el ticket del estado
+// vacío. En el teléfono la clase .activo no pinta nada.
+function abrirPanelDetalle(selector){
+  document.getElementById('detalle-modal').classList.toggle('open', !ESCRITORIO.matches);
+  panelDetalle.classList.remove('sin-detalle');
+  document.querySelectorAll('.venta.activo,.hist-row.activo').forEach(f=>f.classList.remove('activo'));
+  const fila=document.querySelector(selector);
+  if(fila)fila.classList.add('activo');
+}
+
+acomodarDetalle();
+ESCRITORIO.addEventListener('change', acomodarDetalle);
+
 async function verDetalle(id){
   try{
     const r=await authFetch('/api/ventas/'+id);
     ventaDetalle=await r.json();
     detalleTipo='venta';
     const _esDev = ventaDetalle && ((ventaDetalle.estado === 'devolucion') || (ventaDetalle.total < 0));
-  const _tit = document.querySelector('#detalle-modal h2');
+  const _tit = document.querySelector('#detalle-modal h2, .col-der .modal h2');
   if(_tit) _tit.textContent = _esDev ? 'Detalle de devolución' : 'Detalle de venta';
   document.getElementById('detalle-contenido').innerHTML=ticketHTML(ventaDetalle);
-    document.getElementById('detalle-modal').classList.add('open');
+    abrirPanelDetalle('.venta[data-venta="'+id+'"]');
   }catch(e){}
 }
 
@@ -382,10 +589,10 @@ function verAbono(id){
   if(!a)return;
   abonoDetalle=a;
   detalleTipo='abono';
-  const _tit=document.querySelector('#detalle-modal h2');
+  const _tit=document.querySelector('#detalle-modal h2, .col-der .modal h2');
   if(_tit) _tit.textContent='Recibo de abono';
   document.getElementById('detalle-contenido').innerHTML=reciboAbonoHTML(a);
-  document.getElementById('detalle-modal').classList.add('open');
+  abrirPanelDetalle('.hist-row[data-abono="'+id+'"]');
 }
 
 function reciboAbonoHTML(a){
@@ -414,7 +621,13 @@ function reciboAbonoHTML(a){
   return html;
 }
 
-function cerrarDetalle(){document.getElementById('detalle-modal').classList.remove('open');}
+// En el teléfono cierra el modal; en escritorio devuelve la columna derecha al
+// aviso de "elige un movimiento" (ahí el botón Cerrar no se ve, pero Escape y
+// acomodarDetalle() siguen llegando aquí).
+function cerrarDetalle(){
+  document.getElementById('detalle-modal').classList.remove('open');
+  limpiarPanelDetalle();
+}
 
 precargarLogosActivos();
 
