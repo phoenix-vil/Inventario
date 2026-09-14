@@ -92,6 +92,9 @@ button.danger:hover{background:var(--red-bg)}
 .field input:focus,.field select:focus,.toolbar input:focus,.toolbar select:focus{outline:2px solid var(--blue);outline-offset:1px}
 .field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:1.25rem}
+/* Un botón inhabilitado tiene que verse inhabilitado: el de "Recibir" arranca
+   así hasta que se elige un producto. */
+.modal-footer button:disabled{opacity:.45;cursor:not-allowed}
 /* Stock quick adjust */
 .stock-adj{display:inline-flex;align-items:center;gap:4px}
 .stock-adj button{height:24px;width:24px;padding:0;justify-content:center;font-size:16px;border-radius:6px}
@@ -131,14 +134,151 @@ button.danger:hover{background:var(--red-bg)}
   .stats{grid-template-columns:1fr 1fr}
   .stat{padding:.625rem .75rem}
 }
+
+/* ─── Inventario de la sucursal: cajas de escritorio ───────────────────────
+   Mismo patrón que /devoluciones y /pagos: a partir de 1024px la pantalla se
+   reparte en dos columnas que llenan el alto, en lugar de una columna larga
+   con modales encima. Sin backdrop-filter en .box: crea un stacking context y
+   la caja taparía la marca de agua de la tienda que inyecta auth.js. */
+.box{background:var(--bg2);border:0.5px solid var(--border);border-radius:12px;display:flex;flex-direction:column;overflow:hidden;min-height:0}
+.box-header{flex-shrink:0;padding:.75rem 1rem;border-bottom:0.5px solid var(--border);font-size:11.5px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.box-header .cont{color:var(--text);text-transform:none;letter-spacing:0;font-size:12px;font-weight:600}
+.box-cuerpo{flex:1;min-height:0;overflow-y:auto}
+
+/* cabecera del catálogo con las pestañas de tienda */
+.cat-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:.75rem 1rem;border-bottom:0.5px solid var(--border);flex-wrap:wrap}
+.cat-head .tit{font-size:11.5px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.4px}
+.tiendas{display:flex;gap:4px;background:var(--bg);border:0.5px solid var(--border);border-radius:9px;padding:3px;overflow-x:auto;max-width:100%}
+.tienda-tab{display:flex;align-items:center;gap:6px;height:28px;padding:0 11px;border-radius:7px;font-size:12.5px;font-weight:600;color:var(--text2);white-space:nowrap;border:0.5px solid transparent;background:transparent;font-family:inherit;cursor:pointer;flex-shrink:0}
+.tienda-tab .n{font-size:10.5px;font-weight:700;opacity:.72;font-variant-numeric:tabular-nums}
+.tienda-tab.on{background:var(--bg2);color:var(--text);border-color:var(--border)}
+.tienda-tab.cero{opacity:.5}
+button.activo{background:var(--blue-bg);border-color:var(--blue);color:var(--blue);font-weight:600}
+
+/* columna con lo que hay en mi sucursal */
+.celda-suc{font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}
+.celda-suc.cero{font-weight:400;color:var(--text2)}
+.celda-sub{font-size:10.5px;color:var(--text2);font-weight:400;margin-top:1px;white-space:nowrap}
+#tabla tr{cursor:pointer}
+#tabla tr.elegido td{background:var(--blue-bg)}
+#tabla tr.elegido td:first-child{box-shadow:inset 3px 0 0 var(--blue)}
+.badge-na{background:var(--bg);color:var(--text2);border:0.5px solid var(--border)}
+.tag-tienda{display:inline-block;background:var(--blue-bg);color:var(--blue);font-size:10px;padding:1px 7px;border-radius:20px;margin-left:6px;font-weight:600;vertical-align:middle}
+
+/* desglose por sucursal */
+.suc-row{display:flex;align-items:center;gap:12px;padding:.7rem .875rem;border-bottom:0.5px solid var(--border)}
+.suc-row:last-child{border-bottom:none}
+.suc-row.mia{background:var(--blue-bg)}
+.suc-i{flex:1;min-width:0}
+.suc-n{font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:7px}
+.tag-mia{font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--blue);border:0.5px solid var(--blue);border-radius:20px;padding:1px 6px}
+.suc-s{font-size:11px;color:var(--text2);margin-top:2px;font-variant-numeric:tabular-nums}
+.barra{height:4px;border-radius:4px;background:var(--border);margin-top:6px;overflow:hidden}
+.barra i{display:block;height:100%;background:var(--blue);border-radius:4px}
+.suc-q{text-align:right;flex-shrink:0}
+.suc-q b{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums;display:block}
+.suc-q b.cero{color:var(--text2);font-weight:400}
+.suc-q span{font-size:10px;color:var(--text2)}
+.prod-elegido{padding:.75rem .875rem;border-bottom:0.5px solid var(--border);background:var(--bg)}
+.prod-elegido .n{font-size:15px;font-weight:600}
+.prod-elegido .s{font-size:11.5px;color:var(--text2);margin-top:2px}
+.resumen-glob{padding:.625rem .875rem;border-top:0.5px solid var(--border);background:var(--bg);font-size:12px;color:var(--text2);display:flex;justify-content:space-between;gap:10px;font-variant-numeric:tabular-nums}
+.aviso-sobre{display:flex;gap:8px;align-items:flex-start;padding:.625rem .875rem;background:var(--red-bg);color:var(--red);font-size:11.5px;line-height:1.45;border-bottom:0.5px solid var(--border)}
+.vacio-panel{padding:2rem 1.25rem;text-align:center;color:var(--text2);font-size:13px;line-height:1.65}
+
+/* Recibir de otra sucursal: el buscador mira el catálogo entero, así que los
+   resultados traen de qué tienda son y cuánto queda en cada sucursal. */
+.rc-res{max-height:40vh;overflow-y:auto;margin-top:8px;display:flex;flex-direction:column;gap:6px}
+.rc-item{border:0.5px solid var(--border);border-radius:10px;padding:.6rem .75rem;cursor:pointer;background:var(--bg2)}
+.rc-item:hover{border-color:var(--blue);background:var(--bg)}
+.rc-nom{font-size:13.5px;font-weight:600}
+.rc-meta{font-size:11.5px;color:var(--text2);margin-top:2px}
+.rc-sucs{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.rc-tag{font-size:11px;font-weight:600;padding:1px 7px;border-radius:20px;background:var(--green-bg);color:var(--green)}
+.rc-ajena{font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:20px;background:var(--amber-bg);color:var(--amber);margin-left:6px}
+.rc-elegido{border:0.5px solid var(--blue);background:var(--blue-bg);color:var(--blue);border-radius:10px;padding:.6rem .75rem;font-size:13px;font-weight:600}
+.rc-vacio{font-size:12.5px;color:var(--text2);padding:10px 2px}
+
+/* enviar a otra sucursal */
+.campo-env{padding:0 .875rem .7rem}
+.campo-env .lbl{font-size:11px;color:var(--text2);margin-bottom:4px;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.campo-fijo{min-height:38px;border:0.5px dashed var(--border);border-radius:9px;display:flex;align-items:center;padding:.5rem 11px;font-size:13px;color:var(--text2);gap:8px}
+.campo-env select,.campo-env input{width:100%;height:38px;padding:0 10px;border:0.5px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text);font-size:14px;font-family:inherit}
+.chips-cant{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}
+.chip-cant{height:26px;padding:0 11px;border:0.5px solid var(--border);border-radius:20px;font-size:12px;color:var(--text2);background:transparent;font-family:inherit;cursor:pointer}
+.chip-cant:hover{border-color:var(--blue);color:var(--blue);background:transparent}
+.btn-enviar{margin:.2rem .875rem .875rem;height:46px;width:calc(100% - 1.75rem);border:none;border-radius:10px;background:var(--blue);color:var(--bg2);font-weight:700;font-size:14.5px;font-family:inherit;cursor:pointer;display:block}
+.btn-enviar:hover{opacity:.9;background:var(--blue)}
+.btn-enviar:disabled{background:var(--bg);color:var(--text2);border:0.5px solid var(--border);cursor:default;opacity:1}
+.msg-env{font-size:12px;padding:0 .875rem .75rem;line-height:1.5}
+
+/* hoja del producto en móvil: es .overlay para que auth.js no recargue la
+   página encima de ella (ver el aviso del CLAUDE.md sobre los modales). */
+.hoja-overlay{align-items:flex-end}
+.hoja{background:var(--bg2);width:100%;max-height:88vh;border-radius:16px 16px 0 0;display:flex;flex-direction:column;overflow:hidden}
+.hoja-grip{width:38px;height:4px;border-radius:4px;background:var(--border);margin:9px auto 2px;flex-shrink:0}
+.hoja-seg{display:flex;gap:4px;margin:.5rem .875rem 0;background:var(--bg);border:0.5px solid var(--border);border-radius:9px;padding:3px;flex-shrink:0}
+.hoja-seg button{flex:1;height:32px;border:0.5px solid transparent;background:transparent;color:var(--text2);font-size:13px;font-weight:600;border-radius:7px;font-family:inherit;padding:0}
+.hoja-seg button.on{background:var(--bg2);color:var(--text);border-color:var(--border)}
+.hoja-cuerpo{flex:1;min-height:0;overflow-y:auto;padding-bottom:.5rem}
+.hoja-cerrar{margin:0 .875rem .875rem;height:42px;width:calc(100% - 1.75rem);border:0.5px solid var(--border);border-radius:10px;background:transparent;color:var(--text);font-size:14px;font-family:inherit;flex-shrink:0}
+
+/* alta masiva: casillas de la tabla y barra de acción */
+.col-chk{width:36px;text-align:center;padding-left:10px;padding-right:0}
+.chk{width:17px;height:17px;accent-color:var(--blue);cursor:pointer;vertical-align:middle}
+#tabla tr.marcado td{background:color-mix(in srgb, var(--blue-bg) 55%, transparent)}
+#barra-masiva{
+  display:none;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:.625rem .875rem;border-top:0.5px solid var(--border);
+  background:var(--blue-bg);flex-shrink:0
+}
+#barra-masiva.abierta{display:flex}
+.bm-cont{font-size:13px;color:var(--text);white-space:nowrap}
+.bm-cont b{font-size:15px}
+.bm-destino{display:flex;gap:3px;background:var(--bg2);border:0.5px solid var(--border);border-radius:9px;padding:3px}
+.bm-destino button{height:28px;padding:0 11px;border:0.5px solid transparent;border-radius:7px;background:transparent;color:var(--text2);font-size:12.5px;font-weight:600;font-family:inherit;cursor:pointer;white-space:nowrap}
+.bm-destino button.on{background:var(--blue);color:var(--bg2);border-color:var(--blue)}
+#bm-cantidad{width:92px;height:34px;padding:0 10px;border:0.5px solid var(--border);border-radius:8px;background:var(--bg2);color:var(--text);font-size:14px;font-family:inherit;text-align:center;font-weight:600}
+#barra-masiva .sep{flex:1}
+#bm-errores{padding:0 .875rem .625rem;background:var(--blue-bg);font-size:11.5px;color:var(--red);line-height:1.5;display:none}
+#bm-errores.hay{display:block}
+
+/* En móvil la lista es larguísima: la barra se ancla abajo, como en el POS. */
+@media(max-width:1023px){
+  #barra-masiva.abierta{
+    position:fixed;left:0;right:0;bottom:0;z-index:80;
+    box-shadow:0 -4px 16px rgba(0,0,0,.18);
+    padding-bottom:calc(.625rem + env(safe-area-inset-bottom))
+  }
+  #barra-masiva .bm-cont{width:100%}
+  body.masiva-abierta{padding-bottom:76px}
+}
+
+#col-der{display:none}
+
+@media(min-width:1024px){
+  .container{max-width:1500px;display:grid;grid-template-columns:minmax(0,1fr) 400px;grid-template-rows:auto minmax(0,1fr);gap:14px 18px;height:calc(100vh - 54px);padding:1rem 1.25rem}
+  .stats{grid-column:1 / -1;margin-bottom:0;grid-template-columns:repeat(auto-fit,minmax(120px,1fr))}
+  .stat{padding:.625rem .875rem}
+  .stat-value{font-size:20px}
+  .card{margin-bottom:0;min-height:0;display:flex;flex-direction:column}
+  .card > .cat-head,.card > .toolbar,.card > #pie-tabla{flex-shrink:0}
+  .tabla-scroll{flex:1;min-height:0;overflow-y:auto}
+  #pie-tabla{border-top:0.5px solid var(--border)}
+  #col-der{display:flex;flex-direction:column;gap:14px;min-height:0}
+  .container.sin-paneles{grid-template-columns:minmax(0,1fr);max-width:1200px}
+  #panel-existencias{flex:1}
+  /* En escritorio los paneles ya están a la vista: la hoja no debe abrirse. */
+  .hoja-overlay{display:none !important}
+}
 </style>
-<link rel="stylesheet" href="/static/modern.css?v=1787605997">
+<link rel="stylesheet" href="/static/modern.css?v=1789360082">
 </head>
 <body>
 
 <div class="topbar">
   <a href="/" class="btn-inicio" title="Inicio"><img src="/static/icon-nav-v2.png" alt="Inicio" class="nav-icon" style="height:32px;width:32px"></a>
-  <h1 class="topbar-title">📦 Inventario</h1>
+  <h1 class="topbar-title">📦 Inventario<span id="tb-suc" style="color:var(--text2);font-weight:400"></span></h1>
   <div class="topbar-right">
     <span id="sync-indicator" style="font-size:12px;color:var(--text2)"></span>
     <button onclick="abrirEscaner('buscar')">📷 <span class="btn-label">Escanear</span></button>
@@ -150,37 +290,47 @@ button.danger:hover{background:var(--red-bg)}
   <div class="stats" id="stats-grid">
     <div class="stat"><div class="stat-label">Productos</div><div class="stat-value" id="s-total">—</div></div>
     <div class="stat"><div class="stat-label">Valor inventario</div><div class="stat-value" id="s-valor">—</div></div>
+    <div class="stat" id="stat-mia" style="display:none"><div class="stat-label" id="s-mia-label">En mi sucursal</div><div class="stat-value" id="s-mia" style="color:var(--blue)">—</div></div>
     <div class="stat"><div class="stat-label">Stock bajo</div><div class="stat-value" id="s-bajo" style="color:var(--amber)">—</div></div>
     <div class="stat"><div class="stat-label">Agotados</div><div class="stat-value" id="s-agotados" style="color:var(--red)">—</div></div>
     <div class="stat"><div class="stat-label">Categorías</div><div class="stat-value" id="s-cats">—</div></div>
   </div>
 
   <div class="card">
+    <!-- Una sucursal que vende varias tiendas (Imprenta = Only Reef + Only
+         Garden) puede ver cada catálogo por separado. Con una sola tienda no
+         hay nada que elegir y la barra no aparece. -->
+    <div class="cat-head">
+      <span class="tit">Catálogo</span>
+      <div class="tiendas" id="tiendas-tabs" style="display:none"></div>
+    </div>
     <div class="toolbar">
       <input type="search" id="buscar" placeholder="Buscar producto…" oninput="filtrar()">
       <select id="filtro-cat" onchange="filtrar()"><option value="">Todas las categorías</option></select>
-      <select id="filtro-estado" onchange="filtrar()">
+      <!-- Estos tres filtros miran el stock GLOBAL del producto. La columna
+           "Estado" de la tabla, en cambio, habla de tu sucursal: por eso las
+           etiquetas dicen cuál es cuál. -->
+      <select id="filtro-estado" onchange="filtrar()" title="Sobre el stock global del producto">
         <option value="">Todos</option>
-        <option value="ok">En stock</option>
-        <option value="bajo">Stock bajo</option>
-        <option value="agotado">Agotados</option>
+        <option value="ok">En stock (global)</option>
+        <option value="bajo">Stock bajo (global)</option>
+        <option value="agotado">Agotados (global)</option>
       </select>
       <button onclick="abrirDescuentoCategoria()" title="Aplicar descuento a categoría completa">🏷 Promo categoría</button>
-      <!-- Aquí y no en la barra de arriba: ahí las etiquetas se ocultan en
-           móvil y estas dos quedaban como emojis sueltos, imposibles de
-           adivinar. -->
-      <button id="btn-buscar-suc" onclick="abrirBuscarSucursales()" title="Ver si hay existencias en otra sucursal">🏪 Buscar en otra sucursal</button>
-      <button id="btn-enviar-suc" style="display:none" onclick="abrirEnviarSucursal()" title="Enviar producto a otra sucursal">📤 Enviar a otra sucursal</button>
+      <button id="btn-ver-todo" style="display:none" onclick="alternarVerTodo()" title="Asomarse al catálogo completo de tu tienda, incluido lo que aún no te han repartido">📋 Ver todo el catálogo</button>
+      <button id="btn-recibir" style="display:none" onclick="abrirRecibir()" title="Traer a tu sucursal una pieza que está en otra, aunque sea de otra tienda">📥 Recibir de otra sucursal</button>
     </div>
-    <div style="overflow-x:auto">
+    <div class="tabla-scroll" style="overflow-x:auto">
       <table>
         <thead>
           <tr>
+            <th class="col-chk"><input type="checkbox" class="chk" id="chk-todos" onclick="alternarTodos(this)" title="Marcar los productos que se están viendo"></th>
             <th>Producto</th>
             <th class="hide-mobile">Categoría</th>
             <th>Precio</th>
-            <th>Stock</th>
-            <th>Estado</th>
+            <th id="th-suc" style="display:none">En sucursal</th>
+            <th id="th-global">Stock</th>
+            <th id="th-estado">Estado</th>
             <th></th>
           </tr>
         </thead>
@@ -190,7 +340,87 @@ button.danger:hover{background:var(--red-bg)}
     <!-- Cuántos productos se están viendo y el botón para cargar la siguiente
          tanda. También sirve de marca para cargar solo con bajar (ver el
          IntersectionObserver en el script). -->
+    <!-- Aparece al marcar productos: suma la misma cantidad a todos de golpe,
+         al stock global o a lo repartido a mi sucursal. -->
+    <div id="barra-masiva">
+      <span class="bm-cont"><b id="bm-n">0</b> <span id="bm-n-txt">seleccionados</span></span>
+      <div class="bm-destino" id="bm-destino">
+        <button data-d="global" class="on" onclick="elegirDestinoMasivo('global')">Stock global</button>
+        <button data-d="sucursal" id="bm-btn-suc" style="display:none" onclick="elegirDestinoMasivo('sucursal')">Mi sucursal</button>
+      </div>
+      <input type="number" id="bm-cantidad" inputmode="decimal" step="1" placeholder="+0"
+             onkeydown="if(event.key==='Enter')aplicarMasivo()">
+      <button class="primary" id="bm-aplicar" onclick="aplicarMasivo()">Aplicar</button>
+      <span class="sep"></span>
+      <button onclick="limpiarSeleccion()">Quitar selección</button>
+    </div>
+    <div id="bm-errores"></div>
     <div id="pie-tabla" style="padding:.75rem 0;text-align:center"></div>
+  </div>
+
+  <!-- Lo que antes vivía en dos modales sueltos: dónde hay existencias y a
+       dónde mandar producto. En escritorio son dos cajas siempre visibles que
+       responden a la fila elegida; en móvil, la hoja de más abajo. -->
+  <div id="col-der">
+    <div class="box" id="panel-existencias">
+      <div class="box-header"><span>Existencias en tus sucursales</span><span class="cont" id="pe-cont"></span></div>
+      <div class="box-cuerpo" id="pe-cuerpo"></div>
+    </div>
+    <div class="box" id="panel-enviar">
+      <div class="box-header"><span>Enviar a otra sucursal</span></div>
+      <div id="pv-cuerpo"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Recibir de otra sucursal. Lleva .overlay como los demás modales: auth.js
+     se salta su recarga cada 20 minutos mientras haya uno abierto. -->
+<div class="overlay" id="modal-recibir" onclick="if(event.target.id==='modal-recibir')cerrarRecibir()">
+  <div class="modal">
+    <h2>📥 Recibir de otra sucursal</h2>
+    <p style="font-size:12.5px;color:var(--text2);margin:-8px 0 14px;line-height:1.55">
+      Para vender aquí una pieza que está en otra sucursal. Busca en el catálogo
+      completo, así que también aparecen productos de otras tiendas.
+    </p>
+    <div class="field">
+      <label>Producto</label>
+      <input type="text" id="rc-buscar" placeholder="Nombre, clave o código de barras…" autocomplete="off" oninput="buscarParaRecibir()">
+      <div class="rc-res" id="rc-resultados"></div>
+      <div id="rc-elegido" style="display:none;margin-top:8px"></div>
+    </div>
+    <div id="rc-detalle" style="display:none">
+      <div class="field">
+        <label>Viene de</label>
+        <select id="rc-origen" onchange="actualizarMaximoRecibir()"></select>
+      </div>
+      <div class="field">
+        <label>Cantidad <span id="rc-max" style="color:var(--text2)"></span></label>
+        <input type="number" id="rc-cantidad" min="0" step="1" placeholder="0">
+      </div>
+    </div>
+    <div class="msg" id="rc-msg" style="display:none;padding:9px;border-radius:8px;font-size:13px;margin-top:8px"></div>
+    <div class="modal-footer">
+      <button onclick="cerrarRecibir()">Cancelar</button>
+      <button class="primary" id="rc-btn" onclick="confirmarRecepcion()" disabled>Recibir</button>
+    </div>
+  </div>
+</div>
+
+<!-- Hoja del producto (móvil). Lleva la clase .overlay a propósito: auth.js
+     recarga la página cada 20 minutos y se salta la recarga si hay un
+     .overlay.open, para no interrumpir a media captura. -->
+<div class="overlay hoja-overlay" id="hoja-suc" onclick="if(event.target.id==='hoja-suc')cerrarHoja()">
+  <div class="hoja">
+    <div class="hoja-grip"></div>
+    <div class="hoja-seg">
+      <button id="hs-tab-ex" class="on" onclick="hojaTab('ex')">Existencias</button>
+      <button id="hs-tab-env" onclick="hojaTab('env')">Enviar</button>
+    </div>
+    <div class="hoja-cuerpo">
+      <div id="hs-ex"></div>
+      <div id="hs-env" style="display:none"></div>
+    </div>
+    <button class="hoja-cerrar" onclick="cerrarHoja()">Cerrar</button>
   </div>
 </div>
 
@@ -273,55 +503,6 @@ button.danger:hover{background:var(--red-bg)}
 
 <div class="toast" id="toast"></div>
 
-<!-- Modal: ¿hay existencias en otra sucursal? -->
-<div class="overlay" id="overlay-otra-suc" onclick="if(event.target.id==='overlay-otra-suc')cerrarBuscarSucursales()">
-  <div class="modal">
-    <h2>🏪 Buscar en otra sucursal</h2>
-    <p style="font-size:13px;color:var(--text2);margin-bottom:1rem">Escribe el nombre o el código de barras del producto para ver qué queda en las sucursales de tu tienda.</p>
-    <div class="field">
-      <label>Nombre o código de barras</label>
-      <div style="display:flex;gap:8px">
-        <input type="search" id="os-q" placeholder="Ej. Canutillo o 7501234567890" style="flex:1" onkeydown="if(event.key==='Enter')buscarEnSucursales()">
-        <button onclick="abrirEscaner('otra-suc')" title="Escanear código">📷</button>
-      </div>
-    </div>
-    <div id="os-resultados" style="max-height:50vh;overflow:auto"></div>
-    <div class="modal-footer">
-      <button onclick="cerrarBuscarSucursales()">Cerrar</button>
-      <button class="primary" onclick="buscarEnSucursales()">Buscar</button>
-    </div>
-  </div>
-</div>
-
-<!-- Modal: enviar producto a otra sucursal -->
-<div class="overlay" id="overlay-enviar-suc" onclick="if(event.target.id==='overlay-enviar-suc')cerrarEnviarSucursal()">
-  <div class="modal">
-    <h2>📤 Enviar a otra sucursal</h2>
-    <p style="font-size:13px;color:var(--text2);margin-bottom:1rem">Mueve producto de <strong id="env-origen">tu sucursal</strong> a otra. Se descuenta de tu inventario y se suma al de la sucursal destino.</p>
-    <div class="field">
-      <label>Producto (nombre o código de barras)</label>
-      <div style="display:flex;gap:8px">
-        <input type="search" id="env-q" placeholder="Ej. Canutillo o 7501234567890" style="flex:1" onkeydown="if(event.key==='Enter')buscarParaEnviar()">
-        <button onclick="abrirEscaner('enviar')" title="Escanear código">📷</button>
-      </div>
-    </div>
-    <div id="env-resultados" style="max-height:32vh;overflow:auto"></div>
-    <div id="env-form" style="display:none;border-top:0.5px solid var(--border);padding-top:.75rem;margin-top:.5rem">
-      <div style="font-weight:600;font-size:14px" id="env-prod-nombre"></div>
-      <div style="font-size:12px;color:var(--text2);margin-bottom:.75rem" id="env-prod-stock"></div>
-      <div class="field-row">
-        <div class="field"><label>Cantidad</label><input type="number" id="env-cantidad" min="0" step="1" placeholder="0"></div>
-        <div class="field"><label>Sucursal destino</label><select id="env-destino"></select></div>
-      </div>
-      <div class="field" id="env-msg" style="display:none;font-size:13px"></div>
-    </div>
-    <div class="modal-footer">
-      <button onclick="cerrarEnviarSucursal()">Cancelar</button>
-      <button class="primary" id="env-btn" onclick="confirmarEnvio()" disabled>Enviar</button>
-    </div>
-  </div>
-</div>
-
 <!-- Modal descuento por categoría -->
 <div class="overlay" id="overlay-desc-cat" onclick="if(event.target.id==='overlay-desc-cat')cerrarDescuentoCategoria()">
   <div class="modal">
@@ -342,13 +523,55 @@ button.danger:hover{background:var(--red-bg)}
   </div>
 </div>
 
-<script src="/static/auth.js?v=1787605997"></script>
+<script src="/static/auth.js?v=1789360082"></script>
 <script>
 requireGerente();
 const API = '';
 let productos = [];
 let editandoId = null;
 let categorias = [];
+// Sucursales cuyo inventario puede ver esta sesión (las que venden alguna de
+// sus mismas tiendas) y cuál de ellas es la propia. Las manda el backend en
+// cada carga del catálogo; en Only Enterprises, miSucursal es null.
+let sucursales = [];
+let miSucursal = null;
+let elegidoId = null;
+// Productos marcados para el alta masiva. Es un Set y no una marca en la fila
+// porque la tabla se repinta por tandas y cada 30 segundos: la selección tiene
+// que sobrevivir a los repintados.
+const seleccionados = new Set();
+let destinoMasivo = 'global';   // 'global' | 'sucursal' 
+let tiendaActiva = '';      // '' = todas | '__general__' = sin tienda | nombre de tienda
+// Una sucursal ve su piso: solo lo que tiene repartido. El botón de arriba
+// deja asomarse al catálogo entero de su tienda, que hace falta para dar de
+// alta mercancía que todavía no le han asignado. Only Enterprises no tiene
+// sucursal propia y siempre ve todo.
+let verTodo = false;
+
+function esEscritorio() { return window.matchMedia('(min-width:1024px)').matches; }
+
+// Las cantidades por peso se manejan en kilos con tres decimales; las demás
+// son piezas y no deben mostrarse como "16.000".
+function fmtCant(n, porPeso) {
+  const v = Math.round((n || 0) * 1000) / 1000;
+  return porPeso ? v.toFixed(3) : String(v);
+}
+
+// Lo que una sucursal tiene de un producto. Ojo: lo asignado no baja con las
+// ventas (solo baja el stock global del producto), así que lo que de verdad
+// le queda es asignado − vendido. Un producto que nunca se repartió no es lo
+// mismo que uno que se repartió y se acabó: por eso "nunca".
+function datosSuc(p, suc) {
+  const d = p.suc && p.suc[suc];
+  if (!d) return { asignado: 0, vendido: 0, restante: 0, nunca: true };
+  // Sin fila de reparto (d.t), la sucursal solo ha vendido este producto: nunca
+  // se le asignó. Restarle esas ventas daría un negativo que no significa nada,
+  // porque aquí se puede vender sin tener stock asignado.
+  if (!d.t) return { asignado: 0, vendido: d.v, restante: 0, nunca: true };
+  return { asignado: d.a, vendido: d.v, restante: Math.round((d.a - d.v) * 1000) / 1000, nunca: false };
+}
+
+function mio(p) { return miSucursal ? datosSuc(p, miSucursal) : null; }
 
 async function fetchJSON(url, opts = {}) {
   const r = await authFetch(API + url, opts);
@@ -359,7 +582,7 @@ async function fetchJSON(url, opts = {}) {
 
 async function cargarResumen() {
   try {
-    const d = await fetchJSON('/api/resumen');
+    const d = await fetchJSON('/api/resumen' + (verTodo ? '?ver_todo=true' : ''));
     document.getElementById('s-total').textContent = d.total_productos;
     document.getElementById('s-valor').textContent = '$' + d.valor_inventario.toLocaleString('es-MX', {minimumFractionDigits:2,maximumFractionDigits:2});
     document.getElementById('s-bajo').textContent = d.stock_bajo;
@@ -385,18 +608,64 @@ async function cargarCategorias() {
 async function cargarProductos() {
   const q = document.getElementById('buscar').value;
   const cat = document.getElementById('filtro-cat').value;
-  const estado = document.getElementById('filtro-estado').value;
-  let url = '/api/productos?limit=3000';
+  const estadoGlobal = document.getElementById('filtro-estado').value;
+  let url = '/api/inventario/catalogo-sucursal?limit=3000';
   if (q) url += '&q=' + encodeURIComponent(q);
   if (cat) url += '&categoria=' + encodeURIComponent(cat);
-  if (estado) url += '&estado=' + encodeURIComponent(estado);
-  productos = await fetchJSON(url);
+  if (estadoGlobal) url += '&estado=' + encodeURIComponent(estadoGlobal);
+  if (tiendaActiva === '__general__') url += '&sin_clasificar=true';
+  else if (tiendaActiva) url += '&tienda=' + encodeURIComponent(tiendaActiva);
+  if (verTodo) url += '&ver_todo=true';
+  const d = await fetchJSON(url);
+  sucursales = d.sucursales || [];
+  miSucursal = d.sucursal || null;
+  productos = d.productos || [];
+  ajustarUIsucursal();
+  pintarConteosTienda(d.conteo_tiendas || {});
   renderTabla();
+  renderPaneles();
 }
 
+// Lo que solo tiene sentido con una sucursal propia: la columna del stock de
+// aquí, el filtro "solo lo mío" y los dos paneles. Una sesión de Only
+// Enterprises entra sin tienda y no tiene sucursal desde la cual mover.
+function ajustarUIsucursal() {
+  const hay = !!miSucursal;
+  document.getElementById('tb-suc').textContent = hay ? ' · Suc. ' + miSucursal : '';
+  document.getElementById('th-suc').style.display = hay ? '' : 'none';
+  document.getElementById('th-suc').textContent = hay ? 'En ' + miSucursal : 'En sucursal';
+  document.getElementById('th-global').textContent = hay ? 'Global' : 'Stock';
+  document.getElementById('th-estado').textContent = hay ? 'Estado en ' + miSucursal : 'Estado';
+  document.getElementById('stat-mia').style.display = hay ? '' : 'none';
+  document.getElementById('btn-ver-todo').style.display = hay ? '' : 'none';
+  // Only Enterprises no tiene piso: no recibe nada, reparte desde /inventario-sucursales
+  document.getElementById('btn-recibir').style.display = hay ? '' : 'none';
+  document.getElementById('bm-btn-suc').style.display = hay ? '' : 'none';
+  document.getElementById('bm-btn-suc').textContent = hay ? 'A ' + miSucursal : 'Mi sucursal';
+  if (!hay && destinoMasivo === 'sucursal') elegirDestinoMasivo('global');
+  document.getElementById('col-der').style.display = hay ? '' : 'none';
+  document.querySelector('.container').classList.toggle('sin-paneles', !hay);
+  if (hay) {
+    document.getElementById('s-mia-label').textContent = 'En ' + miSucursal;
+    // Se suma lo que resta, que es lo que de verdad hay en el piso.
+    const total = productos.reduce((acc, p) => acc + Math.max(datosSuc(p, miSucursal).restante, 0), 0);
+    document.getElementById('s-mia').textContent = fmtCant(total, false) + ' u';
+  }
+}
+
+// El badge habla de TU sucursal, no del stock global: es lo que se pregunta
+// quien está parado en el mostrador. El filtro de la barra, en cambio, sigue
+// siendo global y sus opciones lo dicen.
 function estado(p) {
-  if (p.stock === 0) return {txt:'Agotado',cls:'badge-out'};
-  if (p.stock <= p.stock_minimo) return {txt:'Stock bajo',cls:'badge-low'};
+  const m = mio(p);
+  if (!m) {
+    if (p.stock === 0) return {txt:'Agotado',cls:'badge-out'};
+    if (p.stock <= p.stock_minimo) return {txt:'Stock bajo',cls:'badge-low'};
+    return {txt:'En stock',cls:'badge-ok'};
+  }
+  if (m.nunca) return {txt:'Sin asignar',cls:'badge-na'};
+  if (m.restante <= 0) return {txt:'Agotado aquí',cls:'badge-out'};
+  if (m.restante <= p.stock_minimo) return {txt:'Stock bajo',cls:'badge-low'};
   return {txt:'En stock',cls:'badge-ok'};
 }
 
@@ -425,14 +694,32 @@ function filaProducto(p) {
   // loading="lazy": casi todas las fotos son de sitios externos (Walmart y
   // demás). Sin esto el navegador pedía las ~2,500 de una sola vez al abrir la
   // pantalla, y ahí era donde se trababa. Así solo pide las que se van viendo.
-  return `<tr data-id="${p.id}">
+  // Lo que le queda a mi sucursal: asignado menos vendido. Sin sucursal
+  // propia (Only Enterprises) la columna ni se dibuja.
+  const m = mio(p);
+  const celdaSuc = m ? `<td>
+        <div class="celda-suc${m.restante > 0 ? '' : ' cero'}">${fmtCant(m.restante, porPeso)}</div>
+        <div class="celda-sub">${m.nunca
+          ? (m.vendido ? `sin asignar · vendido ${fmtCant(m.vendido, porPeso)}` : 'sin asignar')
+          : `asignado ${fmtCant(m.asignado, porPeso)} · vendido ${fmtCant(m.vendido, porPeso)}`}</div>
+      </td>` : '';
+  const tagTienda = p.tienda ? `<span class="tag-tienda">${esc(p.tienda)}</span>` : '';
+  // El clic en la fila elige el producto para los paneles de la derecha. Los
+  // controles de dentro (±, editar, borrar) paran el evento para no elegirlo
+  // sin querer al tocarlos.
+  const marcado = seleccionados.has(p.id);
+  return `<tr data-id="${p.id}"${marcado ? ' class="marcado"' : ''} onclick="seleccionar(${p.id})">
+      <td class="col-chk" onclick="event.stopPropagation()">
+        <input type="checkbox" class="chk" ${marcado ? 'checked' : ''} onchange="marcarItem(${p.id}, this.checked)">
+      </td>
       <td>
         ${p.imagen_url ? `<img src="${esc(p.imagen_url)}" alt="" loading="lazy" decoding="async" style="width:36px;height:36px;object-fit:cover;border-radius:6px;border:0.5px solid var(--border);float:left;margin-right:8px" onerror="this.style.display='none'">` : ''}
-        <strong>${esc(p.nombre)}</strong><br><span style="font-size:11px;color:var(--text2)">${esc(p.unidad)}${porPeso ? ' · por peso' : ''}</span>
+        <strong>${esc(p.nombre)}</strong>${tagTienda}<br><span style="font-size:11px;color:var(--text2)">${esc(p.unidad)}${porPeso ? ' · por peso' : ''}</span>
       </td>
       <td class="hide-mobile">${esc(p.categoria)}</td>
       <td>$${p.precio_venta.toLocaleString('es-MX',{minimumFractionDigits:2})}${precioLabel}${descBadge}</td>
-      <td>
+      ${celdaSuc}
+      <td onclick="event.stopPropagation()">
         <div class="stock-adj">
           <button class="sm" onclick="ajustarStock(${p.id},${-paso})" title="${tituloMenos}">−</button>
           <input type="number" class="qty-input" inputmode="decimal" step="${porPeso?'0.001':'1'}" min="0"
@@ -443,7 +730,7 @@ function filaProducto(p) {
         </div>
       </td>
       <td><span class="badge ${e.cls}">${e.txt}</span></td>
-      <td>
+      <td onclick="event.stopPropagation()">
         <button class="sm" onclick="abrirModal(${p.id})" title="Editar">✏️</button>
         <button class="sm danger" onclick="eliminar(${p.id})" title="Eliminar">🗑</button>
       </td>
@@ -453,13 +740,20 @@ function filaProducto(p) {
 function renderTabla() {
   const tbody = document.getElementById('tabla');
   if (!productos.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="empty">Sin productos</td></tr>`;
+    // Que no parezca una pantalla rota: casi siempre es que a esa sucursal
+    // todavía no le han repartido nada.
+    const vacio = (miSucursal && !verTodo)
+      ? `Aquí solo aparece lo que tiene repartido Suc. ${esc(miSucursal)}, y ahora mismo no hay nada.
+         <div style="margin-top:10px"><button class="sm" onclick="alternarVerTodo()">📋 Ver todo el catálogo</button></div>`
+      : 'Sin productos';
+    tbody.innerHTML = `<tr><td colspan="${miSucursal ? 8 : 7}" class="empty">${vacio}</td></tr>`;
     actualizarPie();
     return;
   }
   mostrados = 0;
   tbody.innerHTML = '';
   agregarTanda();
+  actualizarBarraMasiva();
 }
 
 function agregarTanda() {
@@ -472,6 +766,7 @@ function agregarTanda() {
     productos.slice(mostrados, hasta).map(filaProducto).join(''));
   mostrados = hasta;
   actualizarPie();
+  actualizarBarraMasiva();
   revisarPie();
 }
 
@@ -533,10 +828,21 @@ function filtrar() { cargarProductos(); }
 // de esta pantalla. El endpoint ya devuelve el producto actualizado, así que
 // basta con refrescar su propia fila.
 function actualizarFila(p) {
+  // /api/productos/{id}/stock devuelve el producto pelado, sin el reparto por
+  // sucursal: se fusiona para no perderlo (mover stock global no cambia lo
+  // que cada sucursal tiene asignado).
   const i = productos.findIndex(x => x.id === p.id);
-  if (i >= 0) productos[i] = p;
+  if (i >= 0) { productos[i] = Object.assign({}, productos[i], p); p = productos[i]; }
   const fila = document.querySelector(`#tabla tr[data-id="${p.id}"]`);
-  if (fila) fila.outerHTML = filaProducto(p);
+  if (fila) {
+    const estabaElegida = fila.classList.contains('elegido');
+    fila.outerHTML = filaProducto(p);   // filaProducto ya relee `seleccionados`
+    if (estabaElegida) {
+      const nueva = document.querySelector(`#tabla tr[data-id="${p.id}"]`);
+      if (nueva) nueva.classList.add('elegido');
+    }
+  }
+  if (elegidoId === p.id) renderPaneles();
 }
 
 async function ajustarStock(id, cantidad) {
@@ -686,194 +992,506 @@ async function eliminar(id) {
   } catch(e) { toast('Error: ' + e.message, true); }
 }
 
-// ─── ¿Hay existencias en otra sucursal? ─────────────────────────────────────
-// Consulta puntual por nombre o código de barras. El inventario comparado de
-// todas las sucursales es de Only Enterprises; una sesión de sucursal usa esto
-// para saber si el producto que le falta está en otra sucursal de su tienda.
-function abrirBuscarSucursales() {
-  document.getElementById('os-resultados').innerHTML = '';
-  const campo = document.getElementById('os-q');
-  campo.value = document.getElementById('buscar').value.trim();
-  document.getElementById('overlay-otra-suc').classList.add('open');
-  setTimeout(() => campo.focus(), 60);
-  if (campo.value) buscarEnSucursales();
+// ─── Existencias en tus sucursales y envío a otra ───────────────────────────
+// Antes esto eran dos modales: uno para buscar dónde había producto y otro
+// para mandarlo, cada uno con su propio buscador. Ahora son dos paneles que
+// responden a la fila elegida del catálogo: en escritorio viven en la columna
+// derecha y en móvil, en una hoja. El mismo HTML se pinta en los dos sitios,
+// así que dentro se usan clases y no ids (habría duplicados).
+
+function seleccionar(id) {
+  elegidoId = id;
+  document.querySelectorAll('#tabla tr.elegido').forEach(t => t.classList.remove('elegido'));
+  const fila = document.querySelector(`#tabla tr[data-id="${id}"]`);
+  if (fila) fila.classList.add('elegido');
+  renderPaneles();
+  if (!esEscritorio()) {
+    hojaTab('ex');
+    document.getElementById('hoja-suc').classList.add('open');
+  }
 }
 
-function cerrarBuscarSucursales() {
-  document.getElementById('overlay-otra-suc').classList.remove('open');
+function cerrarHoja() {
+  document.getElementById('hoja-suc').classList.remove('open');
 }
 
-async function buscarEnSucursales() {
-  const q = document.getElementById('os-q').value.trim();
-  const cont = document.getElementById('os-resultados');
-  if (!q) { cont.innerHTML = ''; return; }
-  cont.innerHTML = '<div style="padding:1rem;text-align:center;color:var(--text2);font-size:13px">Buscando…</div>';
+function hojaTab(cual) {
+  const ex = cual === 'ex';
+  document.getElementById('hs-ex').style.display = ex ? '' : 'none';
+  document.getElementById('hs-env').style.display = ex ? 'none' : '';
+  document.getElementById('hs-tab-ex').classList.toggle('on', ex);
+  document.getElementById('hs-tab-env').classList.toggle('on', !ex);
+}
+
+// Qué producto está pintado ahora mismo en los paneles. Sirve para no borrar
+// lo que el usuario lleva escrito: el catálogo se recarga solo cada 30
+// segundos, y sin esto el refresco le vaciaba la cantidad a medio teclear.
+let panelPintadoId = null;
+
+function renderPaneles() {
+  const p = productos.find(x => x.id === elegidoId) || null;
+  if (elegidoId && !p) elegidoId = null;   // dejó de estar en el filtro actual
+  const mismoProducto = p && p.id === panelPintadoId;
+  const enCurso = mismoProducto ? leerFormularioEnvio() : null;
+
+  const ex = htmlExistencias(p);
+  const env = htmlEnviar(p);
+  ['pe-cuerpo', 'hs-ex'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = ex; });
+  ['pv-cuerpo', 'hs-env'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = env; });
+  if (enCurso) restaurarFormularioEnvio(enCurso);
+
+  panelPintadoId = p ? p.id : null;
+  const cont = document.getElementById('pe-cont');
+  if (cont) cont.textContent = p ? sucursales.length + (sucursales.length === 1 ? ' sucursal' : ' sucursales') : '';
+}
+
+// Se lee del panel que esté a la vista (en escritorio el de la columna, en
+// móvil el de la hoja); los dos se pintan iguales, así que basta con uno.
+function leerFormularioEnvio() {
+  const c = document.querySelector('#pv-cuerpo .panel-env, #hs-env .panel-env');
+  if (!c) return null;
+  const cant = c.querySelector('.env-cantidad');
+  if (!cant || !cant.value) return null;
+  return { cantidad: cant.value, destino: c.querySelector('.env-destino').value };
+}
+
+function restaurarFormularioEnvio(v) {
+  document.querySelectorAll('#pv-cuerpo .panel-env, #hs-env .panel-env').forEach(c => {
+    const cant = c.querySelector('.env-cantidad');
+    const dest = c.querySelector('.env-destino');
+    if (cant) cant.value = v.cantidad;
+    // Si la sucursal desapareció del select, se deja la que haya por defecto.
+    if (dest && Array.from(dest.options).some(o => o.value === v.destino)) dest.value = v.destino;
+  });
+}
+
+function htmlExistencias(p) {
+  if (!miSucursal) {
+    return `<div class="vacio-panel">Esta sesión ve el negocio completo.<br>El inventario comparado está en <a href="/inventario-sucursales" style="color:var(--blue)">Inventario por sucursal</a>.</div>`;
+  }
+  if (!p) {
+    return `<div class="vacio-panel">Elige un producto del catálogo<br>para ver cuánto queda en cada sucursal.
+      ${sucursales.length ? `<div style="margin-top:12px;font-size:12px">Ves ${sucursales.map(esc).join(', ')}: las sucursales que venden tus mismas tiendas.</div>` : ''}</div>`;
+  }
+  const porPeso = !!p.vendido_por_peso;
+  // La propia primero: es la que se consulta de verdad.
+  const orden = [miSucursal].concat(sucursales.filter(x => x !== miSucursal));
+  const datos = orden.map(suc => Object.assign({ suc }, datosSuc(p, suc)));
+  const tope = Math.max(1, ...datos.map(d => Math.max(d.restante, 0)));
+  const filas = datos.map(d => `<div class="suc-row${d.suc === miSucursal ? ' mia' : ''}">
+      <div class="suc-i">
+        <div class="suc-n">${esc(d.suc)}${d.suc === miSucursal ? '<span class="tag-mia">Tu sucursal</span>' : ''}</div>
+        <div class="suc-s">${d.nunca
+          ? (d.vendido ? `sin asignar · vendido ${fmtCant(d.vendido, porPeso)}` : 'sin asignar')
+          : `asignado ${fmtCant(d.asignado, porPeso)} · vendido ${fmtCant(d.vendido, porPeso)}`}</div>
+        <div class="barra"><i style="width:${Math.round(Math.max(d.restante, 0) / tope * 100)}%"></i></div>
+      </div>
+      <div class="suc-q"><b class="${d.restante > 0 ? '' : 'cero'}">${fmtCant(d.restante, porPeso)}</b><span>${porPeso ? 'kg' : 'disponibles'}</span></div>
+    </div>`).join('');
+  // Aviso de descuadre: hasta ahora nada delataba que hubiera más piezas
+  // repartidas entre sucursales que las que el sistema dice tener.
+  const aviso = p.sobreasignado > 0
+    ? `<div class="aviso-sobre"><span>⚠</span><span><strong>Sobreasignado por ${fmtCant(p.sobreasignado, porPeso)}.</strong>
+        Entre las sucursales hay más repartido que lo que el sistema dice tener. Conviene cuadrar el stock global antes de mover nada.</span></div>`
+    : '';
+  return `<div class="prod-elegido">
+      <div class="n">${esc(p.nombre)}</div>
+      <div class="s">${esc(p.categoria)}${p.marca ? ' · ' + esc(p.marca) : ''}${p.codigo_barras ? ' · ' + esc(p.codigo_barras) : ''}${p.clave ? ' · Clave ' + esc(p.clave) : ''}</div>
+    </div>
+    ${aviso}
+    ${filas}
+    <div class="resumen-glob"><span>Stock global en el sistema</span><span><strong style="color:var(--text)">${fmtCant(p.stock, porPeso)}</strong> · repartido ${fmtCant(p.asignado_total, porPeso)}</span></div>`;
+}
+
+function htmlEnviar(p) {
+  if (!miSucursal) return `<div class="vacio-panel">Entra por una sucursal para poder enviar producto.</div>`;
+  if (!p) return `<div class="vacio-panel">Elige un producto del catálogo para enviarlo a otra sucursal.</div>`;
+  const porPeso = !!p.vendido_por_peso;
+  const disp = Math.max(datosSuc(p, miSucursal).restante, 0);
+  // Solo las sucursales que venden alguna de mis mismas tiendas: son las que
+  // el backend ya deja consultar (sucursales_visibles). Desde Imprenta salen
+  // Jardincito y Plaza, no Reptile ni El Zar, que son otro negocio.
+  const destinos = sucursales.filter(x => x !== miSucursal);
+  const opciones = destinos.map(x => `<option value="${esc(x)}">Suc. ${esc(x)}</option>`).join('');
+  const atajos = [];
+  if (!porPeso) {
+    [1, 5, 10].forEach(n => { if (n < disp) atajos.push(n); });
+  }
+  const chips = disp > 0
+    ? atajos.map(n => `<button class="chip-cant" onclick="ponerCantidad(this,${n})">${n}</button>`).join('') +
+      `<button class="chip-cant" onclick="ponerCantidad(this,${disp})">Todo (${fmtCant(disp, porPeso)})</button>`
+    : '';
+  return `<div class="panel-env">
+    <div class="campo-env" style="padding-top:.75rem">
+      <div class="lbl"><span>Sale de</span><span>fijo</span></div>
+      <div class="campo-fijo">🏪 Suc. ${esc(miSucursal)} — solo puedes mover lo tuyo</div>
+    </div>
+    <div class="campo-env">
+      <div class="lbl"><span>Producto</span><span>${fmtCant(disp, porPeso)} disponible${disp === 1 ? '' : 's'}</span></div>
+      <div class="campo-fijo" style="border-style:solid;color:var(--text)">${esc(p.nombre)}</div>
+    </div>
+    <div class="campo-env">
+      <div class="lbl"><span>Llega a</span></div>
+      <select class="env-destino">${opciones}</select>
+    </div>
+    <div class="campo-env">
+      <div class="lbl"><span>Cantidad</span><span>máx. ${fmtCant(disp, porPeso)}</span></div>
+      <input class="env-cantidad" type="number" inputmode="decimal" min="0" max="${disp}" step="${porPeso ? '0.001' : '1'}" placeholder="0">
+      ${chips ? `<div class="chips-cant">${chips}</div>` : ''}
+    </div>
+    <div class="msg-env" style="display:none"></div>
+    <button class="btn-enviar" onclick="confirmarEnvio(this)"${disp > 0 && destinos.length ? '' : ' disabled'}>${
+      !destinos.length ? 'No hay otra sucursal' : (disp > 0 ? 'Enviar a otra sucursal' : 'No tienes existencias aquí')
+    }</button>
+  </div>`;
+}
+
+/* ── Recibir de otra sucursal ───────────────────────────────────────────
+   El espejo de "Enviar": aquí la sucursal trae a su piso una pieza que está
+   en otra, para poder cobrarla. El buscador va contra el catálogo entero
+   (buscar-para-recibir) y no contra la tabla de la izquierda, porque
+   justamente lo que se busca es algo que la sucursal todavía no tiene —y que
+   muchas veces ni siquiera es de su tienda—. */
+let rcProducto = null;
+let rcBuscando = null;
+
+function abrirRecibir() {
+  rcProducto = null;
+  document.getElementById('rc-buscar').value = '';
+  document.getElementById('rc-resultados').innerHTML = '';
+  document.getElementById('rc-elegido').style.display = 'none';
+  document.getElementById('rc-detalle').style.display = 'none';
+  document.getElementById('rc-cantidad').value = '';
+  document.getElementById('rc-btn').disabled = true;
+  document.getElementById('rc-btn').textContent = 'Recibir';
+  msgRecibir('');
+  document.getElementById('modal-recibir').classList.add('open');
+  document.getElementById('rc-buscar').focus();
+}
+
+function cerrarRecibir() {
+  document.getElementById('modal-recibir').classList.remove('open');
+}
+
+function msgRecibir(texto, error = true) {
+  const m = document.getElementById('rc-msg');
+  m.style.display = texto ? '' : 'none';
+  m.style.background = error ? 'var(--red-bg)' : 'var(--green-bg)';
+  m.style.color = error ? 'var(--red)' : 'var(--green)';
+  m.textContent = texto;
+}
+
+function buscarParaRecibir() {
+  const q = document.getElementById('rc-buscar').value.trim();
+  const cont = document.getElementById('rc-resultados');
+  clearTimeout(rcBuscando);
+  if (q.length < 2) { cont.innerHTML = ''; return; }
+  // Se espera a que deje de teclear: cada búsqueda abre todas las ventas para
+  // calcular lo que queda en cada sucursal, no es gratis.
+  rcBuscando = setTimeout(async () => {
+    cont.innerHTML = '<div class="rc-vacio">Buscando…</div>';
+    try {
+      const d = await fetchJSON('/api/inventario/buscar-para-recibir?q=' + encodeURIComponent(q));
+      if (!d.productos.length) {
+        cont.innerHTML = '<div class="rc-vacio">Ninguna otra sucursal tiene existencias de eso.</div>';
+        return;
+      }
+      cont.innerHTML = d.productos.map(p => `
+        <div class="rc-item" onclick="elegirParaRecibir(${p.id})">
+          <div class="rc-nom">${esc(p.nombre)}${p.de_otra_tienda ? `<span class="rc-ajena">${esc(p.tienda)}</span>` : ''}</div>
+          <div class="rc-meta">${esc(p.categoria || '')}${p.marca ? ' · ' + esc(p.marca) : ''}</div>
+          <div class="rc-sucs">${p.en_sucursales.map(f =>
+            `<span class="rc-tag">${esc(f.sucursal)}: ${fmtCant(f.restante, p.vendido_por_peso)}</span>`).join('')}</div>
+        </div>`).join('');
+      rcEncontrados = d.productos;
+    } catch (e) {
+      cont.innerHTML = '<div class="rc-vacio">No se pudo buscar.</div>';
+    }
+  }, 350);
+}
+
+let rcEncontrados = [];
+
+function elegirParaRecibir(id) {
+  rcProducto = rcEncontrados.find(p => p.id === id);
+  if (!rcProducto) return;
+  document.getElementById('rc-resultados').innerHTML = '';
+  document.getElementById('rc-buscar').value = '';
+  const el = document.getElementById('rc-elegido');
+  el.style.display = '';
+  el.innerHTML = `<div class="rc-elegido">📦 ${esc(rcProducto.nombre)}` +
+    (rcProducto.de_otra_tienda ? `<span class="rc-ajena">${esc(rcProducto.tienda)}</span>` : '') + '</div>';
+  const sel = document.getElementById('rc-origen');
+  sel.innerHTML = rcProducto.en_sucursales.map(f =>
+    `<option value="${esc(f.sucursal)}">Suc. ${esc(f.sucursal)} — quedan ${fmtCant(f.restante, rcProducto.vendido_por_peso)}</option>`).join('');
+  document.getElementById('rc-cantidad').step = rcProducto.vendido_por_peso ? '0.001' : '1';
+  document.getElementById('rc-detalle').style.display = '';
+  document.getElementById('rc-btn').disabled = false;
+  msgRecibir('');
+  actualizarMaximoRecibir();
+}
+
+function maximoRecibir() {
+  if (!rcProducto) return 0;
+  const origen = document.getElementById('rc-origen').value;
+  const fila = rcProducto.en_sucursales.find(f => f.sucursal === origen);
+  return fila ? fila.restante : 0;
+}
+
+function actualizarMaximoRecibir() {
+  const max = maximoRecibir();
+  document.getElementById('rc-max').textContent = '· máx. ' + fmtCant(max, rcProducto && rcProducto.vendido_por_peso);
+  document.getElementById('rc-cantidad').max = max;
+}
+
+async function confirmarRecepcion() {
+  if (!rcProducto) return;
+  const origen = document.getElementById('rc-origen').value;
+  const cantidad = parseFloat(document.getElementById('rc-cantidad').value);
+  const max = maximoRecibir();
+  if (!cantidad || cantidad <= 0) { msgRecibir('Escribe cuánto vas a recibir'); return; }
+  if (cantidad > max) { msgRecibir(`En Suc. ${origen} solo quedan ${fmtCant(max, rcProducto.vendido_por_peso)}`); return; }
+
+  const btn = document.getElementById('rc-btn');
+  btn.disabled = true; btn.textContent = 'Recibiendo…';
   try {
-    const d = await fetchJSON('/api/inventario/buscar-en-sucursales?q=' + encodeURIComponent(q));
-    if (!d.productos.length) {
-      cont.innerHTML = `<div style="padding:1rem;text-align:center;color:var(--text2);font-size:13px">Ningún producto coincide con “${esc(q)}”</div>`;
+    const r = await authFetch('/api/stock-sucursal/trasladar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        producto_id: rcProducto.id,
+        sucursal_origen: origen,
+        sucursal_destino: miSucursal,
+        cantidad
+      })
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      msgRecibir(typeof d.detail === 'string' ? d.detail : 'No se pudo recibir');
+      btn.disabled = false; btn.textContent = 'Recibir';
       return;
     }
-    cont.innerHTML = d.productos.map(p => {
-      const conStock = p.por_sucursal.filter(s => s.restante > 0);
-      const cant = n => p.vendido_por_peso ? n.toFixed(3) + ' kg' : n;
-      const tags = conStock.length
-        ? conStock.map(s => `<span style="display:inline-block;background:var(--green-bg);color:var(--green);border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600;margin:2px 4px 2px 0">🏪 ${esc(s.sucursal)}: ${cant(s.restante)}</span>`).join('')
-        : `<span style="display:inline-block;background:var(--bg);color:var(--text2);border-radius:20px;padding:3px 10px;font-size:12px;margin:2px 0">Sin existencias asignadas · global: ${cant(p.stock_global)}</span>`;
-      return `<div style="padding:.75rem 0;border-bottom:0.5px solid var(--border)">
-        <div style="font-weight:600;font-size:14px">${esc(p.nombre)}</div>
-        <div style="font-size:11px;color:var(--text2);margin-bottom:6px">${esc(p.categoria)}${p.marca ? ' · ' + esc(p.marca) : ''}${p.codigo_barras ? ' · ' + esc(p.codigo_barras) : ''}${p.clave ? ' · Clave: ' + esc(p.clave) : ''}</div>
-        <div>${tags}</div>
-      </div>`;
-    }).join('');
+    cerrarRecibir();
+    toast(`📥 ${fmtCant(cantidad, rcProducto.vendido_por_peso)} de ${rcProducto.nombre} recibido de Suc. ${origen}`);
+    await Promise.all([cargarProductos(), cargarResumen()]);
   } catch (e) {
-    cont.innerHTML = '<div style="padding:1rem;text-align:center;color:var(--red);font-size:13px">No se pudo consultar</div>';
+    msgRecibir('Error de conexión');
+    btn.disabled = false; btn.textContent = 'Recibir';
   }
 }
 
-// ─── Enviar producto a otra sucursal ────────────────────────────────────────
-// El inventario comparado y los traslados libres son de Only Enterprises; una
-// sucursal solo puede mandar lo suyo, así que el origen es siempre su propia
-// sucursal (el backend lo exige igual) y aquí ni se elige.
-let envProducto = null;
-
-(function mostrarBotonEnviar() {
-  const s = getSesion();
-  // Catálogo exclusivo (ej. El Zar del LED): es la única sucursal que vende
-  // su tienda, así que no hay "otra sucursal" con la que buscar o trasladar.
-  if (s && s.catalogo_exclusivo) {
-    document.getElementById('btn-buscar-suc').style.display = 'none';
-    return;
-  }
-  if (s && !sesionVeTodo()) document.getElementById('btn-enviar-suc').style.display = '';
-})();
-
-async function abrirEnviarSucursal() {
-  const s = getSesion();
-  envProducto = null;
-  document.getElementById('env-origen').textContent = 'Suc. ' + s.sucursal;
-  document.getElementById('env-q').value = '';
-  document.getElementById('env-resultados').innerHTML = '';
-  document.getElementById('env-form').style.display = 'none';
-  document.getElementById('env-msg').style.display = 'none';
-  document.getElementById('env-btn').disabled = true;
-  document.getElementById('overlay-enviar-suc').classList.add('open');
-
-  try {
-    const r = await fetch('/api/sucursales');
-    const sucursales = await r.json();
-    document.getElementById('env-destino').innerHTML = sucursales
-      .filter(x => x.nombre !== s.sucursal)
-      .map(x => `<option value="${esc(x.nombre)}">Suc. ${esc(x.nombre)}</option>`).join('');
-  } catch (e) { /* si falla, el select queda vacío y el envío avisa */ }
-
-  setTimeout(() => document.getElementById('env-q').focus(), 60);
+function ponerCantidad(btn, n) {
+  const campo = btn.closest('.panel-env').querySelector('.env-cantidad');
+  campo.value = n;
+  campo.focus();
 }
 
-function cerrarEnviarSucursal() {
-  document.getElementById('overlay-enviar-suc').classList.remove('open');
-}
+async function confirmarEnvio(btn) {
+  const cont = btn.closest('.panel-env');
+  const msg = cont.querySelector('.msg-env');
+  const mostrarError = t => { msg.style.display = ''; msg.style.color = 'var(--red)'; msg.textContent = t; };
+  const restaurar = () => { btn.disabled = false; btn.textContent = 'Enviar a otra sucursal'; };
 
-// Reutiliza la búsqueda de existencias, que ya devuelve lo que resta en cada
-// sucursal visible; de ahí se toma solo lo de la propia.
-async function buscarParaEnviar() {
-  const q = document.getElementById('env-q').value.trim();
-  const cont = document.getElementById('env-resultados');
-  if (!q) { cont.innerHTML = ''; return; }
-  cont.innerHTML = '<div style="padding:1rem;text-align:center;color:var(--text2);font-size:13px">Buscando…</div>';
-  try {
-    const d = await fetchJSON('/api/inventario/buscar-en-sucursales?q=' + encodeURIComponent(q));
-    if (!d.productos.length) {
-      cont.innerHTML = `<div style="padding:1rem;text-align:center;color:var(--text2);font-size:13px">Ningún producto coincide con “${esc(q)}”</div>`;
-      return;
-    }
-    const mia = getSesion().sucursal;
-    cont.innerHTML = d.productos.map(p => {
-      const propio = p.por_sucursal.find(x => x.sucursal === mia) || {restante: 0};
-      const cant = p.vendido_por_peso ? propio.restante.toFixed(3) + ' kg' : propio.restante;
-      const color = propio.restante > 0 ? 'var(--green)' : 'var(--text2)';
-      return `<div onclick="elegirProductoEnvio(${p.id})" style="padding:.6rem 0;border-bottom:0.5px solid var(--border);cursor:pointer">
-        <div style="font-weight:600;font-size:14px">${esc(p.nombre)}</div>
-        <div style="font-size:11px;color:var(--text2)">${esc(p.categoria)}${p.marca ? ' · ' + esc(p.marca) : ''}</div>
-        <div style="font-size:12px;color:${color};font-weight:600">Tienes ${cant} en Suc. ${esc(mia)}</div>
-      </div>`;
-    }).join('');
-    // Se guardan para no volver a pedirlos al elegir uno
-    cont.dataset.productos = JSON.stringify(d.productos);
-  } catch (e) {
-    cont.innerHTML = '<div style="padding:1rem;text-align:center;color:var(--red);font-size:13px">No se pudo consultar</div>';
-  }
-}
-
-function elegirProductoEnvio(id) {
-  const cont = document.getElementById('env-resultados');
-  const lista = JSON.parse(cont.dataset.productos || '[]');
-  const p = lista.find(x => x.id === id);
-  if (!p) return;
-  const mia = getSesion().sucursal;
-  const propio = p.por_sucursal.find(x => x.sucursal === mia) || {restante: 0};
-  envProducto = {id: p.id, nombre: p.nombre, disponible: propio.restante, porPeso: p.vendido_por_peso};
-
-  document.getElementById('env-prod-nombre').textContent = p.nombre;
-  document.getElementById('env-prod-stock').textContent =
-    'Disponible en Suc. ' + mia + ': ' + (p.vendido_por_peso ? propio.restante.toFixed(3) + ' kg' : propio.restante);
-  const inp = document.getElementById('env-cantidad');
-  inp.step = p.vendido_por_peso ? '0.001' : '1';
-  inp.max = propio.restante;
-  inp.value = '';
-  document.getElementById('env-form').style.display = '';
-  document.getElementById('env-btn').disabled = false;
-  document.getElementById('env-msg').style.display = 'none';
-  cont.innerHTML = '';
-  setTimeout(() => inp.focus(), 60);
-}
-
-async function confirmarEnvio() {
-  const msg = document.getElementById('env-msg');
-  const mostrarError = t => {
-    msg.style.display = '';
-    msg.style.color = 'var(--red)';
-    msg.textContent = t;
-  };
-  if (!envProducto) { mostrarError('Elige primero un producto'); return; }
-  const cantidad = parseFloat(document.getElementById('env-cantidad').value);
-  const destino = document.getElementById('env-destino').value;
+  const p = productos.find(x => x.id === elegidoId);
+  if (!p) { mostrarError('Elige primero un producto'); return; }
+  const porPeso = !!p.vendido_por_peso;
+  const disp = Math.max(datosSuc(p, miSucursal).restante, 0);
+  const cantidad = parseFloat(cont.querySelector('.env-cantidad').value);
+  const destino = cont.querySelector('.env-destino').value;
   if (!cantidad || cantidad <= 0) { mostrarError('Escribe cuánto vas a enviar'); return; }
-  if (cantidad > envProducto.disponible) {
-    mostrarError('Solo tienes ' + envProducto.disponible + ' disponible(s) en tu sucursal');
-    return;
-  }
+  if (cantidad > disp) { mostrarError(`Solo tienes ${fmtCant(disp, porPeso)} en Suc. ${miSucursal}`); return; }
   if (!destino) { mostrarError('No hay otra sucursal a la que enviar'); return; }
 
-  const btn = document.getElementById('env-btn');
   btn.disabled = true;
   btn.textContent = 'Enviando…';
   try {
+    // authFetch pelado y no fetchJSON: aquí interesa leer el detalle del error
+    // que manda el backend (stock insuficiente, sucursal que no es la tuya…).
     const r = await authFetch('/api/stock-sucursal/trasladar', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        producto_id: envProducto.id,
-        sucursal_origen: getSesion().sucursal,
+        producto_id: p.id,
+        sucursal_origen: miSucursal,
         sucursal_destino: destino,
-        cantidad: cantidad,
+        cantidad
       })
     });
     const d = await r.json();
     if (!r.ok) {
       mostrarError(typeof d.detail === 'string' ? d.detail : 'No se pudo enviar');
-      btn.disabled = false; btn.textContent = 'Enviar';
+      restaurar();
       return;
     }
-    cerrarEnviarSucursal();
-    toast(`✓ ${cantidad} de ${envProducto.nombre} enviado a Suc. ${destino}`);
+    cerrarHoja();
+    toast(`✓ ${fmtCant(cantidad, porPeso)} de ${p.nombre} → Suc. ${destino}`);
     await Promise.all([cargarProductos(), cargarResumen()]);
   } catch (e) {
     mostrarError('Error de conexión');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Enviar';
+    restaurar();
   }
 }
+
+// ─── Alta masiva: sumar piezas a varios productos de una vez ────────────────
+// Marcar producto por producto y teclear la cantidad en cada fila era lo más
+// lento de esta pantalla cuando llega mercancía. La selección vive en el Set
+// `seleccionados` y sobrevive a los repintados y a los cambios de filtro: se
+// puede buscar "AF", marcar tres, buscar "Help", marcar dos más y aplicar a los
+// cinco de golpe.
+
+function marcarItem(id, on) {
+  if (on) seleccionados.add(id); else seleccionados.delete(id);
+  const fila = document.querySelector(`#tabla tr[data-id="${id}"]`);
+  if (fila) fila.classList.toggle('marcado', on);
+  actualizarBarraMasiva();
+}
+
+// La casilla de la cabecera trabaja sobre lo que se está viendo, no sobre los
+// 2,800 del catálogo: marcar sin querer todo el inventario y sumarle piezas
+// sería un destrozo difícil de deshacer.
+function alternarTodos(chk) {
+  const on = chk.checked;
+  document.querySelectorAll('#tabla tr[data-id]').forEach(t => {
+    const id = Number(t.dataset.id);
+    if (on) seleccionados.add(id); else seleccionados.delete(id);
+    t.classList.toggle('marcado', on);
+    const c = t.querySelector('.chk');
+    if (c) c.checked = on;
+  });
+  actualizarBarraMasiva();
+}
+
+function limpiarSeleccion() {
+  seleccionados.clear();
+  document.querySelectorAll('#tabla tr[data-id]').forEach(t => {
+    t.classList.remove('marcado');
+    const c = t.querySelector('.chk');
+    if (c) c.checked = false;
+  });
+  const err = document.getElementById('bm-errores');
+  err.className = '';
+  err.innerHTML = '';
+  actualizarBarraMasiva();
+}
+
+function actualizarBarraMasiva() {
+  const n = seleccionados.size;
+  document.getElementById('barra-masiva').classList.toggle('abierta', n > 0);
+  // En móvil la barra va fija al fondo y taparía las últimas filas.
+  document.body.classList.toggle('masiva-abierta', n > 0);
+  document.getElementById('bm-n').textContent = n;
+  document.getElementById('bm-n-txt').textContent = n === 1 ? 'seleccionado' : 'seleccionados';
+
+  const filas = Array.from(document.querySelectorAll('#tabla tr[data-id]'));
+  const todas = filas.length > 0 && filas.every(t => seleccionados.has(Number(t.dataset.id)));
+  const chk = document.getElementById('chk-todos');
+  if (chk) {
+    chk.checked = todas;
+    chk.indeterminate = !todas && filas.some(t => seleccionados.has(Number(t.dataset.id)));
+  }
+}
+
+function elegirDestinoMasivo(d) {
+  if (d === 'sucursal' && !miSucursal) return;
+  destinoMasivo = d;
+  document.querySelectorAll('#bm-destino button').forEach(b => b.classList.toggle('on', b.dataset.d === d));
+  document.getElementById('bm-cantidad').focus();
+}
+
+async function aplicarMasivo() {
+  const cantidad = parseFloat(document.getElementById('bm-cantidad').value);
+  const ids = Array.from(seleccionados);
+  const err = document.getElementById('bm-errores');
+  err.className = '';
+  err.innerHTML = '';
+
+  if (!ids.length) { toast('No hay productos marcados', true); return; }
+  if (!cantidad) { toast('Escribe cuántas piezas sumar o restar', true); return; }
+  if (ids.length > 500) { toast('Máximo 500 productos por vez', true); return; }
+
+  // Con pocos productos se ve de un vistazo lo que se marcó; con muchos, no.
+  if (ids.length > 25) {
+    const verbo = cantidad > 0 ? `sumar ${cantidad}` : `restar ${Math.abs(cantidad)}`;
+    const donde = destinoMasivo === 'global'
+      ? 'al stock global' : `a lo repartido a Suc. ${miSucursal}`;
+    const ok = await confirmarPersonalizado(
+      `Se va a ${verbo} pieza(s) ${donde} de ${ids.length} productos.`, '¿Aplicar a todos?');
+    if (!ok) return;
+  }
+
+  const btn = document.getElementById('bm-aplicar');
+  btn.disabled = true;
+  btn.textContent = 'Aplicando…';
+  try {
+    const r = await fetchJSON('/api/inventario/alta-masiva', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ producto_ids: ids, cantidad, destino: destinoMasivo })
+    });
+    toast(`✓ ${r.aplicados} producto(s) actualizados` +
+          (r.errores.length ? ` · ${r.errores.length} sin aplicar` : ''));
+
+    // Los que fallaron se quedan marcados, para poder corregir y reintentar
+    // solo esos sin volver a buscarlos uno por uno.
+    seleccionados.clear();
+    r.errores.forEach(e => { if (e.id) seleccionados.add(e.id); });
+    if (r.errores.length) {
+      err.className = 'hay';
+      err.innerHTML = `<strong>Sin aplicar (${r.errores.length}):</strong> ` +
+        r.errores.slice(0, 6).map(e => `${esc(e.nombre || '#' + e.id)} — ${esc(e.motivo)}`).join(' · ') +
+        (r.errores.length > 6 ? ' …' : '');
+    } else {
+      document.getElementById('bm-cantidad').value = '';
+    }
+    await Promise.all([cargarProductos(), cargarResumen()]);
+  } catch (e) {
+    toast('Error: ' + e.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Aplicar';
+  }
+}
+
+// ─── Pestañas de tienda ─────────────────────────────────────────────────────
+// Una sucursal que vende varias tiendas (Imprenta = Only Reef + Only Garden)
+// puede mirar cada catálogo por separado. Los cubos no se traslapan: "General"
+// es el catálogo compartido, el que no tiene tienda asignada.
+function renderTiendas() {
+  const s = getSesion();
+  const tiendas = (s && s.tienda) || [];
+  const cont = document.getElementById('tiendas-tabs');
+  if (!cont || tiendas.length < 2) return;
+  cont.style.display = '';
+  const botones = [{ v: '', t: 'Todas' }].concat(tiendas.map(t => ({ v: t, t })));
+  if (!(s && s.catalogo_exclusivo)) botones.push({ v: '__general__', t: 'General' });
+  cont.innerHTML = botones.map(b =>
+    `<button class="tienda-tab${b.v === tiendaActiva ? ' on' : ''}" data-v="${esc(b.v)}" onclick="elegirTienda('${b.v}')">${esc(b.t)}<span class="n"></span></button>`
+  ).join('');
+}
+
+function pintarConteosTienda(conteos) {
+  document.querySelectorAll('#tiendas-tabs .tienda-tab').forEach(b => {
+    const n = conteos[b.dataset.v];
+    b.querySelector('.n').textContent = n === undefined ? '' : n;
+    b.classList.toggle('cero', n === 0);
+  });
+}
+
+function elegirTienda(v) {
+  tiendaActiva = v;
+  document.querySelectorAll('#tiendas-tabs .tienda-tab').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  cargarProductos();
+}
+
+function alternarVerTodo() {
+  verTodo = !verTodo;
+  const b = document.getElementById('btn-ver-todo');
+  b.classList.toggle('activo', verTodo);
+  b.textContent = verTodo ? '🏪 Solo lo de mi sucursal' : '📋 Ver todo el catálogo';
+  // El resumen de arriba tiene que contar lo mismo que la tabla de abajo.
+  Promise.all([cargarProductos(), cargarResumen()]);
+}
+
 
 function toast(msg, error = false) {
   const t = document.getElementById('toast');
@@ -891,12 +1509,20 @@ async function refresh() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  renderTiendas();
   refresh();
   setInterval(refresh, 30000);
 });
 
+// Al cruzar el umbral de escritorio, los paneles cambian de sitio: la hoja se
+// cierra y la columna derecha aparece (o al revés).
+window.addEventListener('resize', () => {
+  if (esEscritorio()) cerrarHoja();
+  ajustarUIsucursal();
+});
+
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { cerrarModal(); cerrarEscaner(); cerrarDescuentoCategoria(); }
+  if (e.key === 'Escape') { cerrarModal(); cerrarEscaner(); cerrarDescuentoCategoria(); cerrarHoja(); cerrarRecibir(); }
 });
 
 // ─── Descuento por categoría ─────────────────────────────────────────────────
@@ -945,7 +1571,7 @@ async function aplicarDescuentoCategoria() {
 // ─── Escáner de código de barras (ZXing) ───────────────────────────────────
 let zxingStream = null;
 let scanLoop = null;
-let scanModo = 'buscar'; // 'buscar' = buscar producto existente | 'form' = llenar campo del formulario | 'otra-suc' = buscar existencias en otras sucursales | 'enviar' = elegir producto a enviar a otra sucursal
+let scanModo = 'buscar'; // 'buscar' = buscar producto en el catálogo | 'form' = llenar el campo del formulario
 
 async function abrirEscaner(modo) {
   scanModo = modo;
@@ -1065,23 +1691,6 @@ async function onCodigoEscaneado(codigo) {
     return;
   }
 
-  // Modo "otra-suc": el código va al buscador de existencias en otras
-  // sucursales, que ya está abierto detrás del escáner.
-  if (scanModo === 'otra-suc') {
-    document.getElementById('os-q').value = codigo;
-    await cerrarEscaner();
-    await buscarEnSucursales();
-    return;
-  }
-
-  // Modo "enviar": igual, pero para el modal de enviar a otra sucursal.
-  if (scanModo === 'enviar') {
-    document.getElementById('env-q').value = codigo;
-    await cerrarEscaner();
-    await buscarParaEnviar();
-    return;
-  }
-
   // Modo "buscar": detener loop y consultar producto
   if (scanLoop) { clearInterval(scanLoop); scanLoop = null; }
   const resultDiv = document.getElementById('scan-result');
@@ -1095,6 +1704,9 @@ async function onCodigoEscaneado(codigo) {
     document.getElementById('buscar').value = p.nombre;
     await cerrarEscaner();
     await cargarProductos();
+    // Escanear ya deja el producto elegido: es lo que se buscaba al escanear
+    // desde los modales de existencias y envío que esto sustituye.
+    if (productos.some(x => x.id === p.id)) seleccionar(p.id);
   } catch (e) {
     resultDiv.style.background = 'var(--red-bg)';
     resultDiv.style.color = 'var(--red)';

@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException, Query, Header, Body
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse, Response
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_, func
+from sqlalchemy import and_, or_, func, exists
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
@@ -21,7 +21,8 @@ from database import CorteCaja
 from schemas import (
     ProductoCreate, ProductoUpdate, ProductoOut, AjusteStock,
     AutorizarDescuento, RegistrarVenta, CrearUsuario, CambiarPassword,
-    Login, LogoutReq, CrearSucursal, DescuentoCategoria, AsignarStockSucursal, TrasladoStock)
+    Login, LogoutReq, CrearSucursal, DescuentoCategoria, AsignarStockSucursal, TrasladoStock,
+    AltaMasivaStock)
 from schemas import CrearTienda, ClasificarProductosMasivo, EditarSucursal
 from schemas import CrearCliente, CrearPagoCredito, LiquidarCuenta
 from schemas import CrearGasto
@@ -233,6 +234,20 @@ def validar_tiendas(lista: Optional[List[str]], db: Session):
         raise HTTPException(status_code=400, detail=f"Tienda(s) desconocida(s): {', '.join(desconocidas)}")
 
 
+def recibido_en_sucursal(sucursal: str):
+    """Condición SQL: este producto tiene piezas repartidas a esa sucursal.
+
+    Correlacionada con Producto, así que se puede meter en cualquier query de
+    productos sin pasar la sesión de base de datos."""
+    return exists().where(
+        and_(
+            StockSucursal.producto_id == Producto.id,
+            StockSucursal.sucursal == sucursal,
+            StockSucursal.cantidad > 0,
+        )
+    )
+
+
 def aplicar_filtro_tienda(query, sesion: Optional[Sesion]):
     """Restringe un query de Producto a la(s) tienda(s) activa(s) de la sesión.
     Sin sesión, o sesión sin tienda activa (ej. Only Enterprises) -> sin restricción.
@@ -240,13 +255,22 @@ def aplicar_filtro_tienda(query, sesion: Optional[Sesion]):
     visibles -es el catálogo general compartido entre Only Reef/Garden/
     Reptile/Pets-, salvo que la sucursal sea de catálogo exclusivo (un
     negocio sin relación con las demás, ej. El Zar del LED): ahí solo se ven
-    los productos de su(s) propia(s) tienda(s)."""
+    los productos de su(s) propia(s) tienda(s).
+
+    Excepción, y es la que hace útil recibir producto: lo que una sucursal
+    tiene repartido se ve siempre, aunque sea de otra tienda. Si a Reptile le
+    mandan una pieza de Only Garden para vender, tiene que poder encontrarla
+    en su inventario y cobrarla en caja; sin esto quedaba registrada a su
+    nombre pero invisible para ella."""
     if sesion and sesion.tienda:
         tiendas_activas = texto_a_tiendas(sesion.tienda)
         if sesion.catalogo_exclusivo:
-            query = query.filter(Producto.tienda.in_(tiendas_activas))
+            cond = Producto.tienda.in_(tiendas_activas)
         else:
-            query = query.filter(or_(Producto.tienda.is_(None), Producto.tienda.in_(tiendas_activas)))
+            cond = or_(Producto.tienda.is_(None), Producto.tienda.in_(tiendas_activas))
+        if sesion.sucursal:
+            cond = or_(cond, recibido_en_sucursal(sesion.sucursal))
+        query = query.filter(cond)
     return query
 
 
@@ -278,6 +302,43 @@ def requerir_sucursal_operativa(sesion: Sesion) -> str:
             detail="Only Enterprises no puede hacer ventas ni devoluciones; entra desde una sucursal.",
         )
     return restriccion
+
+
+def filtrar_asignado_a_mi_sucursal(query, db: Session, sesion: Optional[Sesion], ver_todo: bool = False):
+    """Deja en el query solo los productos repartidos a la sucursal de la sesión.
+
+    El inventario de una sucursal es lo que tiene en su piso, no el catálogo
+    del negocio: por eso /inventario filtra así por omisión. Se mira lo
+    *asignado* (stock_sucursal > 0) y no lo que resta, para que un producto que
+    la sucursal agotó siga a la vista —que es justo cuando hay que reponerlo—.
+
+    Sin efecto para Only Enterprises, que entra sin tienda y no tiene una
+    sucursal propia, ni cuando se pide ver el catálogo entero."""
+    mia = sesion.sucursal if (sesion and sesion.tienda) else None
+    if not mia or ver_todo:
+        return query
+    return query.filter(
+        Producto.id.in_(
+            db.query(StockSucursal.producto_id).filter(
+                StockSucursal.sucursal == mia, StockSucursal.cantidad > 0
+            )
+        )
+    )
+
+
+def sucursales_operativas(db: Session) -> List[str]:
+    """Las sucursales que son piso de venta, en su orden de siempre.
+
+    Only Enterprises está en la tabla `sucursales` porque desde ahí se inicia
+    sesión para administrar el negocio entero, pero no es una tienda: no tiene
+    mostrador, no se le reparte producto y no debe salir en los filtros de
+    inventario ni como destino de un traslado. Se reconoce porque no tiene
+    ninguna tienda asignada."""
+    return [
+        s.nombre
+        for s in db.query(Sucursal).order_by(Sucursal.orden, Sucursal.nombre).all()
+        if texto_a_tiendas(s.tiendas)
+    ]
 
 
 def sucursales_visibles(db: Session, sesion: Optional[Sesion]) -> Optional[List[str]]:
@@ -490,12 +551,18 @@ def tiendas_clasificar_page():
 
 # ─── Resumen / dashboard ───────────────────────────────────────────────────
 @app.get("/api/resumen")
-def resumen(sesion: Optional[Sesion] = Depends(sesion_opcional), db: Session = Depends(get_db)):
-    # Mismo alcance que /api/productos: sin esto, el resumen contaba TODO el
-    # catálogo sin importar la sesión, así que una sucursal de catálogo
+def resumen(
+    ver_todo: bool = Query(False, description="Contar el catálogo entero, no solo lo repartido a mi sucursal"),
+    sesion: Optional[Sesion] = Depends(sesion_opcional),
+    db: Session = Depends(get_db),
+):
+    # Mismo alcance que la tabla de /inventario: sin esto, el resumen contaba
+    # TODO el catálogo sin importar la sesión, así que una sucursal de catálogo
     # exclusivo (El Zar del LED) veía el total de todo el negocio arriba y
-    # solo lo suyo en la lista de abajo -contradictorio-.
+    # solo lo suyo en la lista de abajo -contradictorio-. Por eso `ver_todo`
+    # viaja también aquí: los dos números tienen que hablar de lo mismo.
     base = aplicar_filtro_tienda(db.query(Producto), sesion)
+    base = filtrar_asignado_a_mi_sucursal(base, db, sesion, ver_todo)
     total = base.count()
     valor = base.with_entities(func.sum(Producto.precio_venta * Producto.stock)).scalar() or 0
     stock_bajo = base.filter(
@@ -675,6 +742,9 @@ def stock_sucursal(sucursal: str, sesion: Sesion = Depends(requerir_gerente), db
 def asignar_stock(data: AsignarStockSucursal, sesion: Sesion = Depends(requerir_gerente), db: Session = Depends(get_db)):
     # No se asigna stock a una sucursal cuyo inventario ni siquiera se ve
     verificar_sucursal_visible(db, sesion, data.sucursal)
+    # Ni a una que no es piso de venta (Only Enterprises): no tiene dónde ponerlo
+    if data.sucursal not in sucursales_operativas(db):
+        raise HTTPException(status_code=400, detail=f"{data.sucursal} no es una sucursal con inventario propio")
 
     # Verificar que el producto existe y tiene suficiente stock global
     p = db.query(Producto).filter(Producto.id == data.producto_id).first()
@@ -716,15 +786,24 @@ def trasladar_stock(data: TrasladoStock, sesion: Sesion = Depends(requerir_geren
     if data.sucursal_origen == data.sucursal_destino:
         raise HTTPException(status_code=400, detail="La sucursal de origen y destino no pueden ser la misma")
 
-    # Una sesión de sucursal solo saca de su propio inventario — ni siquiera de
-    # otra de su misma tienda, que puede consultar pero no administrar. El
-    # destino, en cambio, puede ser cualquiera: mandar producto a otra tienda
-    # es una operación física legítima y no revela su inventario.
+    operativas = sucursales_operativas(db)
+    for cual in (data.sucursal_origen, data.sucursal_destino):
+        if cual not in operativas:
+            raise HTTPException(status_code=400, detail=f"{cual} no es una sucursal con inventario propio")
+
+    # Una sesión de sucursal tiene que ser parte del movimiento: o manda algo
+    # suyo (envía), o lo mete en su propio piso (recibe). Lo que no puede es
+    # mover producto entre dos sucursales ajenas; eso es de Only Enterprises.
+    #
+    # Recibir es el caso de "me llegó una pieza de otra tienda y la tengo que
+    # vender hoy": el origen puede ser cualquier sucursal, también de otra
+    # tienda, porque si no, la pieza no habría forma de meterla al inventario
+    # de quien la va a cobrar.
     restriccion = sucursal_restriccion(sesion)
-    if restriccion is not None and data.sucursal_origen != restriccion:
+    if restriccion is not None and restriccion not in (data.sucursal_origen, data.sucursal_destino):
         raise HTTPException(
             status_code=403,
-            detail=f"Solo puedes enviar producto desde tu sucursal ({restriccion})",
+            detail=f"Solo puedes mover producto desde o hacia tu sucursal ({restriccion})",
         )
 
     p = db.query(Producto).filter(Producto.id == data.producto_id).first()
@@ -1285,14 +1364,18 @@ def inventario_por_sucursal(sesion: Sesion = Depends(requerir_enterprise), db: S
 
     # Solo sucursales actualmente registradas (ignorar las borradas que aparecen en ventas),
     # y de esas, únicamente las que esta sesión puede ver (las de su misma tienda).
+    # Only Enterprises queda fuera: administra, pero no tiene inventario propio.
+    operativas = sucursales_operativas(db)
     visibles = sucursales_visibles(db, sesion)
-    sucursales = sucursales_reg if visibles is None else [s for s in sucursales_reg if s in visibles]
+    sucursales = operativas if visibles is None else [s for s in operativas if s in visibles]
 
     resultado = []
     for p in productos:
         v_por_suc = vendido.get(p.id, {})
         a_por_suc = asignado.get(p.id, {})
-        # Solo suma asignaciones de sucursales activas
+        # Solo suma asignaciones de sucursales activas. Se mira contra todas
+        # las registradas y no solo las operativas: si alguna quedó sin tiendas
+        # con producto ya repartido, ese producto sigue comprometido.
         total_asignado = sum(
             cant for suc_id, cant in a_por_suc.items() if suc_id in sucursales_reg
         )
@@ -1317,7 +1400,83 @@ def inventario_por_sucursal(sesion: Sesion = Depends(requerir_enterprise), db: S
             },
         })
 
-    return {"sucursales": sucursales, "productos": resultado, "sucursales_registradas": sucursales_reg}
+    return {"sucursales": sucursales, "productos": resultado, "sucursales_registradas": operativas}
+
+
+@app.get("/api/inventario/buscar-para-recibir")
+def buscar_para_recibir(
+    q: str = Query(..., min_length=1, description="Nombre o código de barras"),
+    sesion: Sesion = Depends(requerir_gerente),
+    db: Session = Depends(get_db),
+):
+    """Qué puede traerse una sucursal desde las demás, para poder venderlo aquí.
+
+    A diferencia de `buscar-en-sucursales`, busca en el catálogo **entero**, sin
+    filtro de tienda: el caso que resuelve es justo el contrario —traer una
+    pieza de otra tienda (Reptile pidiendo algo de Only Garden)— y si se
+    filtrara por tienda no aparecería nada que traer.
+
+    Solo devuelve productos que de verdad le quedan a alguna otra sucursal
+    (asignado − vendido > 0), con cuánto le queda a cada una: es lo que hace
+    falta para elegir de dónde sacarlo y no pedir más de lo que hay.
+    """
+    termino = q.strip()
+    mia = sesion.sucursal if sesion.tienda else None
+    operativas = sucursales_operativas(db)
+    otras = [s for s in operativas if s != mia]
+    if not termino or not otras:
+        return {"sucursal": mia, "sucursales": otras, "productos": []}
+
+    productos = db.query(Producto).filter(
+        or_(
+            Producto.nombre.ilike(f"%{termino}%"),
+            Producto.clave.ilike(f"%{termino}%"),
+            Producto.codigo_barras == termino,
+        )
+    ).order_by(Producto.nombre).limit(25).all()
+    if not productos:
+        return {"sucursal": mia, "sucursales": otras, "productos": []}
+
+    ids = {p.id for p in productos}
+
+    asignado: dict = {}
+    for a in db.query(StockSucursal).filter(StockSucursal.producto_id.in_(ids)).all():
+        asignado.setdefault(a.producto_id, {})[a.sucursal] = a.cantidad
+
+    # Lo vendido sale del detalle de cada venta, que es JSON: hay que abrirlas.
+    vendido: dict = {}
+    for v in db.query(Venta).filter(Venta.sucursal.in_(otras)).all():
+        for it in json.loads(v.detalle_json):
+            pid = it.get("producto_id")
+            if pid in ids:
+                por_suc = vendido.setdefault(pid, {})
+                por_suc[v.sucursal] = por_suc.get(v.sucursal, 0) + it.get("cantidad", 0)
+
+    resultado = []
+    for p in productos:
+        a_por_suc = asignado.get(p.id, {})
+        v_por_suc = vendido.get(p.id, {})
+        filas = []
+        for suc in otras:
+            restante = round(a_por_suc.get(suc, 0) - v_por_suc.get(suc, 0), 3)
+            if restante > 0:
+                filas.append({"sucursal": suc, "restante": restante})
+        if not filas:
+            continue
+        resultado.append({
+            "id": p.id,
+            "nombre": p.nombre,
+            "categoria": p.categoria,
+            "marca": p.marca,
+            "tienda": p.tienda,
+            "unidad": p.unidad,
+            "vendido_por_peso": bool(p.vendido_por_peso),
+            "de_otra_tienda": bool(
+                p.tienda and sesion.tienda and p.tienda not in texto_a_tiendas(sesion.tienda)
+            ),
+            "en_sucursales": filas,
+        })
+    return {"sucursal": mia, "sucursales": otras, "productos": resultado}
 
 
 @app.get("/api/inventario/buscar-en-sucursales")
@@ -1336,7 +1495,8 @@ def buscar_en_sucursales(
 
     visibles = sucursales_visibles(db, sesion)
     if visibles is None:
-        visibles = [s.nombre for s in db.query(Sucursal).order_by(Sucursal.orden, Sucursal.nombre).all()]
+        # Sin restricción (Only Enterprises): todas las que son piso de venta.
+        visibles = sucursales_operativas(db)
 
     productos = db.query(Producto).filter(
         or_(
@@ -1389,6 +1549,255 @@ def buscar_en_sucursales(
             "por_sucursal": filas,
         })
     return {"sucursales": visibles, "productos": resultado}
+
+
+# ─── El catálogo, con lo que tiene cada sucursal ────────────────────────────
+@app.get("/api/inventario/catalogo-sucursal")
+def catalogo_sucursal(
+    q: Optional[str] = Query(None, description="Buscar por nombre, categoría o clave"),
+    categoria: Optional[str] = Query(None),
+    tienda: Optional[str] = Query(None),
+    sin_clasificar: bool = Query(False, description="Solo productos sin tienda asignada"),
+    estado: Optional[str] = Query(None, description="ok | bajo | agotado, sobre el stock global"),
+    ver_todo: bool = Query(False, description="Ver el catálogo entero, no solo lo repartido a mi sucursal"),
+    skip: int = 0,
+    limit: int = 3000,
+    sesion: Sesion = Depends(requerir_gerente),
+    db: Session = Depends(get_db),
+):
+    """El catálogo que ve una sucursal, con lo que le queda a ella y a las demás
+    sucursales de su misma tienda, en una sola consulta.
+
+    Una sesión de sucursal ve por omisión **solo lo que tiene repartido**: su
+    inventario es lo que hay en su piso, no el catálogo del negocio entero. Con
+    `ver_todo=true` se asoma al catálogo completo de su(s) tienda(s) —hace falta
+    para dar de alta mercancía que todavía no se le ha asignado—. Only
+    Enterprises no tiene sucursal propia: siempre ve todo.
+
+    Es lo que /inventario necesita para mostrar en la tabla lo que hay *aquí* y
+    no solo el stock global. `buscar-en-sucursales` responde lo mismo pero exige
+    término de búsqueda y no lista: sirve para "¿dónde hay?", no para el
+    catálogo completo.
+
+    Ojo con los dos números: `stock` (el global del producto) baja con cada
+    venta, pero lo asignado a una sucursal no. Lo que de verdad le queda a la
+    sucursal es asignado − vendido, y eso hay que calcularlo abriendo el detalle
+    de las ventas, que es JSON.
+    """
+    # Only Enterprises entra sin tienda: ve el negocio completo y no tiene una
+    # sucursal "propia" de la cual mover producto.
+    mia = sesion.sucursal if sesion.tienda else None
+    visibles = sucursales_visibles(db, sesion)
+    if visibles is None:
+        # Sin restricción (Only Enterprises): todas las que son piso de venta.
+        visibles = sucursales_operativas(db)
+
+    query = db.query(Producto)
+    if q:
+        query = query.filter(
+            or_(
+                Producto.nombre.ilike(f"%{q}%"),
+                Producto.categoria.ilike(f"%{q}%"),
+                Producto.clave.ilike(f"%{q}%"),
+            )
+        )
+    if categoria:
+        query = query.filter(Producto.categoria == categoria)
+    if estado == "agotado":
+        query = query.filter(Producto.stock == 0)
+    elif estado == "bajo":
+        query = query.filter(Producto.stock > 0, Producto.stock <= Producto.stock_minimo)
+    elif estado == "ok":
+        query = query.filter(Producto.stock > Producto.stock_minimo)
+    query = aplicar_filtro_tienda(query, sesion)
+    query = filtrar_asignado_a_mi_sucursal(query, db, sesion, ver_todo)
+
+    # Cuántos hay en cada tienda *con los demás filtros ya puestos*, para los
+    # contadores de las pestañas. Se cuenta antes de filtrar por tienda: si no,
+    # cada pestaña se contaría a sí misma y las demás saldrían en cero.
+    conteos = {"": 0}
+    for t, n in query.with_entities(Producto.tienda, func.count(Producto.id)).group_by(Producto.tienda).all():
+        conteos["__general__" if t is None else t] = n
+        conteos[""] += n
+
+    if sin_clasificar:
+        query = query.filter(Producto.tienda.is_(None))
+    elif tienda:
+        query = query.filter(Producto.tienda == tienda)
+
+    total = query.count()
+    productos = query.order_by(Producto.nombre).offset(skip).limit(limit).all()
+    ids = {p.id for p in productos}
+    if not ids:
+        return {"sucursal": mia, "sucursales": visibles, "total": total,
+                "conteo_tiendas": conteos, "productos": []}
+
+    # Lo asignado se lee de TODAS las sucursales, no solo de las visibles: para
+    # saber si un producto está sobreasignado hay que sumarlas todas.
+    asignado: dict = {}
+    for a in db.query(StockSucursal).filter(StockSucursal.producto_id.in_(ids)).all():
+        asignado.setdefault(a.producto_id, {})[a.sucursal] = a.cantidad
+
+    # Solo las dos columnas que se necesitan y solo de las sucursales visibles:
+    # con el ORM completo esto carga en memoria el historial entero del negocio.
+    vendido: dict = {}
+    for suc, detalle in db.query(Venta.sucursal, Venta.detalle_json).filter(Venta.sucursal.in_(visibles)).all():
+        for it in json.loads(detalle):
+            pid = it.get("producto_id")
+            if pid in ids:
+                por_suc = vendido.setdefault(pid, {})
+                por_suc[suc] = por_suc.get(suc, 0) + it.get("cantidad", 0)
+
+    resultado = []
+    for p in productos:
+        a_por_suc = asignado.get(p.id, {})
+        v_por_suc = vendido.get(p.id, {})
+        # Solo las sucursales con algo que decir. El catálogo pasa de 2,800
+        # productos y casi ninguno está repartido: mandar las tres sucursales
+        # en cada uno engordaría la respuesta sin aportar nada.
+        suc = {}
+        for nombre_suc in visibles:
+            asig = round(a_por_suc.get(nombre_suc, 0), 3)
+            vend = round(v_por_suc.get(nombre_suc, 0), 3)
+            # "t" = la sucursal tiene fila de reparto para este producto. Hace
+            # falta distinguirlo de "solo se ha vendido aquí": vender no exige
+            # tener stock asignado, así que sin esta marca los ~390 productos
+            # que Imprenta ha vendido sin repartir saldrían en negativo.
+            tiene_reparto = nombre_suc in a_por_suc
+            if tiene_reparto or vend:
+                suc[nombre_suc] = {"a": asig, "v": vend, "t": 1 if tiene_reparto else 0}
+        asignado_total = round(sum(a_por_suc.values()), 3)
+        resultado.append({
+            "id": p.id,
+            "nombre": p.nombre,
+            "categoria": p.categoria,
+            "marca": p.marca,
+            "codigo_barras": p.codigo_barras,
+            "clave": p.clave,
+            "tienda": p.tienda,
+            "precio_venta": p.precio_venta,
+            "precio_costo": p.precio_costo,
+            "precio_1": p.precio_1,
+            "precio_2": p.precio_2,
+            "precio_3": p.precio_3,
+            "stock": p.stock,
+            "stock_minimo": p.stock_minimo,
+            "unidad": p.unidad,
+            "vendido_por_peso": bool(p.vendido_por_peso),
+            "descuento_pct": p.descuento_pct,
+            "descuento_desde": p.descuento_desde,
+            "descuento_hasta": p.descuento_hasta,
+            "imagen_url": p.imagen_url,
+            # Repartido entre sucursales y, si sobra, cuánto de más. Positivo =
+            # hay más piezas repartidas que las que el sistema dice tener.
+            # Hace falta exigir que haya algo repartido: el stock global puede
+            # ser negativo (se permite vender sin existencias) y sin esto los
+            # ~300 productos en negativo darían un aviso falso cada uno.
+            "asignado_total": asignado_total,
+            "sobreasignado": (
+                round(asignado_total - p.stock, 3)
+                if asignado_total > 0 and asignado_total > p.stock else 0
+            ),
+            "suc": suc,
+        })
+
+    return {"sucursal": mia, "sucursales": visibles, "total": total,
+            "conteo_tiendas": conteos, "productos": resultado}
+
+
+# ─── Sumar stock a varios productos de una vez ──────────────────────────────
+@app.post("/api/inventario/alta-masiva")
+def alta_masiva_stock(data: AltaMasivaStock, sesion: Sesion = Depends(requerir_gerente),
+                      db: Session = Depends(get_db)):
+    """Suma la misma cantidad a muchos productos en una sola operación, para no
+    ir de uno en uno cuando llega mercancía.
+
+    Dos destinos, que son cosas distintas:
+      - "global": el stock del catálogo, el mismo que mueven los ± de la tabla.
+        Sube el inventario total del negocio.
+      - "sucursal": lo repartido a la sucursal de la sesión. No crea piezas:
+        toma del stock global que todavía no está repartido a nadie, así que
+        falla si no alcanza.
+
+    Una cantidad negativa resta. Los productos que no se puedan aplicar se
+    devuelven en `errores` con el motivo, sin abortar los demás: en una carga de
+    50 artículos no tiene sentido tirar las 49 que sí se pueden.
+    """
+    if data.cantidad == 0:
+        raise HTTPException(status_code=400, detail="Escribe cuántas piezas sumar o restar")
+    if data.destino not in ("global", "sucursal"):
+        raise HTTPException(status_code=400, detail="Destino no válido")
+
+    mia = sesion.sucursal if sesion.tienda else None
+    if data.destino == "sucursal" and not mia:
+        raise HTTPException(status_code=400, detail="Esta sesión no tiene una sucursal a la que repartir")
+
+    ids = list(dict.fromkeys(data.producto_ids))
+    # aplicar_filtro_tienda: no se toca lo que esta sesión ni siquiera puede ver
+    productos = aplicar_filtro_tienda(
+        db.query(Producto).filter(Producto.id.in_(ids)), sesion
+    ).all()
+
+    aplicados: List[int] = []
+    errores: List[dict] = []
+
+    def fallo(p, motivo):
+        errores.append({"id": p.id, "nombre": p.nombre, "motivo": motivo})
+
+    if data.destino == "global":
+        for p in productos:
+            nuevo = round(p.stock + data.cantidad, 3)
+            if nuevo < 0:
+                fallo(p, f"quedaría en {nuevo}; solo hay {round(p.stock, 3)}")
+                continue
+            p.stock = nuevo
+            p.actualizado_en = datetime.utcnow()
+            aplicados.append(p.id)
+    else:
+        pids = [p.id for p in productos]
+        # Lo que ya está repartido a las OTRAS sucursales: el global menos eso
+        # es lo que queda libre para repartirme a mí.
+        otras = dict(
+            db.query(StockSucursal.producto_id, func.sum(StockSucursal.cantidad))
+            .filter(StockSucursal.producto_id.in_(pids), StockSucursal.sucursal != mia)
+            .group_by(StockSucursal.producto_id).all()
+        )
+        filas = {
+            r.producto_id: r for r in db.query(StockSucursal).filter(
+                StockSucursal.producto_id.in_(pids), StockSucursal.sucursal == mia
+            ).all()
+        }
+        for p in productos:
+            actual = filas[p.id].cantidad if p.id in filas else 0
+            nuevo = round(actual + data.cantidad, 3)
+            if nuevo < 0:
+                fallo(p, f"solo tienes {round(actual, 3)} repartido")
+                continue
+            libre = round(p.stock - (otras.get(p.id) or 0), 3)
+            if nuevo > libre:
+                fallo(p, f"sin stock libre: {libre} disponible para repartir")
+                continue
+            if p.id in filas:
+                filas[p.id].cantidad = nuevo
+                filas[p.id].actualizado_en = datetime.utcnow()
+            else:
+                db.add(StockSucursal(producto_id=p.id, sucursal=mia, cantidad=nuevo,
+                                     actualizado_en=datetime.utcnow()))
+            aplicados.append(p.id)
+
+    encontrados = {p.id for p in productos}
+    for pid in ids:
+        if pid not in encontrados:
+            errores.append({"id": pid, "nombre": None, "motivo": "no está en tu catálogo"})
+
+    db.commit()
+    return {
+        "aplicados": len(aplicados),
+        "cantidad": data.cantidad,
+        "destino": data.destino,
+        "sucursal": mia if data.destino == "sucursal" else None,
+        "errores": errores,
+    }
 
 
 @app.get("/api/ventas/{venta_id}")

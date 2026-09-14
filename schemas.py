@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 
@@ -63,6 +63,14 @@ class AsignarStockSucursal(BaseModel):
 
 class AjusteStock(BaseModel):
     cantidad: float
+
+
+class AltaMasivaStock(BaseModel):
+    """Sumar la misma cantidad a varios productos de una vez, para no ir
+    producto por producto cuando llega mercancía o se reparte a la sucursal."""
+    producto_ids: List[int] = Field(..., min_length=1, max_length=500)
+    cantidad: float
+    destino: str = "global"   # "global" = stock del catálogo | "sucursal" = lo repartido a la mía
 
 
 class ItemVenta(BaseModel):
